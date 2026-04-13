@@ -130,42 +130,31 @@ function isChain(name: string): boolean {
 }
 
 // ---------------------------------------------------------------------------
-// Google Places API types
+// Apify Google Maps scraper result shape
 // ---------------------------------------------------------------------------
 
-interface PlaceSearchResult {
-  place_id: string;
-  name: string;
-  formatted_address: string;
-  geometry?: { location?: { lat: number; lng: number } };
-  rating?: number;
-  user_ratings_total?: number;
+interface ApifyPlaceResult {
+  title?: string;
+  address?: string;
+  phone?: string;
   website?: string;
-  types?: string[];
-}
-
-interface PlaceDetails {
-  name?: string;
-  formatted_phone_number?: string;
-  website?: string;
+  categoryName?: string;
+  totalScore?: number;
+  reviewsCount?: number;
   url?: string;
-  price_level?: number;
-  business_status?: string;
-  editorial_summary?: { overview?: string };
-  opening_hours?: { weekday_text?: string[] };
+  placeId?: string;
+  location?: { lat: number; lng: number };
+  openingHours?: Array<{ day: string; hours: string }>;
+  description?: string;
+  imageUrls?: string[];
   reviews?: Array<{
-    author_name: string;
-    rating: number;
-    text: string;
-    time: number;
-    relative_time_description: string;
+    name?: string;
+    text?: string;
+    stars?: number;
+    publishedAtDate?: string;
   }>;
-  photos?: Array<{
-    photo_reference: string;
-    height: number;
-    width: number;
-    html_attributions: string[];
-  }>;
+  priceLevel?: string;
+  isAdvertisement?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -177,166 +166,152 @@ export const leadScoutAgent: AgentHandler = async (input) => {
   const location = config.location ?? "unknown";
   const campaignId = config.campaign_id ?? input.run_id;
   const maxPerVertical = config.max_results_per_vertical ?? config.max_results ?? 5;
-  const skipDetails = config.skip_details ?? false;
   const maxPhotosPerLead = config.max_photos_per_lead ?? 5;
 
   const verticals = config.verticals ?? (config.vertical ? [config.vertical] : PREFERRED_VERTICALS.slice(0, 6));
 
   const leads: Array<Record<string, unknown>> = [];
   const errors: string[] = [];
-  const seenPlaceIds = new Set<string>();
+  const seenNames = new Set<string>();
 
-  const googleApiKey = process.env.GOOGLE_PLACES_API_KEY;
+  const apifyToken = process.env.APIFY_API_TOKEN;
 
-  if (googleApiKey) {
-    // ── Step 1: Text Search per vertical ──
-    for (const vertical of verticals) {
-      try {
-        const query = encodeURIComponent(`${vertical} in ${location}`);
-        const url = `https://maps.googleapis.com/maps/api/place/textsearch/json?query=${query}&key=${googleApiKey}`;
-        const response = await fetch(url);
+  if (apifyToken) {
+    // ── Apify Google Maps scraper ──
+    // Build search queries — one per vertical
+    const searchStrings = verticals.map((v) => `${v} in ${location}`);
 
-        if (!response.ok) {
-          errors.push(`Google Places error for "${vertical}": ${response.status}`);
-          continue;
-        }
+    log.info("starting Apify Google Maps scrape", {
+      queries: searchStrings.length,
+      maxPerSearch: maxPerVertical,
+      location,
+    });
 
-        const data = (await response.json()) as { results?: PlaceSearchResult[]; status?: string };
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 180_000); // 3 min timeout
 
-        if (data.status !== "OK" && data.status !== "ZERO_RESULTS") {
-          errors.push(`Google Places status for "${vertical}": ${data.status}`);
-          continue;
-        }
+      const response = await fetch(
+        `https://api.apify.com/v2/acts/compass~crawler-google-places/run-sync-get-dataset-items?token=${apifyToken}&timeout=120`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            searchStringsArray: searchStrings,
+            maxCrawledPlacesPerSearch: maxPerVertical,
+            language: "en",
+            deeperCityScrape: false,
+            onePerQuery: false,
+          }),
+          signal: controller.signal,
+        },
+      );
+      clearTimeout(timeout);
 
-        for (const place of (data.results ?? []).slice(0, maxPerVertical)) {
-          if (seenPlaceIds.has(place.place_id)) continue;
-          seenPlaceIds.add(place.place_id);
+      if (!response.ok) {
+        const body = await response.text();
+        errors.push(`Apify Google Maps error: ${response.status} — ${body.slice(0, 200)}`);
+      } else {
+        const results = (await response.json()) as ApifyPlaceResult[];
 
-          const googleTypes = place.types ?? [];
-          const verticalCategory = classifyVertical(place.name, vertical, googleTypes);
+        log.info(`Apify returned ${results.length} places`);
+
+        for (const place of results) {
+          if (!place.title) continue;
+          if (place.isAdvertisement) continue;
+
+          // Deduplicate by name
+          const nameKey = place.title.toLowerCase().trim();
+          if (seenNames.has(nameKey)) continue;
+          seenNames.add(nameKey);
+
+          // Determine vertical from the search query that found this result
+          const matchedVertical = verticals.find((v) =>
+            (place.categoryName ?? "").toLowerCase().includes(v.toLowerCase()),
+          ) ?? verticals[0];
+
+          const googleTypes = place.categoryName ? [place.categoryName.toLowerCase().replace(/\s+/g, "_")] : [];
+          const verticalCategory = classifyVertical(place.title, matchedVertical, googleTypes);
+
+          const leadId = `lead-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+
+          // Parse opening hours into weekday_text format
+          const openingHours = place.openingHours
+            ? place.openingHours.map((h) => `${h.day}: ${h.hours}`)
+            : undefined;
+
+          // Parse reviews
+          const reviews = place.reviews
+            ? place.reviews.slice(0, 5).map((r) => ({
+                author: r.name ?? "Anonymous",
+                rating: r.stars ?? 5,
+                text: r.text ?? "",
+                time: r.publishedAtDate ? new Date(r.publishedAtDate).getTime() / 1000 : 0,
+                relative_time: "",
+              }))
+            : undefined;
+
+          // Download photos
+          let photosDownloaded = 0;
+          const photoFilenames: string[] = [];
+          if (place.imageUrls && place.imageUrls.length > 0) {
+            ensureLeadDir(leadId);
+            for (let i = 0; i < Math.min(place.imageUrls.length, maxPhotosPerLead); i++) {
+              const filename = `google_photo_${i + 1}.jpg`;
+              try {
+                const meta = await saveFromUrl(leadId, filename, place.imageUrls[i], "gallery");
+                if (meta) {
+                  photoFilenames.push(filename);
+                  photosDownloaded++;
+                }
+              } catch { /* non-fatal */ }
+            }
+          }
 
           leads.push({
-            lead_id: `lead-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-            business_name: place.name,
-            address: place.formatted_address,
-            google_place_id: place.place_id,
-            google_maps_url: `https://www.google.com/maps/place/?q=place_id:${place.place_id}`,
-            google_rating: place.rating,
-            google_review_count: place.user_ratings_total,
+            lead_id: leadId,
+            business_name: place.title,
+            address: place.address ?? "",
+            google_place_id: place.placeId ?? "",
+            google_maps_url: place.url ?? "",
+            google_rating: place.totalScore,
+            google_review_count: place.reviewsCount,
             website_url: place.website ?? null,
             has_website: place.website ? 1 : 0,
-            business_type: vertical,
+            business_type: matchedVertical,
             vertical_category: verticalCategory,
-            has_premises: hasPremisesSignal(googleTypes),
-            is_chain: isChain(place.name),
+            has_premises: hasPremisesSignal(googleTypes) || verticalCategory !== "trades",
+            is_chain: isChain(place.title),
             google_types: googleTypes,
-            lat: place.geometry?.location?.lat,
-            lng: place.geometry?.location?.lng,
-            source: "google_places",
+            lat: place.location?.lat,
+            lng: place.location?.lng,
+            source: "apify_google_maps",
+            phone: place.phone,
+            description: place.description,
+            opening_hours: openingHours,
+            reviews,
+            review_count_detailed: reviews?.length,
+            google_photos_downloaded: photosDownloaded,
+            google_photo_filenames: photoFilenames,
+            price_level: place.priceLevel ? parsePriceLevel(place.priceLevel) : undefined,
+            business_status: "OPERATIONAL",
           });
         }
-
-        log.info(`searched "${vertical}" in ${location}`, {
-          results: (data.results ?? []).length,
-          total: leads.length,
-        });
-      } catch (err) {
-        errors.push(`Google Places fetch failed for "${vertical}": ${String(err)}`);
+      }
+    } catch (err) {
+      if ((err as Error).name === "AbortError") {
+        errors.push("Apify Google Maps scrape timed out after 3 minutes");
+      } else {
+        errors.push(`Apify Google Maps scrape failed: ${String(err)}`);
       }
     }
 
-    // ── Step 2: Place Details enrichment ──
-    if (!skipDetails && leads.length > 0) {
-      const run = pLimit(3);
-      log.info("enriching leads with Place Details API", { count: leads.length });
-
-      await Promise.all(
-        leads.map((lead) =>
-          run(async () => {
-            const placeId = lead.google_place_id as string;
-            const leadId = lead.lead_id as string;
-            if (!placeId) return;
-
-            try {
-              const details = await fetchPlaceDetails(placeId, googleApiKey);
-              if (!details) return;
-
-              // Enrich lead with details data
-              if (details.website && !lead.website_url) {
-                lead.website_url = details.website;
-                lead.has_website = 1;
-              }
-              if (details.formatted_phone_number) {
-                lead.phone = details.formatted_phone_number;
-              }
-              if (details.price_level !== undefined) {
-                lead.price_level = details.price_level;
-              }
-              if (details.business_status) {
-                lead.business_status = details.business_status;
-              }
-              if (details.editorial_summary?.overview) {
-                lead.description = details.editorial_summary.overview;
-              }
-              if (details.opening_hours?.weekday_text) {
-                lead.opening_hours = details.opening_hours.weekday_text;
-              }
-              if (details.url) {
-                lead.google_maps_url = details.url;
-              }
-
-              // Reviews
-              if (details.reviews && details.reviews.length > 0) {
-                lead.reviews = details.reviews.map((r) => ({
-                  author: r.author_name,
-                  rating: r.rating,
-                  text: r.text,
-                  time: r.time,
-                  relative_time: r.relative_time_description,
-                }));
-                lead.review_count_detailed = details.reviews.length;
-              }
-
-              // Photo download
-              if (details.photos && details.photos.length > 0) {
-                ensureLeadDir(leadId);
-                const photoUrls: string[] = [];
-                const photosToDownload = details.photos.slice(0, maxPhotosPerLead);
-
-                for (let i = 0; i < photosToDownload.length; i++) {
-                  const photo = photosToDownload[i];
-                  const photoUrl = `https://maps.googleapis.com/maps/api/place/photo?maxwidth=1200&photo_reference=${photo.photo_reference}&key=${googleApiKey}`;
-                  const filename = `google_photo_${i + 1}.jpg`;
-                  try {
-                    const meta = await saveFromUrl(leadId, filename, photoUrl, "gallery");
-                    if (meta) {
-                      photoUrls.push(filename);
-                    }
-                  } catch {
-                    // Photo download failures are non-fatal
-                  }
-                }
-
-                lead.google_photos_downloaded = photoUrls.length;
-                lead.google_photo_filenames = photoUrls;
-                log.debug(`downloaded ${photoUrls.length} photos for ${lead.business_name}`);
-              }
-            } catch (err) {
-              log.warn(`Place Details failed for ${lead.business_name}`, { error: String(err) });
-            }
-          }),
-        ),
-      );
-
-      const enriched = leads.filter((l) => l.phone || l.description || (l.google_photos_downloaded as number) > 0);
-      log.info("enrichment complete", {
-        enriched: enriched.length,
-        total: leads.length,
-        with_website: leads.filter((l) => l.website_url).length,
-        with_phone: leads.filter((l) => l.phone).length,
-        with_photos: leads.filter((l) => (l.google_photos_downloaded as number) > 0).length,
-      });
-    }
+    log.info("Apify scrape complete", {
+      total: leads.length,
+      with_website: leads.filter((l) => l.website_url).length,
+      with_phone: leads.filter((l) => l.phone).length,
+      with_photos: leads.filter((l) => (l.google_photos_downloaded as number) > 0).length,
+    });
   }
 
   // Companies House (UK)
@@ -437,25 +412,13 @@ export const leadScoutAgent: AgentHandler = async (input) => {
 };
 
 // ---------------------------------------------------------------------------
-// Google Places Detail API
+// Helpers
 // ---------------------------------------------------------------------------
 
-async function fetchPlaceDetails(placeId: string, apiKey: string): Promise<PlaceDetails | null> {
-  const fields = [
-    "name", "formatted_phone_number", "website", "url",
-    "price_level", "business_status", "editorial_summary",
-    "opening_hours", "reviews", "photos",
-  ].join(",");
-
-  const url = `https://maps.googleapis.com/maps/api/place/details/json?place_id=${placeId}&fields=${fields}&key=${apiKey}`;
-
-  const response = await fetch(url);
-  if (!response.ok) return null;
-
-  const data = (await response.json()) as { result?: PlaceDetails; status?: string };
-  if (data.status !== "OK") return null;
-
-  return data.result ?? null;
+function parsePriceLevel(priceStr: string): number | undefined {
+  // Apify returns "$", "$$", "$$$", "$$$$" or similar
+  const dollarCount = (priceStr.match(/[$£]/g) ?? []).length;
+  return dollarCount > 0 ? dollarCount : undefined;
 }
 
 export { classifyVertical, hasPremisesSignal, isChain };

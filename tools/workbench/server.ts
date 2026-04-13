@@ -368,7 +368,7 @@ function listSaves(): Array<{ leadId: string; files: string[] }> {
 // ---------------------------------------------------------------------------
 
 const ENV_FILE = join(REPO_ROOT, "data/.env.workbench");
-const MANAGED_KEYS = ["OPENROUTER_API_KEY", "GOOGLE_PLACES_API_KEY", "APIFY_API_TOKEN"];
+const MANAGED_KEYS = ["OPENROUTER_API_KEY", "APIFY_API_TOKEN"];
 
 function loadKeys(): void {
   if (!existsSync(ENV_FILE)) return;

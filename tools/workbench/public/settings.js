@@ -20,7 +20,7 @@ async function saveAllKeys() {
   const keys = {};
   let hasAny = false;
 
-  for (const keyName of ["OPENROUTER_API_KEY", "GOOGLE_PLACES_API_KEY", "APIFY_API_TOKEN"]) {
+  for (const keyName of ["OPENROUTER_API_KEY", "APIFY_API_TOKEN"]) {
     const input = document.getElementById(`input-${keyName}`);
     if (input.value.trim()) {
       keys[keyName] = input.value.trim();
