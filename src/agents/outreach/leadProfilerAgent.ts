@@ -112,6 +112,8 @@ export interface ProfileResult {
   reviews_json?: string;
   // Instagram data (via Apify)
   instagram_json?: string;
+  instagram_followers?: number;
+  instagram_handle?: string;
   // Scout enrichment pass-through (for qualifier)
   vertical_category?: string;
   has_premises?: boolean;
@@ -1334,9 +1336,9 @@ async function scrapeInstagramViaApify(
 
     const profile = data[0];
 
-    // Download post images to asset store
+    // Download post images to asset store (max 10 posts)
     const postImages: string[] = [];
-    for (let i = 0; i < Math.min(profile.latestPosts?.length ?? 0, 9); i++) {
+    for (let i = 0; i < Math.min(profile.latestPosts?.length ?? 0, 10); i++) {
       const post = profile.latestPosts[i];
       if (post.displayUrl) {
         try {
@@ -1364,6 +1366,37 @@ async function scrapeInstagramViaApify(
   } catch (err) {
     log.warn(`Instagram scrape failed for @${username}`, { error: String(err) });
     return null;
+  }
+}
+
+/** Populate profile fields from Apify Instagram data */
+function populateInstagramProfile(profile: ProfileResult, igData: InstagramProfile): void {
+  profile.instagram_followers = igData.followersCount;
+  profile.instagram_handle = igData.username;
+  profile.instagram_json = JSON.stringify({
+    username: igData.username,
+    full_name: igData.fullName,
+    bio: igData.biography,
+    followers: igData.followersCount,
+    posts_count: igData.postsCount,
+    profile_pic: igData.profilePicUrlHD,
+    website: igData.externalUrl,
+    is_business: igData.isBusinessAccount,
+    category: igData.businessCategoryName,
+    recent_posts: (igData.latestPosts ?? []).slice(0, 10).map((p, idx) => ({
+      type: p.type,
+      caption: p.caption?.slice(0, 300),
+      likes: p.likesCount,
+      comments: p.commentsCount,
+      hashtags: p.hashtags,
+      image_file: p.displayUrl ? `instagram_post_${idx + 1}.jpg` : undefined,
+    })),
+    top_hashtags: getTopHashtags(igData.latestPosts ?? []),
+    avg_engagement: getAvgEngagement(igData.latestPosts ?? []),
+  });
+  // Use Instagram bio as description if we don't have one
+  if (igData.biography && !profile.business_description_raw) {
+    profile.business_description_raw = igData.biography;
   }
 }
 
@@ -1612,31 +1645,7 @@ async function profileSingleLead(
           if (igUrl) {
             const igData = await scrapeInstagramViaApify(igUrl, leadId);
             if (igData) {
-              profile.instagram_json = JSON.stringify({
-                username: igData.username,
-                full_name: igData.fullName,
-                bio: igData.biography,
-                followers: igData.followersCount,
-                posts_count: igData.postsCount,
-                profile_pic: igData.profilePicUrlHD,
-                website: igData.externalUrl,
-                is_business: igData.isBusinessAccount,
-                category: igData.businessCategoryName,
-                recent_posts: (igData.latestPosts ?? []).slice(0, 12).map((p) => ({
-                  type: p.type,
-                  caption: p.caption?.slice(0, 300),
-                  likes: p.likesCount,
-                  comments: p.commentsCount,
-                  hashtags: p.hashtags,
-                  image_file: p.displayUrl ? `instagram_post_${(igData.latestPosts ?? []).indexOf(p) + 1}.jpg` : undefined,
-                })),
-                top_hashtags: getTopHashtags(igData.latestPosts ?? []),
-                avg_engagement: getAvgEngagement(igData.latestPosts ?? []),
-              });
-              // Use Instagram bio as description if we don't have one
-              if (igData.biography && !profile.business_description_raw) {
-                profile.business_description_raw = igData.biography;
-              }
+              populateInstagramProfile(profile, igData);
             }
           }
         }
@@ -1683,32 +1692,8 @@ async function profileSingleLead(
         if (igUrl) {
           const igData = await scrapeInstagramViaApify(igUrl, leadId);
           if (igData) {
-            profile.instagram_json = JSON.stringify({
-              username: igData.username,
-              full_name: igData.fullName,
-              bio: igData.biography,
-              followers: igData.followersCount,
-              posts_count: igData.postsCount,
-              profile_pic: igData.profilePicUrlHD,
-              website: igData.externalUrl,
-              is_business: igData.isBusinessAccount,
-              category: igData.businessCategoryName,
-              recent_posts: (igData.latestPosts ?? []).slice(0, 12).map((p, idx) => ({
-                type: p.type,
-                caption: p.caption?.slice(0, 300),
-                likes: p.likesCount,
-                comments: p.commentsCount,
-                hashtags: p.hashtags,
-                image_file: p.displayUrl ? `instagram_post_${idx + 1}.jpg` : undefined,
-              })),
-              top_hashtags: getTopHashtags(igData.latestPosts ?? []),
-              avg_engagement: getAvgEngagement(igData.latestPosts ?? []),
-            });
-            // Use Instagram bio as description
-            if (igData.biography && !profile.business_description_raw) {
-              profile.business_description_raw = igData.biography;
-            }
-            // Use profile pic as logo fallback
+            populateInstagramProfile(profile, igData);
+            // Use profile pic as logo fallback for no-website leads
             if (!profile.logo_path && igData.profilePicUrlHD) {
               profile.logo_path = "instagram_profile.jpg";
             }
@@ -1719,6 +1704,24 @@ async function profileSingleLead(
         for (const sp of socialProfiles) {
           if (sp.bio && !profile.business_description_raw) {
             profile.business_description_raw = sp.bio;
+          }
+        }
+      }
+    }
+
+    // ---------------------------------------------------------------
+    // Final: If we found IG links but didn't scrape via Apify, try now
+    // ---------------------------------------------------------------
+    if (!profile.instagram_json) {
+      const allSocialLinks = JSON.parse(profile.social_links_json ?? "[]") as string[];
+      const igUrl = findInstagramUrl(allSocialLinks);
+      if (igUrl) {
+        log.info(`fallback IG scrape for ${lead.business_name}`);
+        const igData = await scrapeInstagramViaApify(igUrl, leadId);
+        if (igData) {
+          populateInstagramProfile(profile, igData);
+          if (!profile.logo_path && igData.profilePicUrlHD) {
+            profile.logo_path = "instagram_profile.jpg";
           }
         }
       }
