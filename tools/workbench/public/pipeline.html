@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Pipeline — Composer Workbench</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <div class="page-content">
+    <div class="pipeline-layout">
+      <!-- Config Panel -->
+      <div class="pipeline-config" id="config-panel">
+        <h2>Pipeline Config</h2>
+        <label>
+          Location
+          <input type="text" id="cfg-location" value="Aberdeen" placeholder="City name..." />
+        </label>
+        <label>
+          Verticals
+          <input type="text" id="cfg-verticals" value="cafe, barber, salon, bakery, pub, restaurant" placeholder="cafe, barber, salon..." />
+        </label>
+        <label>
+          Max per vertical
+          <input type="number" id="cfg-max" value="3" min="1" max="20" />
+        </label>
+        <div class="pipeline-actions">
+          <button class="btn-primary" id="btn-step" onclick="startAndStep()">Run Step-by-Step</button>
+          <button class="btn-secondary" id="btn-all" onclick="startAndRunAll()">Run All Stages</button>
+        </div>
+        <div class="pipeline-status" id="pipeline-status"></div>
+      </div>
+
+      <!-- Stage Progress -->
+      <div class="pipeline-stages">
+        <h2>Stages</h2>
+        <div class="stage-track" id="stage-track">
+          <div class="stage-node" data-stage="scout"><span class="dot"></span><span class="label">Scout</span></div>
+          <div class="stage-connector"></div>
+          <div class="stage-node" data-stage="profile"><span class="dot"></span><span class="label">Profile</span></div>
+          <div class="stage-connector"></div>
+          <div class="stage-node" data-stage="brand-analyse"><span class="dot"></span><span class="label">Brand</span></div>
+          <div class="stage-connector"></div>
+          <div class="stage-node" data-stage="brand-intelligence"><span class="dot"></span><span class="label">Intelligence</span></div>
+          <div class="stage-connector"></div>
+          <div class="stage-node" data-stage="qualify"><span class="dot"></span><span class="label">Qualify</span></div>
+          <div class="stage-connector"></div>
+          <div class="stage-node" data-stage="brief"><span class="dot"></span><span class="label">Brief</span></div>
+          <div class="stage-connector"></div>
+          <div class="stage-node" data-stage="compose"><span class="dot"></span><span class="label">Compose</span></div>
+        </div>
+
+        <!-- Next stage button (appears after first step) -->
+        <div class="stage-actions" id="stage-actions" style="display:none;">
+          <button class="btn-primary" id="btn-next" onclick="runNextStep()">Next Stage</button>
+          <span class="stage-info" id="stage-info"></span>
+        </div>
+
+        <!-- Stage detail cards -->
+        <div class="stage-output" id="stage-output">
+          <div class="output-placeholder">Configure and run the pipeline to see stage outputs here.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="/nav.js"></script>
+  <script src="/pipeline.js"></script>
+</body>
+</html>

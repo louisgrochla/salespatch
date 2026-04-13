@@ -30,6 +30,16 @@ import { generateSiteWithAI } from "../../src/agents/outreach/aiComposer.js";
 import { makeDesignDecision, type DesignInput } from "../../src/agents/outreach/designSystem.js";
 import type { BrandAnalysis } from "../../src/agents/outreach/brandAnalyser.js";
 
+// Pipeline agents
+import { leadScoutAgent } from "../../src/agents/outreach/leadScoutAgent.js";
+import { leadProfilerAgent } from "../../src/agents/outreach/leadProfilerAgent.js";
+import { brandAnalyserAgent } from "../../src/agents/outreach/brandAnalyser.js";
+import { brandIntelligenceAgent } from "../../src/agents/outreach/brandIntelligence.js";
+import { leadQualifierAgent } from "../../src/agents/outreach/leadQualifierAgent.js";
+import { briefGeneratorAgent } from "../../src/agents/outreach/briefGenerator.js";
+import { siteComposerAgent } from "../../src/agents/outreach/siteComposerAgent.js";
+import type { AgentExecutionInput } from "../../src/pipeline/agentRuntime.js";
+
 // ---------------------------------------------------------------------------
 // Config
 // ---------------------------------------------------------------------------
@@ -354,6 +364,286 @@ function listSaves(): Array<{ leadId: string; files: string[] }> {
 }
 
 // ---------------------------------------------------------------------------
+// Secure Key Storage
+// ---------------------------------------------------------------------------
+
+const ENV_FILE = join(REPO_ROOT, "data/.env.workbench");
+const MANAGED_KEYS = ["OPENROUTER_API_KEY", "GOOGLE_PLACES_API_KEY", "APIFY_API_TOKEN"];
+
+function loadKeys(): void {
+  if (!existsSync(ENV_FILE)) return;
+  const content = readFileSync(ENV_FILE, "utf-8");
+  for (const line of content.split("\n")) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#")) continue;
+    const eqIdx = trimmed.indexOf("=");
+    if (eqIdx < 0) continue;
+    const key = trimmed.slice(0, eqIdx).trim();
+    const value = trimmed.slice(eqIdx + 1).trim();
+    if (MANAGED_KEYS.includes(key) && value) {
+      process.env[key] = value;
+    }
+  }
+}
+
+function saveKeys(keys: Record<string, string>): void {
+  // Merge with existing
+  const existing: Record<string, string> = {};
+  if (existsSync(ENV_FILE)) {
+    const content = readFileSync(ENV_FILE, "utf-8");
+    for (const line of content.split("\n")) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith("#")) continue;
+      const eqIdx = trimmed.indexOf("=");
+      if (eqIdx < 0) continue;
+      existing[trimmed.slice(0, eqIdx).trim()] = trimmed.slice(eqIdx + 1).trim();
+    }
+  }
+
+  for (const [key, value] of Object.entries(keys)) {
+    if (MANAGED_KEYS.includes(key) && value) {
+      existing[key] = value;
+      process.env[key] = value;
+    }
+  }
+
+  const lines = Object.entries(existing)
+    .filter(([k]) => MANAGED_KEYS.includes(k))
+    .map(([k, v]) => `${k}=${v}`);
+  writeFileSync(ENV_FILE, lines.join("\n") + "\n", { mode: 0o600 });
+}
+
+function getMaskedKeys(): Record<string, string> {
+  const result: Record<string, string> = {};
+  for (const key of MANAGED_KEYS) {
+    const val = process.env[key];
+    if (val && val.length > 8) {
+      result[key] = val.slice(0, 4) + "..." + val.slice(-4);
+    } else {
+      result[key] = "";
+    }
+  }
+  return result;
+}
+
+// ---------------------------------------------------------------------------
+// Pipeline Execution
+// ---------------------------------------------------------------------------
+
+const STAGES = ["scout", "profile", "brand-analyse", "brand-intelligence", "qualify", "brief", "compose"] as const;
+type StageName = typeof STAGES[number];
+
+const STAGE_AGENTS: Record<StageName, string> = {
+  scout: "lead-scout-agent",
+  profile: "lead-profiler-agent",
+  "brand-analyse": "brand-analyser-agent",
+  "brand-intelligence": "brand-intelligence-agent",
+  qualify: "lead-qualifier-agent",
+  brief: "brief-generator-agent",
+  compose: "site-composer-agent",
+};
+
+const STAGE_HANDLERS: Record<StageName, (input: AgentExecutionInput) => Promise<{ summary: string; artifacts: Record<string, unknown>; cost_usd?: number }>> = {
+  scout: leadScoutAgent,
+  profile: leadProfilerAgent,
+  "brand-analyse": brandAnalyserAgent,
+  "brand-intelligence": brandIntelligenceAgent,
+  qualify: leadQualifierAgent,
+  brief: briefGeneratorAgent,
+  compose: siteComposerAgent,
+};
+
+// Maps upstream stage dependencies
+function getUpstreamKeys(stage: StageName): StageName[] {
+  switch (stage) {
+    case "scout": return [];
+    case "profile": return ["scout"];
+    case "brand-analyse": return ["scout", "profile"];
+    case "brand-intelligence": return ["profile", "brand-analyse"];
+    case "qualify": return ["profile", "brand-analyse", "brand-intelligence"];
+    case "brief": return ["qualify", "profile", "brand-analyse"];
+    case "compose": return ["brief", "qualify", "brand-analyse"];
+  }
+}
+
+interface PipelineRun {
+  id: string;
+  config: { location: string; verticals: string[]; maxPerVertical: number };
+  currentStage: number;
+  stages: Array<{
+    name: StageName;
+    status: "pending" | "running" | "done" | "error";
+    startedAt?: number;
+    finishedAt?: number;
+    summary?: string;
+    error?: string;
+    leadCount?: number;
+    costUsd?: number;
+    artifacts?: Record<string, unknown>;
+  }>;
+}
+
+const activeRuns = new Map<string, PipelineRun>();
+const sseClients = new Map<string, ServerResponse[]>();
+
+function makeInput(
+  runId: string, nodeId: string, agentId: string,
+  upstream: Record<string, unknown>, config?: Record<string, unknown>,
+): AgentExecutionInput {
+  return { run_id: runId, node_id: nodeId, agent_id: agentId as AgentExecutionInput["agent_id"], config, upstreamArtifacts: upstream };
+}
+
+function broadcastSSE(runId: string, data: unknown): void {
+  const clients = sseClients.get(runId) ?? [];
+  const msg = `data: ${JSON.stringify(data)}\n\n`;
+  for (const client of clients) {
+    try { client.write(msg); } catch { /* client disconnected */ }
+  }
+}
+
+function createPipelineRun(config: PipelineRun["config"]): PipelineRun {
+  const id = `wb-${Date.now()}`;
+  const run: PipelineRun = {
+    id,
+    config,
+    currentStage: -1,
+    stages: STAGES.map((name) => ({ name, status: "pending" as const })),
+  };
+  activeRuns.set(id, run);
+  return run;
+}
+
+async function runNextStage(runId: string): Promise<PipelineRun["stages"][0]> {
+  const run = activeRuns.get(runId);
+  if (!run) throw new Error("Run not found");
+
+  const nextIdx = run.currentStage + 1;
+  if (nextIdx >= STAGES.length) throw new Error("Pipeline complete — no more stages");
+
+  const stage = run.stages[nextIdx];
+  const stageName = stage.name;
+  run.currentStage = nextIdx;
+
+  stage.status = "running";
+  stage.startedAt = Date.now();
+  broadcastSSE(runId, { type: "stage_start", stage: stageName, index: nextIdx });
+
+  try {
+    // Build upstream artifacts
+    const upstream: Record<string, unknown> = {};
+    for (const dep of getUpstreamKeys(stageName)) {
+      const depStage = run.stages.find((s) => s.name === dep);
+      if (depStage?.artifacts) upstream[dep] = depStage.artifacts;
+    }
+
+    // Build config for scout
+    const config = stageName === "scout"
+      ? { verticals: run.config.verticals, location: run.config.location, max_results_per_vertical: run.config.maxPerVertical }
+      : undefined;
+
+    const handler = STAGE_HANDLERS[stageName];
+    const result = await handler(makeInput(runId, stageName, STAGE_AGENTS[stageName], upstream, config));
+
+    stage.status = "done";
+    stage.finishedAt = Date.now();
+    stage.summary = result.summary;
+    stage.costUsd = result.cost_usd;
+    stage.artifacts = result.artifacts;
+
+    // Count leads/items
+    const a = result.artifacts;
+    stage.leadCount = (a.leads as unknown[])?.length
+      ?? (a.profiles as unknown[])?.length
+      ?? (a.analyses as unknown[])?.length
+      ?? (a.intelligence as unknown[])?.length
+      ?? (a.qualified as unknown[])?.length
+      ?? (a.briefs as unknown[])?.length
+      ?? (a.sites as unknown[])?.length
+      ?? 0;
+
+    broadcastSSE(runId, { type: "stage_done", stage: stageName, index: nextIdx, summary: stage.summary, leadCount: stage.leadCount, ms: (stage.finishedAt - stage.startedAt!), cost: stage.costUsd });
+  } catch (err) {
+    stage.status = "error";
+    stage.finishedAt = Date.now();
+    stage.error = err instanceof Error ? err.message : String(err);
+    broadcastSSE(runId, { type: "stage_error", stage: stageName, index: nextIdx, error: stage.error });
+  }
+
+  return stage;
+}
+
+/** Format stage output for display — summarize leads/profiles/etc into cards */
+function formatStageOutput(stage: PipelineRun["stages"][0]): unknown {
+  if (!stage.artifacts) return null;
+  const a = stage.artifacts;
+
+  // Return a display-friendly summary per stage
+  switch (stage.name) {
+    case "scout":
+      return (a.leads as Array<Record<string, unknown>> ?? []).map((l) => ({
+        lead_id: l.lead_id, name: l.business_name, type: l.business_type,
+        rating: l.google_rating, reviews: l.google_review_count,
+        address: l.address, phone: l.phone, website: l.website_url,
+        photos: l.google_photos_downloaded ?? 0,
+      }));
+    case "profile":
+      return (a.profiles as Array<Record<string, unknown>> ?? []).map((p) => ({
+        lead_id: p.lead_id, name: p.business_name, type: p.business_type,
+        rating: p.google_rating, reviews: p.google_review_count,
+        website_score: p.website_quality_score, has_website: p.has_website,
+        phone: p.phone, address: p.address,
+        ig_followers: p.instagram_followers, ig_handle: p.instagram_handle,
+        has_ig: !!p.instagram_json, logo: p.logo_path,
+        social_count: p.has_social_links,
+        services: p.services_extracted_json ? JSON.parse(p.services_extracted_json as string).length : 0,
+      }));
+    case "brand-analyse":
+      return (a.analyses as Array<Record<string, unknown>> ?? []).map((ba) => ({
+        lead_id: ba.lead_id,
+        colours: ba.colours, fonts: ba.fonts,
+        photos: (ba.photo_inventory as unknown[])?.length ?? 0,
+        services: (ba.services as unknown[])?.length ?? 0,
+        description: (ba.description as string)?.slice(0, 150),
+      }));
+    case "brand-intelligence":
+      return (a.intelligence as Array<Record<string, unknown>> ?? []).map((bi) => ({
+        lead_id: bi.lead_id,
+        tone: bi.tone, personality: bi.personality,
+        usps: bi.unique_selling_points,
+        headline: bi.suggested_headline,
+      }));
+    case "qualify":
+      return {
+        qualified: (a.qualified as Array<Record<string, unknown>> ?? []).map((q) => ({
+          lead_id: q.lead_id, name: q.business_name, type: q.business_type,
+          score: q.qualification_score, reasons: q.qualification_reasons,
+        })),
+        rejected: (a.rejected as Array<Record<string, unknown>> ?? []).map((r) => ({
+          lead_id: r.lead_id, name: r.business_name, type: r.business_type,
+          reason: r.rejection_reason,
+        })),
+        stats: { qualified: (a.qualified as unknown[])?.length ?? 0, rejected: (a.rejected as unknown[])?.length ?? 0, avg_score: a.avg_score },
+      };
+    case "brief":
+      return (a.briefs as Array<Record<string, unknown>> ?? []).map((b) => ({
+        name: b.businessName, type: b.businessType,
+        headline: b.heroHeadline, subtext: b.heroSubtext,
+        services: (b.services as unknown[])?.length ?? 0,
+        reviews: (b.bestReviews as unknown[])?.length ?? 0,
+        sections: b.sectionOrder,
+      }));
+    case "compose":
+      return (a.sites as Array<Record<string, unknown>> ?? []).map((s) => ({
+        lead_id: s.lead_id, name: s.business_name,
+        html_length: (s.html as string)?.length ?? 0,
+        cost: s.cost_usd,
+      }));
+    default:
+      return a;
+  }
+}
+
+// ---------------------------------------------------------------------------
 // HTTP Server
 // ---------------------------------------------------------------------------
 
@@ -452,6 +742,99 @@ const server = createServer(async (req, res) => {
       return;
     }
 
+    // --- Key management ---
+    if (path === "/api/keys" && req.method === "GET") {
+      sendJson(res, getMaskedKeys());
+      return;
+    }
+
+    if (path === "/api/keys" && req.method === "POST") {
+      const body = JSON.parse(await readBody(req)) as Record<string, string>;
+      saveKeys(body);
+      sendJson(res, getMaskedKeys());
+      return;
+    }
+
+    // --- Pipeline ---
+    if (path === "/api/pipeline/start" && req.method === "POST") {
+      const body = JSON.parse(await readBody(req)) as { location: string; verticals: string[]; maxPerVertical: number };
+      const run = createPipelineRun(body);
+      sendJson(res, { runId: run.id, stages: run.stages.map((s) => ({ name: s.name, status: s.status })) });
+      return;
+    }
+
+    if (path === "/api/pipeline/step" && req.method === "POST") {
+      const body = JSON.parse(await readBody(req)) as { runId: string };
+      const stage = await runNextStage(body.runId);
+      const run = activeRuns.get(body.runId)!;
+      sendJson(res, {
+        stage: { ...stage, artifacts: undefined },
+        formatted: formatStageOutput(stage),
+        currentStage: run.currentStage,
+        allStages: run.stages.map((s) => ({ name: s.name, status: s.status, summary: s.summary, leadCount: s.leadCount, costUsd: s.costUsd, ms: s.finishedAt && s.startedAt ? s.finishedAt - s.startedAt : undefined })),
+      });
+      return;
+    }
+
+    if (path === "/api/pipeline/run-all" && req.method === "POST") {
+      const body = JSON.parse(await readBody(req)) as { runId: string };
+      const run = activeRuns.get(body.runId);
+      if (!run) return sendError(res, "Run not found", 404);
+
+      // Run all remaining stages
+      const results: unknown[] = [];
+      while (run.currentStage < STAGES.length - 1) {
+        const stage = await runNextStage(body.runId);
+        results.push({ ...stage, artifacts: undefined });
+        if (stage.status === "error") break;
+      }
+      sendJson(res, {
+        stages: run.stages.map((s) => ({ name: s.name, status: s.status, summary: s.summary, leadCount: s.leadCount, costUsd: s.costUsd })),
+        complete: run.currentStage >= STAGES.length - 1,
+      });
+      return;
+    }
+
+    const pipelineStatusMatch = path.match(/^\/api\/pipeline\/status\/([^/]+)$/);
+    if (pipelineStatusMatch && req.method === "GET") {
+      const runId = pipelineStatusMatch[1];
+      // SSE stream
+      res.writeHead(200, {
+        "Content-Type": "text/event-stream",
+        "Cache-Control": "no-cache",
+        Connection: "keep-alive",
+        "Access-Control-Allow-Origin": "*",
+      });
+      const clients = sseClients.get(runId) ?? [];
+      clients.push(res);
+      sseClients.set(runId, clients);
+      req.on("close", () => {
+        const remaining = (sseClients.get(runId) ?? []).filter((c) => c !== res);
+        if (remaining.length > 0) sseClients.set(runId, remaining);
+        else sseClients.delete(runId);
+      });
+      // Send current state
+      const run = activeRuns.get(runId);
+      if (run) {
+        res.write(`data: ${JSON.stringify({ type: "init", stages: run.stages.map((s) => ({ name: s.name, status: s.status, summary: s.summary, leadCount: s.leadCount })) })}\n\n`);
+      }
+      return;
+    }
+
+    const pipelineOutputMatch = path.match(/^\/api\/pipeline\/output\/([^/]+)\/([^/]+)$/);
+    if (pipelineOutputMatch && req.method === "GET") {
+      const run = activeRuns.get(pipelineOutputMatch[1]);
+      if (!run) return sendError(res, "Run not found", 404);
+      const stage = run.stages.find((s) => s.name === pipelineOutputMatch[2]);
+      if (!stage) return sendError(res, "Stage not found", 404);
+      sendJson(res, {
+        stage: { ...stage, artifacts: undefined },
+        formatted: formatStageOutput(stage),
+        raw: stage.artifacts,
+      });
+      return;
+    }
+
     // --- Static files ---
     let filePath = path === "/" ? "/index.html" : path;
     const fullPath = join(PUBLIC_DIR, filePath);
@@ -476,6 +859,7 @@ const server = createServer(async (req, res) => {
 // ---------------------------------------------------------------------------
 
 openDb();
+loadKeys();
 console.log(`
 ╔════════════════════════════════════════════╗
 ║   Composer Workbench                       ║

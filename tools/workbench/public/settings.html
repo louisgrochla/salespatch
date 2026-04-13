@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Settings — Composer Workbench</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <div class="page-content">
+    <div class="settings-container">
+      <h1>API Keys</h1>
+      <p class="settings-desc">Keys are stored locally in <code>data/.env.workbench</code> and never sent to the browser. Only masked versions are shown.</p>
+
+      <div class="key-form" id="key-form">
+        <div class="key-row">
+          <label>
+            <span class="key-name">OpenRouter API Key</span>
+            <span class="key-desc">For AI site generation (Claude Sonnet via OpenRouter)</span>
+          </label>
+          <div class="key-input-row">
+            <span class="key-current" id="current-OPENROUTER_API_KEY">—</span>
+            <input type="password" id="input-OPENROUTER_API_KEY" placeholder="sk-or-v1-..." />
+          </div>
+        </div>
+
+        <div class="key-row">
+          <label>
+            <span class="key-name">Google Places API Key</span>
+            <span class="key-desc">For lead scouting and Place Details enrichment</span>
+          </label>
+          <div class="key-input-row">
+            <span class="key-current" id="current-GOOGLE_PLACES_API_KEY">—</span>
+            <input type="password" id="input-GOOGLE_PLACES_API_KEY" placeholder="AIzaSy..." />
+          </div>
+        </div>
+
+        <div class="key-row">
+          <label>
+            <span class="key-name">Apify API Token</span>
+            <span class="key-desc">For Instagram profile scraping</span>
+          </label>
+          <div class="key-input-row">
+            <span class="key-current" id="current-APIFY_API_TOKEN">—</span>
+            <input type="password" id="input-APIFY_API_TOKEN" placeholder="apify_api_..." />
+          </div>
+        </div>
+
+        <button class="btn-save-keys" onclick="saveAllKeys()">Save Keys</button>
+        <div class="key-status-msg" id="key-status"></div>
+      </div>
+    </div>
+  </div>
+
+  <script src="/nav.js"></script>
+  <script src="/settings.js"></script>
+</body>
+</html>
