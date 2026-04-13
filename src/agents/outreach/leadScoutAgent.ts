@@ -30,10 +30,22 @@ export interface LeadScoutConfig {
 export type VerticalCategory = "food" | "beauty" | "retail" | "professional" | "trades" | "unknown";
 
 const PREFERRED_VERTICALS = [
-  "restaurant", "cafe", "takeaway", "bakery", "pub", "bar",
-  "barber", "salon", "hairdresser", "spa", "nail bar", "tattoo",
+  // Food & drink
+  "restaurant", "cafe", "takeaway", "bakery", "pub", "bar", "deli", "juice bar",
+  // Beauty
+  "barber", "salon", "hairdresser", "spa", "nail bar", "tanning", "tattoo",
+  // Health
+  "dentist", "physio", "chiropractor", "optician", "vet", "pharmacy",
+  // Trades
+  "plumber", "electrician", "roofer", "locksmith", "painter", "gardener", "builder", "handyman",
+  // Automotive
+  "garage", "MOT centre", "car wash", "tyre shop", "auto repair",
+  // Fitness
   "gym", "fitness",
-  "florist", "pet shop", "boutique", "shop",
+  // Retail
+  "florist", "pet shop", "dry cleaner", "tailor", "gift shop", "jeweller", "boutique", "shop",
+  // Services
+  "accountant", "solicitor", "estate agent", "tutor", "photographer",
 ];
 
 const TRADES_KEYWORDS = [
@@ -44,14 +56,29 @@ const TRADES_KEYWORDS = [
 ];
 
 const KNOWN_CHAINS = [
-  "mcdonald", "burger king", "kfc", "subway", "domino", "pizza hut",
-  "costa", "starbucks", "greggs", "pret", "nando", "wagamama",
-  "zizzi", "pizza express", "frankie & benny", "tgi friday",
-  "wetherspoon", "slug and lettuce", "all bar one",
-  "toni & guy", "supercuts", "rush hair",
-  "tesco", "sainsbury", "asda", "aldi", "lidl", "morrisons",
+  // Fast food
+  "mcdonald", "burger king", "kfc", "subway", "domino", "pizza hut", "five guys",
+  "taco bell", "wendy", "papa john",
+  // Coffee
+  "costa", "starbucks", "caffe nero", "pret a manger", "pret ",
+  // High street food
+  "greggs", "nando", "wagamama", "zizzi", "pizza express", "yo sushi",
+  "frankie & benny", "tgi friday", "ask italian", "prezzo", "bella italia",
+  "harvester", "beefeater", "toby carvery", "hungry horse",
+  // Pubs
+  "wetherspoon", "slug and lettuce", "all bar one", "greene king",
+  // Hair
+  "toni & guy", "toni&guy", "supercuts", "rush hair", "headmasters",
+  // Retail
+  "tesco", "sainsbury", "asda", "aldi", "lidl", "morrisons", "waitrose",
   "boots", "superdrug", "the body shop",
-  "anytime fitness", "puregym", "the gym group", "david lloyd",
+  // Fitness
+  "anytime fitness", "puregym", "pure gym", "the gym group", "david lloyd",
+  "nuffield health", "virgin active", "bannatyne",
+  // Bakery / specialty
+  "cake box", "black sheep coffee", "gail's",
+  // Other
+  "specsavers", "vision express", "halfords", "kwik fit",
 ];
 
 const GOOGLE_TYPE_TO_CATEGORY: Record<string, VerticalCategory> = {
