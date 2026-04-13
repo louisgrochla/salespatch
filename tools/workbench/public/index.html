@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Composer Workbench</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <div class="layout">
+    <!-- Sidebar: Lead List -->
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-header">
+        <h2>Leads</h2>
+        <div class="filter-bar">
+          <select id="filter-status">
+            <option value="all">All</option>
+            <option value="qualified">Qualified</option>
+            <option value="rejected">Rejected</option>
+          </select>
+          <input type="text" id="filter-search" placeholder="Search..." />
+        </div>
+      </div>
+      <div class="lead-list" id="lead-list">
+        <div class="loading">Loading leads...</div>
+      </div>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="main" id="main">
+      <div class="empty-state" id="empty-state">
+        <h2>Select a lead from the sidebar</h2>
+        <p>Pick a business to generate a demo site for. You'll see their scraped data, photos, and brand analysis before generating.</p>
+      </div>
+
+      <!-- Lead Detail View (hidden initially) -->
+      <div class="detail-view" id="detail-view" style="display:none;">
+        <!-- Top row: Business info + Settings -->
+        <div class="detail-top">
+          <div class="business-info" id="business-info"></div>
+          <div class="settings-panel">
+            <h3>Composer Settings</h3>
+            <label>
+              Model
+              <select id="setting-model">
+                <option value="anthropic/claude-sonnet-4-20250514">Claude Sonnet 4</option>
+                <option value="anthropic/claude-3.5-sonnet">Claude 3.5 Sonnet</option>
+                <option value="anthropic/claude-haiku-3.5-20241022">Claude 3.5 Haiku</option>
+                <option value="google/gemini-2.0-flash-001">Gemini 2.0 Flash</option>
+              </select>
+            </label>
+            <label>
+              Temperature
+              <input type="range" id="setting-temp" min="0" max="1" step="0.1" value="0.7" />
+              <span id="temp-value">0.7</span>
+            </label>
+            <label>
+              Max Tokens
+              <input type="number" id="setting-tokens" value="16000" min="4000" max="32000" step="1000" />
+            </label>
+            <label>
+              Prompt Addition
+              <textarea id="setting-prompt" rows="3" placeholder="Extra instructions for the AI..."></textarea>
+            </label>
+            <div class="photo-selection" id="photo-selection"></div>
+            <button class="btn-generate" id="btn-generate" onclick="generate()">Generate Site</button>
+            <div class="status" id="status"></div>
+          </div>
+        </div>
+
+        <!-- Bottom row: Preview -->
+        <div class="detail-bottom">
+          <div class="preview-panel">
+            <div class="preview-header">
+              <h3>Generated Preview</h3>
+              <div class="preview-actions">
+                <button onclick="saveOutput()" id="btn-save" disabled>Save</button>
+                <button onclick="openInNewTab()" id="btn-newtab" disabled>Open in Tab</button>
+                <button onclick="copyHtml()" id="btn-copy" disabled>Copy HTML</button>
+              </div>
+            </div>
+            <iframe id="preview-frame" sandbox="allow-scripts allow-same-origin"></iframe>
+          </div>
+          <div class="reference-panel">
+            <h3>Reference Photos</h3>
+            <div class="photo-grid" id="reference-photos"></div>
+            <div class="brand-data" id="brand-data"></div>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/app.js"></script>
+</body>
+</html>
