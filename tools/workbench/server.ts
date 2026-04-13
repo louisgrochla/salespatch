@@ -105,6 +105,7 @@ function getAllLeads(): LeadSummary[] {
   const runIds = getRunIds();
   const leads: LeadSummary[] = [];
   const seen = new Set<string>();
+  const seenNames = new Set<string>();
 
   for (const runId of runIds) {
     const scoutData = getArtifact(runId, "scout") as { leads?: Array<Record<string, unknown>> } | null;
@@ -140,6 +141,11 @@ function getAllLeads(): LeadSummary[] {
       const id = lead.lead_id as string;
       if (seen.has(id)) continue;
       seen.add(id);
+
+      // Deduplicate by business name (scheduler ran many times with same search)
+      const nameKey = ((lead.business_name as string) ?? "").toLowerCase().trim();
+      if (seenNames.has(nameKey)) continue;
+      seenNames.add(nameKey);
 
       const profile = profiles.get(id);
       const brand = brandMap.get(id);
