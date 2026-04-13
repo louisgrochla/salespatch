@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import { createLogger } from "./lib/logger.js";
 import { validateEnv } from "./lib/envValidator.js";
 import { CodeAgent } from "./agents/codeAgent.js";
@@ -11,10 +10,6 @@ import { createModelProvider } from "./models/provider.js";
 import { MissionControlServer } from "./missionControl/server.js";
 import { ClawdeckCompatStore } from "./missionControl/clawdeckCompatStore.js";
 import { runLocalAdapter } from "./mock/localAdapter.js";
-import { OpenClawBridgeServer } from "./openclaw/bridgeServer.js";
-import { OpenClawInboundAdapter } from "./openclaw/inboundAdapter.js";
-import { OpenAIRealtimeSessionBroker } from "./openclaw/realtimeSessionBroker.js";
-import { OpenClawEvent } from "./openclaw/types.js";
 import { Orchestrator } from "./orchestrator/orchestrator.js";
 import { SQLiteTaskStore } from "./storage/sqliteTaskStore.js";
 import { SQLiteTraceStore } from "./trace/sqliteTraceStore.js";
@@ -25,11 +20,8 @@ import { registerOutreachAgents } from "./agents/outreach/index.js";
 import { DecisionStore } from "./learning/decisionStore.js";
 import { withLearning } from "./learning/learningAgent.js";
 import { PipelineEngine } from "./pipeline/engine.js";
-import { NoopDispatchAdapter, WebhookDispatchAdapter } from "./pipeline/postDispatch.js";
 import { PipelineScheduler } from "./pipeline/scheduler.js";
 import { SQLitePipelineStore } from "./pipeline/sqlitePipelineStore.js";
-import { TwilioTelephonyDialer } from "./telephony/twilioDialer.js";
-import { BridgeTelephonyControlClient } from "./telephony/controlClient.js";
 
 const log = createLogger("main");
 
@@ -92,60 +84,6 @@ async function main(): Promise<void> {
   // Replay any events from a previous interrupted run
   await bus.replayUnprocessed();
 
-  // ── Optional integrations ──
-  const realtimeSessionBroker =
-    process.env.OPENAI_API_KEY && process.env.OPENAI_REALTIME_ENABLED === "true"
-      ? new OpenAIRealtimeSessionBroker({
-          apiKey: process.env.OPENAI_API_KEY,
-          model: process.env.OPENAI_REALTIME_MODEL ?? "gpt-realtime-mini",
-          baseUrl: process.env.OPENAI_BASE_URL,
-        })
-      : undefined;
-  const telephonyDialer =
-    process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN
-      ? new TwilioTelephonyDialer({
-          accountSid: process.env.TWILIO_ACCOUNT_SID,
-          authToken: process.env.TWILIO_AUTH_TOKEN,
-        })
-      : undefined;
-  const telephonyPublicBaseUrl = process.env.TELEPHONY_PUBLIC_BASE_URL;
-  const telephonyConversationMode =
-    process.env.TELEPHONY_CONVERSATION_MODE === "stream" ? "stream" : "gather";
-
-  // ── Dispatch adapters ──
-  const dispatchAdapters = new Map([
-    [
-      "tiktok",
-      process.env.TIKTOK_DISPATCH_WEBHOOK
-        ? new WebhookDispatchAdapter(
-            "tiktok",
-            process.env.TIKTOK_DISPATCH_WEBHOOK,
-            process.env.POST_DISPATCH_SECRET,
-          )
-        : new NoopDispatchAdapter("tiktok"),
-    ],
-    [
-      "reels",
-      process.env.REELS_DISPATCH_WEBHOOK
-        ? new WebhookDispatchAdapter(
-            "reels",
-            process.env.REELS_DISPATCH_WEBHOOK,
-            process.env.POST_DISPATCH_SECRET,
-          )
-        : new NoopDispatchAdapter("reels"),
-    ],
-    [
-      "shorts",
-      process.env.SHORTS_DISPATCH_WEBHOOK
-        ? new WebhookDispatchAdapter(
-            "shorts",
-            process.env.SHORTS_DISPATCH_WEBHOOK,
-            process.env.POST_DISPATCH_SECRET,
-          )
-        : new NoopDispatchAdapter("shorts"),
-    ],
-  ]);
-
   // ── Self-learning layer ──
   const decisionStore = new DecisionStore(dbPath);
   closeables.push(decisionStore);
@@ -172,8 +110,6 @@ async function main(): Promise<void> {
     pipelineStore,
     agentRuntime,
     notificationStore,
-    undefined,
-    dispatchAdapters,
   );
 
   // Auto-register pipeline definitions
@@ -190,10 +126,6 @@ async function main(): Promise<void> {
   pipelineEngine.recoverStaleRuns();
 
   const pipelineScheduler = new PipelineScheduler(pipelineStore, pipelineEngine);
-  const telephonyBridgeUrl =
-    process.env.MISSION_CONTROL_BRIDGE_URL ??
-    `http://127.0.0.1:${process.env.OPENCLAW_BRIDGE_PORT ?? "4318"}`;
-  const telephonyClient = new BridgeTelephonyControlClient(telephonyBridgeUrl);
 
   // ── Mode dispatch ──
   if (mode === "local") {
@@ -201,85 +133,16 @@ async function main(): Promise<void> {
     return;
   }
 
-  if (mode === "openclaw") {
-    const openClaw = new OpenClawInboundAdapter(
-      controller,
-      transcriptStore,
-      notificationStore,
-    );
-
-    const inbound: OpenClawEvent<{ text: string }> = {
-      event_id: randomUUID(),
-      timestamp: new Date().toISOString(),
-      session_id: "session-001",
-      user_id: "user-001",
-      event_type: "openclaw.message_received",
-      payload: { text: "Create runtime bootstrap task" },
-    };
-
-    const result = await openClaw.handle(inbound);
-    log.info("openclaw one-shot complete", {
-      outbound_count: result.outbound.length,
-    });
-    for (const outbound of result.outbound) {
-      if (
-        outbound.event_type === "system.message_send" ||
-        outbound.event_type === "system.voice_speak"
-      ) {
-        log.info("outbound", {
-          type: outbound.event_type,
-          text: outbound.payload.text,
-        });
-      } else if (outbound.event_type === "system.approval_request") {
-        log.info("outbound", {
-          type: outbound.event_type,
-          task: outbound.payload.task_id,
-        });
-      } else if (
-        outbound.event_type === "system.notify_user" ||
-        outbound.event_type === "system.call_user"
-      ) {
-        log.info("outbound", {
-          type: outbound.event_type,
-          reason: outbound.payload.reason,
-        });
-      }
-    }
-    return;
-  }
-
-  if (mode === "openclaw-bridge") {
-    const adapter = new OpenClawInboundAdapter(
-      controller,
-      transcriptStore,
-      notificationStore,
-    );
-    const host = process.env.OPENCLAW_BRIDGE_HOST ?? "0.0.0.0";
-    const port = Number(process.env.OPENCLAW_BRIDGE_PORT ?? "4318");
-    const bridge = new OpenClawBridgeServer(
-      adapter,
-      transcriptStore,
-      changelogChangeId,
-      realtimeSessionBroker,
-      telephonyDialer,
-      telephonyPublicBaseUrl,
-      telephonyConversationMode,
-    );
-    await bridge.start({ host, port });
-    return;
-  }
 
   if (mode === "mission-control") {
-    const schedulerMode = process.env.SCHEDULER_MODE ?? "internal";
+    const schedulerMode = process.env.SCHEDULER_MODE ?? "disabled";
     if (schedulerMode === "internal") {
       pipelineScheduler.start();
       log.info("scheduler started", { mode: "internal" });
-    } else if (schedulerMode === "openclaw-cron") {
-      log.info("scheduler started", { mode: "openclaw-cron" });
+    } else if (["disabled", "off", "none"].includes(schedulerMode)) {
+      log.info("scheduler disabled");
     } else {
-      throw new Error(
-        `Unsupported SCHEDULER_MODE: ${schedulerMode}. Use "internal" or "openclaw-cron".`,
-      );
+      log.warn("unknown SCHEDULER_MODE, defaulting to disabled", { schedulerMode });
     }
     const server = new MissionControlServer(
       taskStore,
@@ -288,10 +151,10 @@ async function main(): Promise<void> {
       latencyTracker,
       transcriptStore,
       notificationStore,
-      realtimeSessionBroker,
+      undefined, // realtimeSessionBroker — removed
       pipelineStore,
       pipelineEngine,
-      telephonyClient,
+      undefined, // telephonyClient — removed
       compatStore,
     );
     const host = process.env.MISSION_CONTROL_HOST ?? "127.0.0.1";
