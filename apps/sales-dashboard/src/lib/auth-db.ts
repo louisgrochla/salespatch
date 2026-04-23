@@ -34,12 +34,18 @@ export function isSupabaseMode(): boolean {
 
 export async function findUserByName(name: string): Promise<SalesUserRow | null> {
   if (isSupabaseMode()) {
+    // `select('*')` avoids failures if optional columns (email, device_type,
+    // last_active_at) aren't in the deployed Supabase schema.
     const sb = getSupabaseServer();
-    const { data } = await sb
+    const { data, error } = await sb
       .from('sales_users')
-      .select('id, name, pin_hash, email, phone, area_postcode, commission_rate, active, device_type, last_active_at, created_at')
+      .select('*')
       .ilike('name', name)
       .maybeSingle();
+    if (error) {
+      console.error('[auth-db] findUserByName Supabase error:', error);
+      throw new Error(`Supabase select failed: ${error.message}`);
+    }
     if (!data) return null;
     return normaliseRow(data);
   }
@@ -60,38 +66,37 @@ export async function createUser(input: {
   area_postcode: string;
   commission_rate?: number;
 }): Promise<void> {
-  const payload = {
-    id: input.id,
-    name: input.name,
-    pin_hash: input.pin_hash,
-    phone: input.phone ?? null,
-    email: input.email ?? null,
-    area_postcode: input.area_postcode,
-    commission_rate: input.commission_rate ?? 0.1,
-    active: true,
-    device_type: 'web' as const,
-  };
-
   if (isSupabaseMode()) {
+    // Only insert columns we know exist in the Supabase schema (matching the
+    // pre-existing prod signup route). email/device_type may not exist there.
     const sb = getSupabaseServer();
-    const { error } = await sb.from('sales_users').insert(payload);
+    const { error } = await sb.from('sales_users').insert({
+      id: input.id,
+      name: input.name,
+      pin_hash: input.pin_hash,
+      phone: input.phone ?? null,
+      area_postcode: input.area_postcode,
+      commission_rate: input.commission_rate ?? 0.1,
+      active: true,
+    });
     if (error) throw new Error(`Supabase insert failed: ${error.message}`);
     return;
   }
 
+  // SQLite: full schema with email + device_type
   run(
     `INSERT INTO sales_users
        (id, name, pin_hash, email, phone, area_postcode, commission_rate, active, device_type)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    payload.id,
-    payload.name,
-    payload.pin_hash,
-    payload.email,
-    payload.phone,
-    payload.area_postcode,
-    payload.commission_rate,
-    payload.active ? 1 : 0,
-    payload.device_type,
+    input.id,
+    input.name,
+    input.pin_hash,
+    input.email ?? null,
+    input.phone ?? null,
+    input.area_postcode,
+    input.commission_rate ?? 0.1,
+    1,
+    'web',
   );
 }
 
