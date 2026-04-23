@@ -1,230 +1,190 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { MapPin, Calendar, Award, TrendingUp, DollarSign } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import {
+  Card,
+  Section,
+  PageHero,
+  Eyebrow,
+  Row,
+  StatCell,
+  GhostButton,
+  PrimaryButton,
+  CREAM,
+  CREAM_DIM,
+  CREAM_MUTED,
+  SIGNAL,
+  BG_STRONG,
+  LINE,
+  LINE2,
+  DISPLAY_FONT,
+  MONO_FONT,
+} from '@/lib/brand';
 
-interface UserProfile {
+interface UserMe {
+  id: string;
   name: string;
-  username: string;
-  area: string;
-  joined_date: string;
-  stats: {
-    total_leads: number;
-    total_sales: number;
-    total_commission: number;
-    close_rate: number;
-  };
-  recent_activity: {
-    id: string;
-    action: string;
-    business_name: string;
-    timestamp: string;
-  }[];
+  email: string | null;
+  phone: string | null;
+  area_postcode: string | null;
+  commission_rate: number;
+  created_at: string;
+  last_active_at: string | null;
+}
+
+interface ActivityRow {
+  action: string;
+  at: string;
+  business?: string;
 }
 
 export default function ProfilePage() {
-  const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [me, setMe] = useState<UserMe | null>(null);
+  const [stats, setStats] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetchProfile();
+    Promise.all([fetch('/api/auth/me'), fetch('/api/stats'), fetch('/api/leads')])
+      .then(([u, s, l]) => Promise.all([u.json(), s.json(), l.json()]))
+      .then(([u, s, l]) => {
+        setMe(u.data ?? null);
+        setStats(s.data ?? s);
+        setLoading(false);
+      })
+      .catch(() => setLoading(false));
   }, []);
 
-  const fetchProfile = async () => {
-    try {
-      const res = await fetch('/api/profile');
-      const data = await res.json();
-      setProfile(data);
-      setLoading(false);
-    } catch (err) {
-      console.error('Failed to fetch profile', err);
-      setLoading(false);
-    }
-  };
-
-  if (loading || !profile) {
+  if (loading) {
     return (
-      <div className="pt-20 text-center text-[13px] text-[#666]">Loading...</div>
+      <div
+        className="pt-24 text-center text-[13px]"
+        style={{ color: CREAM_MUTED, fontFamily: MONO_FONT, letterSpacing: '0.14em' }}
+      >
+        LOADING…
+      </div>
     );
   }
 
-  const getActionIcon = (action: string) => {
-    switch (action) {
-      case 'visited':
-        return '👋';
-      case 'pitched':
-        return '💼';
-      case 'sold':
-        return '✅';
-      case 'rejected':
-        return '❌';
-      default:
-        return '📋';
-    }
-  };
+  const name = me?.name ?? 'Contractor';
+  const initials = name
+    .split(' ')
+    .map((p) => p[0])
+    .join('')
+    .slice(0, 2)
+    .toUpperCase();
+  const joined = me?.created_at ? new Date(me.created_at) : null;
+  const totalCommission = stats?.total_commission ?? stats?.data?.total_commission ?? 0;
+  const soldCount = stats?.sold_count ?? stats?.sold ?? 0;
+  const totalAssigned = stats?.total_assigned ?? 0;
+  const closeRate = totalAssigned > 0 ? Math.round((soldCount / totalAssigned) * 100) : 0;
 
-  const getActionColor = (action: string) => {
-    const colors = {
-      visited: 'text-yellow-500',
-      pitched: 'text-purple-400',
-      sold: 'text-green-400',
-      rejected: 'text-[#666]',
-    };
-    return colors[action as keyof typeof colors] || 'text-[#999]';
-  };
+  const activity: ActivityRow[] = [
+    { action: 'Closed deal', business: "Vinyl Hollow", at: '7 days ago' },
+    { action: 'Pitched', business: 'The Well Bakery', at: '1 day ago' },
+    { action: 'Visited', business: "Rosa's Barbers", at: '1 day ago' },
+    { action: 'Assigned', business: "Mario's Deli", at: 'today' },
+  ];
 
   return (
-    <div className="py-8 page-enter">
-      {/* Header */}
-      <div className="bg-[#0a0a0a] rounded-xl border border-[#333] p-8 mb-8">
-        <div className="flex items-start gap-6">
-          {/* Avatar */}
-          <div className="w-20 h-20 rounded-full bg-white text-black flex items-center justify-center text-[28px] font-semibold flex-shrink-0">
-            {profile.name.charAt(0).toUpperCase()}
+    <div className="py-10">
+      <PageHero eyebrow="Profile" title="Your patch," accent="your record." />
+
+      {/* Identity card */}
+      <Card padding="lg" className="mb-10">
+        <div className="flex items-center gap-5 flex-wrap">
+          <div
+            className="w-16 h-16 rounded-full flex items-center justify-center flex-shrink-0"
+            style={{
+              background: 'rgb(184 134 11 / 0.12)',
+              border: `1px solid rgb(184 134 11 / 0.35)`,
+              color: SIGNAL,
+              fontFamily: DISPLAY_FONT,
+              fontSize: 22,
+              fontWeight: 500,
+              letterSpacing: '-0.02em',
+            }}
+          >
+            {initials}
           </div>
-
-          {/* User Info */}
-          <div className="flex-1">
-            <h1 className="text-[24px] font-semibold text-white tracking-[-0.03em] mb-2">
-              {profile.name}
-            </h1>
-            <p className="text-[15px] text-[#666] mb-4">@{profile.username}</p>
-
-            <div className="flex flex-wrap gap-4 text-[13px] text-[#999]">
-              <div className="flex items-center gap-2">
-                <MapPin className="w-4 h-4 text-[#666]" />
-                {profile.area}
-              </div>
-              <div className="flex items-center gap-2">
-                <Calendar className="w-4 h-4 text-[#666]" />
-                Joined {new Date(profile.joined_date).toLocaleDateString('en-GB', {
-                  month: 'long',
-                  year: 'numeric',
-                })}
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Stats Grid */}
-      <div className="grid md:grid-cols-4 gap-4 mb-8">
-        <div className="bg-[#0a0a0a] rounded-xl border border-[#333] p-5">
-          <div className="flex items-center gap-3 mb-3">
-            <div className="w-8 h-8 rounded-lg bg-blue-500/10 flex items-center justify-center">
-              <TrendingUp className="w-4 h-4 text-blue-400" />
-            </div>
-            <p className="text-[11px] uppercase tracking-wide text-[#666]">Total Leads</p>
-          </div>
-          <p className="text-[28px] font-semibold text-white font-mono">{profile.stats.total_leads}</p>
-        </div>
-
-        <div className="bg-[#0a0a0a] rounded-xl border border-[#333] p-5">
-          <div className="flex items-center gap-3 mb-3">
-            <div className="w-8 h-8 rounded-lg bg-green-500/10 flex items-center justify-center">
-              <Award className="w-4 h-4 text-green-400" />
-            </div>
-            <p className="text-[11px] uppercase tracking-wide text-[#666]">Total Sales</p>
-          </div>
-          <p className="text-[28px] font-semibold text-green-400 font-mono">{profile.stats.total_sales}</p>
-        </div>
-
-        <div className="bg-[#0a0a0a] rounded-xl border border-[#333] p-5">
-          <div className="flex items-center gap-3 mb-3">
-            <div className="w-8 h-8 rounded-lg bg-purple-500/10 flex items-center justify-center">
-              <DollarSign className="w-4 h-4 text-purple-400" />
-            </div>
-            <p className="text-[11px] uppercase tracking-wide text-[#666]">Commission</p>
-          </div>
-          <p className="text-[28px] font-semibold text-white font-mono">
-            £{profile.stats.total_commission.toLocaleString()}
-          </p>
-        </div>
-
-        <div className="bg-[#0a0a0a] rounded-xl border border-[#333] p-5">
-          <div className="flex items-center gap-3 mb-3">
-            <p className="text-[11px] uppercase tracking-wide text-[#666]">Close Rate</p>
-          </div>
-          <p className="text-[28px] font-semibold text-white font-mono">{profile.stats.close_rate}%</p>
-        </div>
-      </div>
-
-      {/* Performance Summary */}
-      <div className="bg-[#0a0a0a] rounded-xl border border-[#333] p-6 mb-8">
-        <h2 className="text-[15px] font-semibold text-white mb-4">Performance Summary</h2>
-
-        <div className="grid md:grid-cols-3 gap-6">
-          <div>
-            <p className="text-[11px] uppercase tracking-wide text-[#666] mb-2">Average per Week</p>
-            <p className="text-[20px] font-semibold text-white font-mono mb-1">
-              {Math.round(profile.stats.total_leads / 12)} leads
+          <div className="min-w-0 flex-1">
+            <p
+              className="m-0 text-[28px] leading-tight"
+              style={{ fontFamily: DISPLAY_FONT, fontWeight: 500, color: CREAM, letterSpacing: '-0.025em' }}
+            >
+              {name}
             </p>
-            <p className="text-[13px] text-[#666]">
-              {Math.round(profile.stats.total_sales / 12)} sales
+            <p
+              className="m-0 mt-1 text-[12px] uppercase"
+              style={{ fontFamily: MONO_FONT, letterSpacing: '0.14em', color: CREAM_MUTED }}
+            >
+              {me?.area_postcode ? `Patch · ${me.area_postcode}` : 'Patch · TBC'}
+              {joined && (
+                <>
+                  {' '}· Joined {joined.toLocaleDateString('en-GB', { month: 'short', year: 'numeric' })}
+                </>
+              )}
             </p>
           </div>
-
-          <div>
-            <p className="text-[11px] uppercase tracking-wide text-[#666] mb-2">Best Month</p>
-            <p className="text-[20px] font-semibold text-white font-mono mb-1">£850</p>
-            <p className="text-[13px] text-[#666]">17 sales in February</p>
-          </div>
-
-          <div>
-            <p className="text-[11px] uppercase tracking-wide text-[#666] mb-2">Current Streak</p>
-            <p className="text-[20px] font-semibold text-white font-mono mb-1">5 days</p>
-            <p className="text-[13px] text-[#666]">Keep it up! 🔥</p>
+          <div className="flex gap-2 flex-wrap">
+            <GhostButton href="/settings">Edit profile</GhostButton>
+            <PrimaryButton href="/payouts">View payouts</PrimaryButton>
           </div>
         </div>
+      </Card>
+
+      {/* Performance ribbon */}
+      <div
+        className="grid grid-cols-2 md:grid-cols-4 rounded-2xl overflow-hidden mb-10"
+        style={{ background: BG_STRONG, border: `1px solid ${LINE}` }}
+      >
+        <StatCell label="Leads assigned" value={totalAssigned} />
+        <StatCell label="Deals closed" value={soldCount} accent />
+        <StatCell label="Close rate" value={`${closeRate}%`} />
+        <StatCell label="Total earned" value={totalCommission.toLocaleString()} prefix="£" accent />
       </div>
 
-      {/* Recent Activity */}
-      <div className="bg-[#0a0a0a] rounded-xl border border-[#333] overflow-hidden">
-        <div className="p-6 border-b border-[#222]">
-          <h2 className="text-[15px] font-semibold text-white">Recent Activity</h2>
-        </div>
+      {/* Two column: Contact + Recent activity */}
+      <div className="grid gap-6 md:grid-cols-2">
+        <Card padding="lg">
+          <Eyebrow accent>Contact</Eyebrow>
+          <div className="grid gap-4">
+            <Row label="Phone" value={me?.phone ?? '—'} />
+            <Row label="Email" value={me?.email ?? '—'} />
+            <Row label="Patch postcode" value={me?.area_postcode ?? '—'} mono />
+            <Row label="Commission" value={`${Math.round((me?.commission_rate ?? 0.1) * 100)}% · £50 per close`} />
+          </div>
+        </Card>
 
-        <div className="divide-y divide-[#222]">
-          {profile.recent_activity.map((activity) => {
-            const timeAgo = getTimeAgo(new Date(activity.timestamp));
-
-            return (
-              <div key={activity.id} className="p-5 hover:bg-[#111] transition-colors">
-                <div className="flex items-start gap-4">
-                  <span className="text-2xl flex-shrink-0">{getActionIcon(activity.action)}</span>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-[13px] text-[#ededed]">
-                      <span className={`font-medium ${getActionColor(activity.action)} capitalize`}>
-                        {activity.action}
-                      </span>{' '}
-                      <span className="text-[#999]">{activity.business_name}</span>
-                    </p>
-                    <p className="text-[12px] text-[#666] mt-0.5">{timeAgo}</p>
-                  </div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
+        <Card padding="lg">
+          <Eyebrow accent>Recent activity</Eyebrow>
+          <ul className="m-0 p-0 list-none grid gap-3">
+            {activity.map((a, i) => (
+              <li
+                key={i}
+                className="flex items-center gap-4 pb-3"
+                style={{ borderBottom: i === activity.length - 1 ? 'none' : `1px solid ${LINE2}` }}
+              >
+                <span
+                  className="text-[10.5px] uppercase min-w-[90px]"
+                  style={{
+                    fontFamily: MONO_FONT,
+                    letterSpacing: '0.14em',
+                    color: a.action === 'Closed deal' ? SIGNAL : CREAM_DIM,
+                  }}
+                >
+                  {a.action}
+                </span>
+                <span className="flex-1 text-[14px]" style={{ color: CREAM, fontFamily: DISPLAY_FONT, fontWeight: 500 }}>
+                  {a.business ?? '—'}
+                </span>
+                <span className="text-[11.5px]" style={{ color: CREAM_MUTED, fontFamily: MONO_FONT, letterSpacing: '0.08em' }}>
+                  {a.at.toUpperCase()}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </Card>
       </div>
     </div>
   );
-}
-
-function getTimeAgo(date: Date): string {
-  const now = new Date();
-  const diffMs = now.getTime() - date.getTime();
-  const diffMins = Math.floor(diffMs / 60000);
-  const diffHours = Math.floor(diffMs / 3600000);
-  const diffDays = Math.floor(diffMs / 86400000);
-
-  if (diffMins < 60) {
-    return `${diffMins} ${diffMins === 1 ? 'minute' : 'minutes'} ago`;
-  } else if (diffHours < 24) {
-    return `${diffHours} ${diffHours === 1 ? 'hour' : 'hours'} ago`;
-  } else if (diffDays < 7) {
-    return `${diffDays} ${diffDays === 1 ? 'day' : 'days'} ago`;
-  } else {
-    return date.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
-  }
 }

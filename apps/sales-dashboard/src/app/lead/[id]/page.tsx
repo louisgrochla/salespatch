@@ -3,831 +3,861 @@
 import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 
-function tryParse<T>(val: unknown, fallback: T): T {
-  if (!val || typeof val !== 'string') return fallback;
-  try { return JSON.parse(val) as T; } catch { return fallback; }
-}
-
-import {
-  ArrowLeft,
-  Phone,
-  MapPin,
-  Star,
-  ExternalLink,
-  CheckCircle2,
-  XCircle,
-  Clock,
-  Calendar,
-  Lightbulb,
-  MessageSquare,
-  TrendingUp,
-  AlertCircle,
-  ChevronDown,
-} from 'lucide-react';
-
+// -----------------------------------------------------------------------------
+// Types
+// -----------------------------------------------------------------------------
 interface Lead {
-  id: string;
+  assignment_id: string;
+  assignment_status: 'new' | 'visited' | 'pitched' | 'sold' | 'rejected';
+  assigned_at: string;
+  lead_id: string;
+
   business_name: string;
-  business_type: string;
-  postcode: string;
-  phone: string;
-  google_rating: number;
-  google_review_count: number;
-  status: 'new' | 'visited' | 'pitched' | 'sold' | 'rejected';
-  has_demo_site: boolean;
-  follow_up_date?: string;
-  contact_name?: string;
-  contact_role?: string;
-  opening_hours: string[];
+  business_type: string | null;
+  address: string | null;
+  postcode: string | null;
+  phone: string | null;
+  email: string | null;
+  website_url: string | null;
+
+  google_rating: number | null;
+  google_review_count: number | null;
+  has_website: boolean;
+  website_quality_score: number | null;
+
+  description: string | null;
   services: string[];
-  address?: string;
-  avoid_topics?: string[];
-  best_reviews?: Array<{ author: string; rating: number; text: string }>;
-  trust_badges?: string[];
-  follow_up_at?: string;
-  [key: string]: unknown;
+  pain_points: string[];
+  opening_hours: string[];
+  best_reviews: Array<{ author: string; rating: number; text: string }>;
+
+  brand_colours: Record<string, string> | null;
+  hero_headline: string | null;
+  cta_text: string | null;
+  trust_badges: string[];
+  avoid_topics: string[];
+
+  demo_site_domain: string | null;
+  demo_site_qa_score: number | null;
+  has_demo_site: boolean;
+
+  follow_up_at: string | null;
+  follow_up_note: string | null;
+  contact_name: string | null;
+  contact_role: string | null;
+  commission_amount: number | null;
+
+  visited_at: string | null;
+  pitched_at: string | null;
+  sold_at: string | null;
 }
 
+// -----------------------------------------------------------------------------
+// Brand tokens (match AppShell + apply page)
+// -----------------------------------------------------------------------------
+const CREAM = 'rgb(248 244 238)';
+const CREAM_DIM = 'rgb(210 200 185)';
+const CREAM_MUTED = 'rgb(210 200 185 / 0.55)';
+const SIGNAL = 'rgb(184 134 11)';
+const SIGNAL_DIM = 'rgb(184 134 11 / 0.6)';
+const BG_CARD = 'rgb(28 26 23)';
+const BG_STRONG = 'rgb(30 28 25)';
+const BG_HOVER = 'rgb(36 33 29)';
+const LINE = 'rgb(255 255 255 / 0.08)';
+const LINE2 = 'rgb(255 255 255 / 0.05)';
+
+const DISPLAY_FONT = 'Geist, "Inter Tight", sans-serif';
+const MONO_FONT = '"JetBrains Mono", ui-monospace, monospace';
+
+const STATUS_COLOR: Record<Lead['assignment_status'], string> = {
+  new: 'rgb(140 160 200)',
+  visited: CREAM_DIM,
+  pitched: 'rgb(220 150 80)',
+  sold: SIGNAL,
+  rejected: 'rgb(120 115 108)',
+};
+
+// -----------------------------------------------------------------------------
+// Component
+// -----------------------------------------------------------------------------
 export default function LeadDetailPage() {
   const params = useParams();
   const router = useRouter();
   const id = params.id as string;
 
   const [lead, setLead] = useState<Lead | null>(null);
-  const [activeTab, setActiveTab] = useState<'overview' | 'prepare' | 'pitch' | 'follow-up'>('overview');
-  const [briefing, setBriefing] = useState(false);
-  const [briefingStep, setBriefingStep] = useState(0);
   const [loading, setLoading] = useState(true);
-  const [notes, setNotes] = useState('');
-  const [followUpDate, setFollowUpDate] = useState('');
-  const [actionsOpen, setActionsOpen] = useState(false);
-  const [interestLevel, setInterestLevel] = useState<'hot' | 'warm' | 'cold' | ''>('');
-  const [objection, setObjection] = useState('');
-  const [bestTime, setBestTime] = useState('');
-  const [sentiment, setSentiment] = useState<'friendly' | 'neutral' | 'hostile' | ''>('');
-  const [competitor, setCompetitor] = useState('');
-  const [priceDiscussed, setPriceDiscussed] = useState(false);
-  const [contactName, setContactName] = useState('');
-  const [contactRole, setContactRole] = useState('');
+  const [notFound, setNotFound] = useState(false);
 
   useEffect(() => {
-    fetchLead();
+    let cancelled = false;
+    fetch(`/api/leads/${id}`)
+      .then((r) => r.json().then((j) => ({ status: r.status, body: j })))
+      .then(({ status, body }) => {
+        if (cancelled) return;
+        if (status === 404) {
+          setNotFound(true);
+        } else if (body.data) {
+          setLead(body.data);
+        }
+        setLoading(false);
+      })
+      .catch(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [id]);
 
-  const fetchLead = async () => {
-    try {
-      const res = await fetch(`/api/leads/${id}`);
-      const json = await res.json();
-      const data = json.data ?? json;
-      // Parse JSON string fields if needed
-      const parsed = {
-        ...data,
-        id: data.id ?? data.assignment_id ?? data.lead_id,
-        status: data.status ?? data.assignment_status ?? 'new',
-        opening_hours: Array.isArray(data.opening_hours) ? data.opening_hours : tryParse(data.opening_hours, []),
-        services: Array.isArray(data.services) ? data.services : tryParse(data.services, []),
-        best_reviews: Array.isArray(data.best_reviews) ? data.best_reviews : tryParse(data.best_reviews, []),
-        trust_badges: Array.isArray(data.trust_badges) ? data.trust_badges : tryParse(data.trust_badges, []),
-        avoid_topics: Array.isArray(data.avoid_topics) ? data.avoid_topics : tryParse(data.avoid_topics, []),
-      };
-      setLead(parsed);
-      setFollowUpDate(parsed.follow_up_date || parsed.follow_up_at || '');
-      setLoading(false);
-    } catch (err) {
-      console.error('Failed to fetch lead', err);
-      setLoading(false);
-    }
-  };
-
-  const updateStatus = async (newStatus: string) => {
-    try {
-      const res = await fetch(`/api/leads/${id}/status`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: newStatus }),
-      });
-      if (res.ok) {
-        // Update locally immediately for instant feedback
-        setLead(prev => prev ? { ...prev, status: newStatus as Lead['status'] } : prev);
-      }
-    } catch (err) {
-      console.error('Failed to update status', err);
-    }
-  };
-
-  const saveFollowUp = async () => {
-    try {
-      await fetch(`/api/leads/${id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ follow_up_date: followUpDate, notes }),
-      });
-      alert('Follow-up saved');
-    } catch (err) {
-      console.error('Failed to save follow-up', err);
-    }
-  };
-
-  // Check if business is open right now based on opening_hours
-  const getOpenStatus = (): { isOpen: boolean; label: string } | null => {
-    const hours = lead?.opening_hours;
-    if (!hours || !Array.isArray(hours) || hours.length === 0) return null;
-
-    const now = new Date();
-    const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-    const dayAliases: Record<string, number> = {
-      'sun': 0, 'sunday': 0, 'mon': 1, 'monday': 1, 'tue': 2, 'tuesday': 2,
-      'wed': 3, 'wednesday': 3, 'thu': 4, 'thursday': 4, 'fri': 5, 'friday': 5,
-      'sat': 6, 'saturday': 6,
-    };
-    const currentDay = now.getDay();
-    const currentMinutes = now.getHours() * 60 + now.getMinutes();
-
-    for (const entry of hours) {
-      const str = entry.toLowerCase().trim();
-
-      // Match "Mon-Fri: 9:00-17:30" or "Saturday: 9:00-16:00" or "Sun: Closed"
-      const match = str.match(/^([a-z\-]+)\s*[:]\s*(.+)$/i);
-      if (!match) continue;
-
-      const dayPart = match[1].trim().toLowerCase();
-      const timePart = match[2].trim().toLowerCase();
-
-      // Check if current day falls in this range
-      let dayMatches = false;
-      if (dayPart.includes('-')) {
-        const [startDay, endDay] = dayPart.split('-').map(d => dayAliases[d.trim()]);
-        if (startDay !== undefined && endDay !== undefined) {
-          if (startDay <= endDay) {
-            dayMatches = currentDay >= startDay && currentDay <= endDay;
-          } else {
-            dayMatches = currentDay >= startDay || currentDay <= endDay;
-          }
-        }
-      } else {
-        dayMatches = dayAliases[dayPart] === currentDay;
-      }
-
-      if (!dayMatches) continue;
-
-      if (timePart === 'closed') return { isOpen: false, label: 'Closed today' };
-
-      const timeMatch = timePart.match(/(\d{1,2}):?(\d{2})?\s*[-–]\s*(\d{1,2}):?(\d{2})?/);
-      if (!timeMatch) continue;
-
-      const openMin = parseInt(timeMatch[1]) * 60 + parseInt(timeMatch[2] || '0');
-      const closeMin = parseInt(timeMatch[3]) * 60 + parseInt(timeMatch[4] || '0');
-
-      if (currentMinutes >= openMin && currentMinutes < closeMin) {
-        const minsLeft = closeMin - currentMinutes;
-        if (minsLeft <= 60) return { isOpen: true, label: `Closes in ${minsLeft}m` };
-        const closeH = Math.floor(closeMin / 60);
-        const closeM = closeMin % 60;
-        return { isOpen: true, label: `Open until ${closeH}:${closeM.toString().padStart(2, '0')}` };
-      } else if (currentMinutes < openMin) {
-        const openH = Math.floor(openMin / 60);
-        const openM = openMin % 60;
-        return { isOpen: false, label: `Opens at ${openH}:${openM.toString().padStart(2, '0')}` };
-      } else {
-        return { isOpen: false, label: 'Closed' };
-      }
-    }
-    return null;
-  };
-
-  const openStatus = lead ? getOpenStatus() : null;
-
-  const getStatusColor = (status: string) => {
-    const colors = {
-      new: 'bg-blue-500/10 text-blue-400 border-blue-500/20',
-      visited: 'bg-yellow-500/10 text-yellow-500 border-yellow-500/20',
-      pitched: 'bg-purple-500/10 text-purple-400 border-purple-500/20',
-      sold: 'bg-green-500/10 text-green-400 border-green-500/20',
-      rejected: 'bg-[#222] text-[#666] border-[#333]',
-    };
-    return colors[status as keyof typeof colors] || colors.new;
-  };
-
-  const getBusinessEmoji = (type: string) => {
-    const emojis: Record<string, string> = {
-      barber: '💈',
-      cafe: '☕',
-      plumber: '🔧',
-      restaurant: '🍽️',
-      salon: '💅',
-      gym: '💪',
-      dentist: '🦷',
-      default: '🏪',
-    };
-    return emojis[type] || emojis.default;
-  };
-
-  if (loading || !lead) {
+  if (loading) {
     return (
-      <div className="pt-20 text-center text-[13px] text-[#666]">Loading...</div>
+      <div
+        className="pt-24 text-center text-[13px]"
+        style={{ color: CREAM_MUTED, fontFamily: MONO_FONT, letterSpacing: '0.14em' }}
+      >
+        LOADING…
+      </div>
     );
   }
 
-  const tabs = [
-    { id: 'overview', label: 'Overview', icon: TrendingUp },
-    { id: 'prepare', label: 'Prepare', icon: Lightbulb },
-    { id: 'pitch', label: 'Pitch', icon: MessageSquare },
-    { id: 'follow-up', label: 'Follow Up', icon: Calendar },
-  ];
+  if (notFound || !lead) {
+    return (
+      <div className="py-16">
+        <button
+          onClick={() => router.push('/dashboard')}
+          className="text-[13px] mb-6"
+          style={{ color: SIGNAL, fontFamily: MONO_FONT, letterSpacing: '0.12em' }}
+        >
+          ← BACK TO LEADS
+        </button>
+        <div
+          className="rounded-2xl p-14 text-center"
+          style={{ background: BG_STRONG, border: `1px solid ${LINE}` }}
+        >
+          <p style={{ fontFamily: DISPLAY_FONT, fontSize: 22, fontWeight: 500, color: CREAM }}>
+            Lead not found.
+          </p>
+          <p className="mt-2 text-[14px]" style={{ color: CREAM_DIM }}>
+            It may have been reassigned, or the link is stale.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  const since = relTime(lead.assigned_at);
+  const statusColor = STATUS_COLOR[lead.assignment_status];
 
   return (
-    <div className="page-enter">
-      {/* Header */}
-      <div className="border-b border-[#333]">
-        <div className="py-6">
-          <button
-            onClick={() => router.push('/dashboard')}
-            className="inline-flex items-center gap-2 text-[13px] text-[#666] hover:text-white mb-6 transition-colors"
-          >
-            <ArrowLeft className="w-4 h-4" />
-            Back to leads
-          </button>
+    <div className="py-8 pb-32 page-enter">
+      {/* ── Back ── */}
+      <button
+        onClick={() => router.push('/dashboard')}
+        className="text-[11px] mb-6 inline-flex items-center gap-2 hover:opacity-80 transition-opacity"
+        style={{ color: CREAM_MUTED, fontFamily: MONO_FONT, letterSpacing: '0.14em' }}
+      >
+        ← BACK TO LEADS
+      </button>
 
-          <div className="flex items-start justify-between">
-            <div className="flex items-start gap-4">
-              <span className="text-5xl">{getBusinessEmoji(lead.business_type)}</span>
-              <div>
-                <h1 className="text-[24px] font-semibold text-white tracking-[-0.03em] mb-2">
-                  {lead.business_name}
-                </h1>
-                <div className="flex items-center gap-4 text-[13px] text-[#999]">
-                  <span className="capitalize">{lead.business_type}</span>
-                  <span className="flex items-center gap-1.5">
-                    <MapPin className="w-4 h-4" />
-                    {lead.postcode}
+      {/* ── Hero row ── */}
+      <div className="flex items-start justify-between gap-6 mb-10 flex-wrap">
+        <div className="min-w-0 flex-1">
+          <div
+            className="inline-flex items-center gap-2 mb-3 text-[10.5px] uppercase"
+            style={{ fontFamily: MONO_FONT, letterSpacing: '0.14em', color: statusColor }}
+          >
+            <span
+              className="w-[7px] h-[7px] rounded-full"
+              style={{ background: statusColor }}
+            />
+            {lead.assignment_status}
+            <span style={{ color: CREAM_MUTED }}>· ASSIGNED {since.toUpperCase()}</span>
+            {lead.assignment_status === 'sold' && lead.commission_amount && (
+              <span style={{ color: SIGNAL }}>· +£{lead.commission_amount} EARNED</span>
+            )}
+          </div>
+          <h1
+            className="text-[52px] leading-[1.02] tracking-[-0.035em] font-medium m-0"
+            style={{ fontFamily: DISPLAY_FONT, color: CREAM }}
+          >
+            {lead.business_name}
+          </h1>
+          <p className="text-[15px] mt-3" style={{ color: CREAM_DIM }}>
+            {[lead.business_type, lead.address].filter(Boolean).join(' · ')}
+          </p>
+        </div>
+
+        {/* Rating block */}
+        {lead.google_rating != null && lead.google_rating > 0 && (
+          <div
+            className="rounded-2xl px-6 py-5 min-w-[180px]"
+            style={{ background: BG_STRONG, border: `1px solid ${LINE}` }}
+          >
+            <div
+              className="text-[10.5px] uppercase mb-2"
+              style={{ fontFamily: MONO_FONT, letterSpacing: '0.14em', color: CREAM_MUTED }}
+            >
+              Google rating
+            </div>
+            <div className="flex items-baseline gap-2">
+              <span
+                style={{
+                  fontFamily: DISPLAY_FONT,
+                  fontSize: 34,
+                  fontWeight: 500,
+                  letterSpacing: '-0.03em',
+                  color: CREAM,
+                  lineHeight: 1,
+                }}
+              >
+                {lead.google_rating.toFixed(1)}
+              </span>
+              <span style={{ color: SIGNAL, fontSize: 18 }}>★</span>
+            </div>
+            <div
+              className="mt-1 text-[11px]"
+              style={{ fontFamily: MONO_FONT, color: CREAM_MUTED, letterSpacing: '0.08em' }}
+            >
+              {lead.google_review_count ?? 0} reviews
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* ── Description (if present) ── */}
+      {lead.description && (
+        <div
+          className="mb-10 rounded-2xl p-6"
+          style={{
+            background: 'rgb(184 134 11 / 0.08)',
+            border: `1px solid rgb(184 134 11 / 0.25)`,
+            borderLeft: `3px solid ${SIGNAL}`,
+          }}
+        >
+          <div
+            className="text-[10px] uppercase mb-2"
+            style={{ fontFamily: MONO_FONT, letterSpacing: '0.14em', color: SIGNAL }}
+          >
+            / The brief
+          </div>
+          <p className="text-[15px] leading-[1.55] m-0" style={{ color: CREAM }}>
+            {lead.description}
+          </p>
+        </div>
+      )}
+
+      {/* ── Two-column grid ── */}
+      <div className="grid gap-8" style={{ gridTemplateColumns: 'minmax(0, 1.4fr) minmax(0, 1fr)' }}>
+        {/* LEFT — the pitch */}
+        <div className="flex flex-col gap-8 min-w-0">
+          {/* Pain points / talking hooks */}
+          {lead.pain_points.length > 0 && (
+            <Section title="What to say at the door" eyebrow="Pitch hooks">
+              <div className="grid gap-3">
+                {lead.pain_points.map((p, i) => (
+                  <PitchCard key={i} index={i + 1} text={p} />
+                ))}
+              </div>
+            </Section>
+          )}
+
+          {/* Demo site preview */}
+          {lead.has_demo_site && lead.demo_site_domain && (
+            <Section title="Their site, ready to show" eyebrow="Demo preview">
+              <div
+                className="rounded-2xl overflow-hidden"
+                style={{ background: BG_STRONG, border: `1px solid ${LINE}` }}
+              >
+                <div
+                  className="flex items-center gap-3 px-5 py-3"
+                  style={{
+                    borderBottom: `1px solid ${LINE}`,
+                    fontFamily: MONO_FONT,
+                    fontSize: 11,
+                    color: CREAM_MUTED,
+                  }}
+                >
+                  <span className="flex gap-1.5">
+                    <span className="w-2 h-2 rounded-full" style={{ background: 'rgb(255 255 255 / 0.12)' }} />
+                    <span className="w-2 h-2 rounded-full" style={{ background: 'rgb(255 255 255 / 0.12)' }} />
+                    <span className="w-2 h-2 rounded-full" style={{ background: 'rgb(255 255 255 / 0.12)' }} />
                   </span>
-                  {lead.google_rating > 0 && (
-                    <span className="flex items-center gap-1.5">
-                      <Star className="w-4 h-4 text-amber-400 fill-amber-400" />
-                      {lead.google_rating} ({lead.google_review_count})
+                  <span
+                    className="flex-1 px-3 py-1 rounded-full"
+                    style={{ background: BG_CARD, border: `1px solid ${LINE2}`, letterSpacing: '0.04em' }}
+                  >
+                    🔒 {lead.demo_site_domain}
+                  </span>
+                  {lead.demo_site_qa_score != null && (
+                    <span style={{ color: SIGNAL, letterSpacing: '0.12em' }}>
+                      QA {lead.demo_site_qa_score}/100
                     </span>
                   )}
-                  {openStatus && (
-                    <span className={`flex items-center gap-1.5 ${openStatus.isOpen ? 'text-green-400' : 'text-[#666]'}`}>
-                      <span className={`w-1.5 h-1.5 rounded-full ${openStatus.isOpen ? 'bg-green-400 pulse-dot' : 'bg-[#666]'}`} />
-                      {openStatus.label}
+                </div>
+                <div
+                  className="h-[260px] flex flex-col items-center justify-center gap-4 p-8"
+                  style={{
+                    background:
+                      lead.brand_colours?.primary
+                        ? `linear-gradient(135deg, ${lead.brand_colours.primary}, ${lead.brand_colours.accent ?? lead.brand_colours.primary})`
+                        : 'linear-gradient(135deg, rgb(184 134 11), rgb(60 40 25))',
+                  }}
+                >
+                  {lead.hero_headline && (
+                    <p
+                      className="text-center m-0"
+                      style={{
+                        fontFamily: DISPLAY_FONT,
+                        fontSize: 32,
+                        fontWeight: 500,
+                        letterSpacing: '-0.025em',
+                        color: 'white',
+                        textShadow: '0 2px 24px rgb(0 0 0 / 0.3)',
+                      }}
+                    >
+                      {lead.hero_headline}
+                    </p>
+                  )}
+                  {lead.cta_text && (
+                    <span
+                      className="px-5 py-2.5 rounded-full text-[13px]"
+                      style={{ background: 'rgb(20 20 19 / 0.85)', color: 'white', fontWeight: 500 }}
+                    >
+                      {lead.cta_text}
                     </span>
                   )}
                 </div>
               </div>
-            </div>
-
-            <div className="flex items-center gap-3">
-              <span className="flex items-center gap-2 text-[13px]">
-                <span className={`w-2 h-2 rounded-full ${
-                  lead.status === 'new' ? 'bg-blue-400 pulse-dot' :
-                  lead.status === 'visited' ? 'bg-yellow-500' :
-                  lead.status === 'pitched' ? 'bg-purple-400' :
-                  lead.status === 'sold' ? 'bg-green-400' : 'bg-[#666]'
-                }`} />
-                <span className={`font-medium capitalize ${
-                  lead.status === 'new' ? 'text-blue-400' :
-                  lead.status === 'visited' ? 'text-yellow-500' :
-                  lead.status === 'pitched' ? 'text-purple-400' :
-                  lead.status === 'sold' ? 'text-green-400' : 'text-[#666]'
-                }`}>{lead.status}</span>
-              </span>
-              <button
-                onClick={() => { setBriefing(true); setBriefingStep(0); }}
-                className="px-4 py-2 bg-[#1a1a1a] text-white rounded-lg text-[13px] font-medium hover:bg-[#333] transition-colors border border-[#333]"
-              >
-                Quick brief
-              </button>
-              <a
-                href={`tel:${lead.phone}`}
-                className="inline-flex items-center gap-2 px-4 py-2 bg-white text-black rounded-lg text-[13px] font-medium hover:bg-[#ededed] transition-colors"
-              >
-                <Phone className="w-4 h-4" />
-                Call
-              </a>
-            </div>
-          </div>
-
-          {/* Tabs */}
-          <div className="flex gap-1 mt-8 border-b border-[#333] -mb-px">
-            {tabs.map((tab) => {
-              const Icon = tab.icon;
-              return (
-                <button
-                  key={tab.id}
-                  onClick={() => setActiveTab(tab.id as any)}
-                  className={`flex items-center gap-2 px-4 py-3 text-[13px] font-medium border-b-2 transition-colors ${
-                    activeTab === tab.id
-                      ? 'border-white text-white'
-                      : 'border-transparent text-[#666] hover:text-white'
-                  }`}
+              <div className="mt-3 flex gap-3 flex-wrap">
+                <a
+                  href={`https://${lead.demo_site_domain}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="px-5 py-3 rounded-full text-[14px] inline-flex items-center gap-2"
+                  style={{ background: CREAM, color: 'rgb(20 20 19)', fontWeight: 500 }}
                 >
-                  <Icon className="w-4 h-4" />
-                  {tab.label}
+                  Open full preview →
+                </a>
+                <button
+                  className="px-5 py-3 rounded-full text-[14px] inline-flex items-center gap-2"
+                  style={{ background: 'transparent', color: CREAM, border: `1px solid ${LINE}` }}
+                >
+                  Copy share link
                 </button>
-              );
-            })}
-          </div>
+              </div>
+            </Section>
+          )}
+
+          {/* Services */}
+          {lead.services.length > 0 && (
+            <Section title="What they offer" eyebrow="Services">
+              <div className="flex flex-wrap gap-2">
+                {lead.services.map((s, i) => (
+                  <span
+                    key={i}
+                    className="px-3.5 py-2 rounded-full text-[13px]"
+                    style={{ background: BG_CARD, border: `1px solid ${LINE}`, color: CREAM_DIM }}
+                  >
+                    {s}
+                  </span>
+                ))}
+              </div>
+            </Section>
+          )}
+
+          {/* Best reviews */}
+          {lead.best_reviews.length > 0 && (
+            <Section title="What customers say" eyebrow="Best reviews">
+              <div className="grid gap-3">
+                {lead.best_reviews.map((r, i) => (
+                  <div
+                    key={i}
+                    className="rounded-2xl p-5"
+                    style={{ background: BG_STRONG, border: `1px solid ${LINE}` }}
+                  >
+                    <p
+                      className="m-0 text-[15px] leading-[1.55]"
+                      style={{ fontFamily: DISPLAY_FONT, color: CREAM, fontWeight: 400 }}
+                    >
+                      &ldquo;{r.text}&rdquo;
+                    </p>
+                    <p
+                      className="mt-3 text-[11px] uppercase"
+                      style={{ fontFamily: MONO_FONT, letterSpacing: '0.14em', color: CREAM_MUTED }}
+                    >
+                      {r.author} · {'★'.repeat(r.rating)}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </Section>
+          )}
+
+          {/* Brand colours */}
+          {lead.brand_colours && Object.keys(lead.brand_colours).length > 0 && (
+            <Section title="Their palette" eyebrow="Brand colours">
+              <div className="flex gap-3 flex-wrap">
+                {Object.entries(lead.brand_colours).map(([name, hex]) => (
+                  <div
+                    key={name}
+                    className="flex items-center gap-3 rounded-full pl-1 pr-4 py-1"
+                    style={{ background: BG_CARD, border: `1px solid ${LINE}` }}
+                  >
+                    <span
+                      className="w-9 h-9 rounded-full"
+                      style={{ background: hex, border: `1px solid ${LINE}` }}
+                    />
+                    <div>
+                      <div
+                        className="text-[10px] uppercase"
+                        style={{ fontFamily: MONO_FONT, letterSpacing: '0.12em', color: CREAM_MUTED }}
+                      >
+                        {name}
+                      </div>
+                      <div
+                        className="text-[12px]"
+                        style={{ fontFamily: MONO_FONT, color: CREAM }}
+                      >
+                        {hex}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </Section>
+          )}
+
+          {/* Avoid topics */}
+          {lead.avoid_topics.length > 0 && (
+            <Section title="Don't mention" eyebrow="Tread carefully">
+              <ul className="m-0 pl-0 list-none grid gap-2">
+                {lead.avoid_topics.map((t, i) => (
+                  <li
+                    key={i}
+                    className="flex items-start gap-3 text-[14px]"
+                    style={{ color: CREAM_DIM }}
+                  >
+                    <span style={{ color: 'rgb(220 150 80)', marginTop: 2 }}>⚠</span>
+                    <span>{t}</span>
+                  </li>
+                ))}
+              </ul>
+            </Section>
+          )}
+        </div>
+
+        {/* RIGHT — the facts */}
+        <div className="flex flex-col gap-5 min-w-0">
+          {/* Contact card */}
+          <InfoCard>
+            <Eyebrow>Contact</Eyebrow>
+            <div className="grid gap-3">
+              {lead.phone && (
+                <InfoRow
+                  label="Phone"
+                  value={
+                    <a
+                      href={`tel:${lead.phone}`}
+                      style={{ color: SIGNAL, textDecoration: 'none' }}
+                    >
+                      {lead.phone}
+                    </a>
+                  }
+                />
+              )}
+              {lead.email && (
+                <InfoRow
+                  label="Email"
+                  value={
+                    <a
+                      href={`mailto:${lead.email}`}
+                      style={{ color: SIGNAL, textDecoration: 'none' }}
+                    >
+                      {lead.email}
+                    </a>
+                  }
+                />
+              )}
+              {lead.address && (
+                <InfoRow
+                  label="Address"
+                  value={
+                    <a
+                      href={`https://maps.google.com/?q=${encodeURIComponent(lead.address)}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      style={{ color: SIGNAL, textDecoration: 'none' }}
+                    >
+                      {lead.address}
+                    </a>
+                  }
+                />
+              )}
+              {lead.postcode && !lead.address && (
+                <InfoRow label="Postcode" value={lead.postcode} mono />
+              )}
+              {lead.website_url && (
+                <InfoRow
+                  label="Current site"
+                  value={
+                    <a
+                      href={lead.website_url}
+                      target="_blank"
+                      rel="noreferrer"
+                      style={{ color: SIGNAL, textDecoration: 'none' }}
+                    >
+                      {lead.website_url.replace(/^https?:\/\//, '').replace(/\/$/, '')}
+                    </a>
+                  }
+                />
+              )}
+              {!lead.has_website && (
+                <InfoRow
+                  label="Current site"
+                  value={<span style={{ color: 'rgb(220 150 80)' }}>No website ✶</span>}
+                />
+              )}
+            </div>
+          </InfoCard>
+
+          {/* Contact person */}
+          {(lead.contact_name || lead.contact_role) && (
+            <InfoCard>
+              <Eyebrow>Who to ask for</Eyebrow>
+              <p
+                className="m-0 text-[18px]"
+                style={{ fontFamily: DISPLAY_FONT, fontWeight: 500, color: CREAM, letterSpacing: '-0.02em' }}
+              >
+                {lead.contact_name ?? 'Whoever is behind the counter'}
+              </p>
+              {lead.contact_role && (
+                <p className="m-0 mt-1 text-[13px]" style={{ color: CREAM_DIM }}>
+                  {lead.contact_role}
+                </p>
+              )}
+            </InfoCard>
+          )}
+
+          {/* Opening hours */}
+          {lead.opening_hours.length > 0 && (
+            <InfoCard>
+              <Eyebrow>Opening hours</Eyebrow>
+              <ul className="m-0 pl-0 list-none grid gap-1.5">
+                {lead.opening_hours.map((h, i) => (
+                  <li
+                    key={i}
+                    className="text-[13px]"
+                    style={{ fontFamily: MONO_FONT, color: CREAM_DIM, letterSpacing: '0.02em' }}
+                  >
+                    {h}
+                  </li>
+                ))}
+              </ul>
+            </InfoCard>
+          )}
+
+          {/* Follow-up */}
+          {lead.follow_up_at && (
+            <InfoCard accent>
+              <Eyebrow accent>Follow up</Eyebrow>
+              <p
+                className="m-0 text-[18px]"
+                style={{ fontFamily: DISPLAY_FONT, fontWeight: 500, color: CREAM, letterSpacing: '-0.02em' }}
+              >
+                {formatDate(lead.follow_up_at)}
+              </p>
+              {lead.follow_up_note && (
+                <p className="m-0 mt-2 text-[13px] leading-[1.55]" style={{ color: CREAM_DIM }}>
+                  {lead.follow_up_note}
+                </p>
+              )}
+            </InfoCard>
+          )}
+
+          {/* Trust badges */}
+          {lead.trust_badges.length > 0 && (
+            <InfoCard>
+              <Eyebrow>Trust signals</Eyebrow>
+              <div className="flex flex-wrap gap-2">
+                {lead.trust_badges.map((b, i) => (
+                  <span
+                    key={i}
+                    className="px-3 py-1.5 rounded-full text-[12px]"
+                    style={{ background: BG_CARD, border: `1px solid ${LINE}`, color: CREAM_DIM }}
+                  >
+                    {b}
+                  </span>
+                ))}
+              </div>
+            </InfoCard>
+          )}
+
+          {/* Timeline */}
+          <InfoCard>
+            <Eyebrow>Timeline</Eyebrow>
+            <ul className="m-0 pl-0 list-none grid gap-2.5">
+              <TimelineItem label="Assigned" at={lead.assigned_at} done />
+              <TimelineItem label="Visited" at={lead.visited_at} done={!!lead.visited_at} />
+              <TimelineItem label="Pitched" at={lead.pitched_at} done={!!lead.pitched_at} />
+              <TimelineItem label="Sold" at={lead.sold_at} done={!!lead.sold_at} accent />
+            </ul>
+          </InfoCard>
         </div>
       </div>
 
-      {/* Content */}
-      <div className="py-8">
-        {/* Overview Tab */}
-        {activeTab === 'overview' && (
-          <div className="max-w-2xl">
-            {/* Action row — compact, inline */}
-            <div className="flex items-center gap-4 pb-6">
-              <div className="relative">
-                <button
-                  onClick={() => setActionsOpen(!actionsOpen)}
-                  className="flex items-center gap-1.5 text-[13px] text-[#999] hover:text-white transition-colors"
-                >
-                  Update status
-                  <ChevronDown className={`w-3.5 h-3.5 transition-transform ${actionsOpen ? 'rotate-180' : ''}`} />
-                </button>
-                {actionsOpen && (
-                  <>
-                    <div className="fixed inset-0 z-10" onClick={() => setActionsOpen(false)} />
-                    <div className="absolute top-8 left-0 z-20 bg-[#1a1a1a] border border-[#333] rounded-lg py-1 min-w-[140px] shadow-[0_4px_20px_rgba(0,0,0,0.4)]">
-                      {[
-                        { s: 'visited', l: 'Visited', d: 'bg-blue-400' },
-                        { s: 'pitched', l: 'Pitched', d: 'bg-purple-400' },
-                        { s: 'sold', l: 'Sold', d: 'bg-green-400' },
-                        { s: 'rejected', l: 'Rejected', d: 'bg-[#666]' },
-                      ].map(({ s, l, d }) => (
-                        <button key={s} onClick={() => { updateStatus(s); setActionsOpen(false); }} className="w-full flex items-center gap-2.5 px-3 py-2 text-[13px] text-[#ededed] hover:bg-[#333] transition-colors">
-                          <span className={`w-1.5 h-1.5 rounded-full ${d}`} />{l}
-                        </button>
-                      ))}
-                    </div>
-                  </>
-                )}
-              </div>
-
-              {lead.has_demo_site && (
-                <button
-                  onClick={() => window.open(`/demo/${lead.id}`, '_blank')}
-                  className="flex items-center gap-1.5 text-[13px] text-blue-400 hover:text-blue-300 transition-colors"
-                >
-                  <ExternalLink className="w-3.5 h-3.5" />
-                  View demo
-                </button>
-              )}
-
-              <a
-                href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(lead.postcode || lead.address || '')}`}
-                target="_blank"
-                rel="noopener"
-                className="flex items-center gap-1.5 text-[13px] text-[#999] hover:text-white transition-colors"
-              >
-                <MapPin className="w-3.5 h-3.5" />
-                Directions
-              </a>
-            </div>
-
-            <div className="border-t border-[#222]" />
-
-            {/* Contact */}
-            {lead.contact_name && (
-              <>
-                <div className="py-5">
-                  <p className="text-[11px] text-[#666] mb-1">Contact</p>
-                  <p className="text-[14px] text-white">{lead.contact_name}{lead.contact_role ? ` · ${lead.contact_role}` : ''}</p>
-                </div>
-                <div className="border-t border-[#222]" />
-              </>
-            )}
-
-            {/* Hours */}
-            {(lead.opening_hours ?? []).length > 0 && (
-              <>
-                <div className="py-5">
-                  <p className="text-[11px] text-[#666] mb-2">Hours</p>
-                  <div className="space-y-1">
-                    {(lead.opening_hours ?? []).map((h: string, i: number) => (
-                      <p key={i} className="text-[13px] text-[#ededed]">{h}</p>
-                    ))}
-                  </div>
-                </div>
-                <div className="border-t border-[#222]" />
-              </>
-            )}
-
-            {/* Services */}
-            {(lead.services ?? []).length > 0 && (
-              <>
-                <div className="py-5">
-                  <p className="text-[11px] text-[#666] mb-2">Services</p>
-                  <p className="text-[13px] text-[#ededed]">
-                    {(lead.services ?? []).join(' · ')}
-                  </p>
-                </div>
-                <div className="border-t border-[#222]" />
-              </>
-            )}
-
-            {/* Address + directions */}
-            {(lead.address || lead.postcode) && (
-              <>
-                <div className="py-5">
-                  <p className="text-[11px] text-[#666] mb-1">Address</p>
-                  <p className="text-[13px] text-[#ededed]">{lead.address || lead.postcode}</p>
-                </div>
-                <div className="border-t border-[#222]" />
-              </>
-            )}
-
-            {/* Rating detail */}
-            {lead.google_rating > 0 && (
-              <div className="py-5">
-                <p className="text-[11px] text-[#666] mb-1">Google Rating</p>
-                <p className="text-[14px] text-white">{lead.google_rating} <span className="text-[#666]">from {lead.google_review_count} reviews</span></p>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Prepare Tab */}
-        {activeTab === 'prepare' && (
-          <div className="max-w-2xl">
-            <p className="text-[11px] text-[#666] mb-3">Talking points</p>
-            <ul className="space-y-2 pb-6">
-              {lead.google_rating > 0 && (
-                <li className="text-[13px] text-[#ededed]">· {lead.google_rating}★ from {lead.google_review_count} reviews — they care about reputation</li>
-              )}
-              <li className="text-[13px] text-[#ededed]">· No website — customers can&apos;t find them online</li>
-              {lead.has_demo_site && (
-                <li className="text-[13px] text-[#ededed]">· Demo site ready — show them on your phone</li>
-              )}
-              <li className="text-[13px] text-[#ededed]">· Built with their real info, reviews, and services</li>
-              {(lead.services ?? []).length > 0 && (
-                <li className="text-[13px] text-[#ededed]">· Services: {(lead.services ?? []).join(', ')}</li>
-              )}
-            </ul>
-
-            <div className="border-t border-[#222]" />
-
-            <div className="py-6">
-              <p className="text-[11px] text-yellow-500 mb-3">Don&apos;t mention</p>
-              <ul className="space-y-1.5">
-                {(lead.avoid_topics ?? ['SEO guarantees', 'criticising their current setup', 'rushing the decision']).map((t: string, i: number) => (
-                  <li key={i} className="text-[13px] text-[#999]">· {t}</li>
-                ))}
-              </ul>
-            </div>
-
-            <div className="border-t border-[#222]" />
-
-            <div className="py-6">
-              <p className="text-[11px] text-[#666] mb-3">Hours</p>
-              {(lead.opening_hours ?? []).map((h: string, i: number) => (
-                <p key={i} className="text-[13px] text-[#ededed]">{h}</p>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Pitch Tab */}
-        {activeTab === 'pitch' && (
-          <div className="max-w-3xl space-y-6">
-            <div className="bg-[#0a0a0a] rounded-xl border border-[#333] p-6">
-              <h2 className="text-[15px] font-semibold text-white mb-4">Objection Handlers</h2>
-              <div className="space-y-4">
-                {[
-                  {
-                    objection: "I already have a website",
-                    response: "That's great! When was it last updated? We specialize in modern, mobile-first sites that convert visitors into customers.",
-                  },
-                  {
-                    objection: "£350 is too expensive",
-                    response: "I understand. That's just £25/month, less than a phone bill. How many new customers would you need to make that worthwhile?",
-                  },
-                  {
-                    objection: "I need to think about it",
-                    response: "Absolutely. Can I show you the demo site I made for you first? Takes 2 minutes, then you'll have all the info to decide.",
-                  },
-                  {
-                    objection: "I'm too busy right now",
-                    response: "That's exactly why we do everything for you. We handle design, setup, and hosting. You just approve the content.",
-                  },
-                ].map((item, idx) => (
-                  <div key={idx} className="border-l-4 border-white pl-4 py-2">
-                    <p className="text-[13px] font-medium text-white mb-2">"{item.objection}"</p>
-                    <p className="text-[13px] text-[#999] italic">{item.response}</p>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div className="bg-[#0a0a0a] rounded-xl border border-[#333] p-6">
-              <h2 className="text-[15px] font-semibold text-white mb-4">Price Breakdown</h2>
-              <div className="space-y-3">
-                <div className="flex justify-between items-center py-2 border-b border-[#222]">
-                  <span className="text-[13px] text-[#999]">Custom website design</span>
-                  <span className="text-[13px] font-medium text-white">£350</span>
-                </div>
-                <div className="flex justify-between items-center py-2 border-b border-[#222]">
-                  <span className="text-[13px] text-[#999]">Or monthly payment</span>
-                  <span className="text-[13px] font-medium text-white">£25/mo</span>
-                </div>
-                <div className="bg-[#111] rounded-lg p-4 mt-4">
-                  <p className="text-[11px] uppercase tracking-wide text-[#666] mb-2">Includes:</p>
-                  <ul className="space-y-1 text-[13px] text-[#999]">
-                    <li>✓ Mobile-optimized design</li>
-                    <li>✓ Contact form & phone links</li>
-                    <li>✓ Free hosting for 1 year</li>
-                    <li>✓ Custom domain setup</li>
-                  </ul>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Follow Up Tab */}
-        {activeTab === 'follow-up' && (
-          <div className="grid md:grid-cols-2 gap-4 max-w-3xl">
-            {/* Left column — scheduling & contact */}
-            <div className="rounded-lg border border-[#1a1a1a] divide-y divide-[#1a1a1a] hover:border-[#333] transition-colors">
-              <Row label="Follow up" right={
-                <input type="date" value={followUpDate} onChange={e => setFollowUpDate(e.target.value)} className="bg-transparent text-[13px] text-white focus:outline-none text-right" />
-              } />
-              <Row label="Best time" right={
-                <select value={bestTime} onChange={e => setBestTime(e.target.value)} className="bg-transparent text-[13px] text-white focus:outline-none text-right appearance-none cursor-pointer">
-                  <option value="" className="bg-[#111]">—</option>
-                  <option value="morning" className="bg-[#111]">Morning</option>
-                  <option value="afternoon" className="bg-[#111]">Afternoon</option>
-                  <option value="evening" className="bg-[#111]">Evening</option>
-                </select>
-              } />
-              <Row label="Phone" right={
-                <a href={`tel:${lead.phone}`} className="text-[13px] text-blue-400 hover:text-blue-300 transition-colors">{lead.phone}</a>
-              } />
-              <Row label="Address" right={
-                <span className="text-[13px] text-[#ededed]">{lead.address || lead.postcode}</span>
-              } />
-              <div className="px-4 py-2.5">
-                <div className="flex gap-2">
-                  <input value={contactName} onChange={e => setContactName(e.target.value)} placeholder="Contact name" className="flex-1 bg-transparent text-[13px] text-white placeholder:text-[#333] focus:outline-none" />
-                  <input value={contactRole} onChange={e => setContactRole(e.target.value)} placeholder="Role" className="w-24 bg-transparent text-[13px] text-[#999] placeholder:text-[#333] focus:outline-none text-right" />
-                </div>
-              </div>
-            </div>
-
-            {/* Right column — intel capture */}
-            <div className="rounded-lg border border-[#1a1a1a] divide-y divide-[#1a1a1a] hover:border-[#333] transition-colors">
-              <div className="px-4 py-2.5">
-                <span className="text-[12px] text-[#666] block mb-2">Interest level</span>
-                <div className="flex gap-1">
-                  {(['hot', 'warm', 'cold'] as const).map(level => (
-                    <button
-                      key={level}
-                      onClick={() => setInterestLevel(interestLevel === level ? '' : level)}
-                      className={`px-3 py-1 rounded text-[12px] capitalize transition-colors ${
-                        interestLevel === level
-                          ? level === 'hot' ? 'bg-green-500/20 text-green-400'
-                            : level === 'warm' ? 'bg-yellow-500/20 text-yellow-400'
-                            : 'bg-blue-500/20 text-blue-400'
-                          : 'text-[#666] hover:text-[#999]'
-                      }`}
-                    >
-                      {level}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div className="px-4 py-2.5">
-                <span className="text-[12px] text-[#666] block mb-2">Owner vibe</span>
-                <div className="flex gap-1">
-                  {(['friendly', 'neutral', 'hostile'] as const).map(s => (
-                    <button
-                      key={s}
-                      onClick={() => setSentiment(sentiment === s ? '' : s)}
-                      className={`px-3 py-1 rounded text-[12px] capitalize transition-colors ${
-                        sentiment === s
-                          ? s === 'friendly' ? 'bg-green-500/20 text-green-400'
-                            : s === 'neutral' ? 'bg-yellow-500/20 text-yellow-400'
-                            : 'bg-red-500/20 text-red-400'
-                          : 'text-[#666] hover:text-[#999]'
-                      }`}
-                    >
-                      {s}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <Row label="Objection" right={
-                <select value={objection} onChange={e => setObjection(e.target.value)} className="bg-transparent text-[13px] text-white focus:outline-none text-right appearance-none cursor-pointer">
-                  <option value="" className="bg-[#111]">None</option>
-                  <option value="too-expensive" className="bg-[#111]">Too expensive</option>
-                  <option value="not-interested" className="bg-[#111]">Not interested</option>
-                  <option value="has-website" className="bg-[#111]">Already has one</option>
-                  <option value="need-to-think" className="bg-[#111]">Need to think</option>
-                  <option value="come-back-later" className="bg-[#111]">Come back later</option>
-                  <option value="wrong-person" className="bg-[#111]">Wrong person</option>
-                </select>
-              } />
-
-              <Row label="Competitor" right={
-                <input value={competitor} onChange={e => setCompetitor(e.target.value)} placeholder="e.g. Wix, Squarespace" className="bg-transparent text-[13px] text-white placeholder:text-[#333] focus:outline-none text-right w-full" />
-              } />
-
-              <div className="flex items-center justify-between px-4 py-2.5">
-                <span className="text-[12px] text-[#666]">Price discussed</span>
-                <button
-                  onClick={() => setPriceDiscussed(!priceDiscussed)}
-                  className={`w-8 h-[18px] rounded-full transition-colors ${priceDiscussed ? 'bg-blue-500' : 'bg-[#333]'}`}
-                >
-                  <div className={`w-3.5 h-3.5 rounded-full bg-white transition-transform mx-0.5 ${priceDiscussed ? 'translate-x-3.5' : ''}`} />
-                </button>
-              </div>
-            </div>
-
-            {/* Notes — full width */}
-            <div className="md:col-span-2 rounded-lg border border-[#1a1a1a] hover:border-[#333] transition-colors px-4 py-3">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-[12px] text-[#666]">Notes</span>
-                {notes.trim() && (
-                  <button onClick={saveFollowUp} className="text-[11px] text-blue-400 hover:text-blue-300 transition-colors">Save all</button>
-                )}
-              </div>
-              <textarea
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                placeholder="What happened? Key takeaways for next visit..."
-                rows={2}
-                className="w-full bg-transparent text-[13px] text-white placeholder:text-[#333] focus:outline-none resize-none"
-              />
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* ═══ QUICK BRIEF — full-screen step-by-step walkthrough ═══ */}
-      {briefing && lead && (() => {
-        const services = lead.services ?? [];
-        const hours = lead.opening_hours ?? [];
-        const reviews = lead.best_reviews ?? [];
-        const avoidTopics = lead.avoid_topics ?? [];
-        const hasDemoSite = lead.has_demo_site;
-
-        const steps = [
-          // Step 0: The business
-          {
-            title: lead.business_name,
-            content: (
-              <div className="space-y-3">
-                <p className="text-[15px] text-[#ededed]">{lead.business_type} in {lead.postcode}</p>
-                {lead.google_rating > 0 && (
-                  <p className="text-[14px] text-[#999]">★ {lead.google_rating} from {lead.google_review_count} reviews</p>
-                )}
-                {openStatus && (
-                  <p className={`text-[14px] ${openStatus.isOpen ? 'text-green-400' : 'text-[#666]'}`}>
-                    {openStatus.label}
-                  </p>
-                )}
-              </div>
-            ),
-          },
-          // Step 1: What they do
-          {
-            title: 'What they do',
-            content: services.length > 0 ? (
-              <p className="text-[14px] text-[#ededed] leading-relaxed">{services.join(' · ')}</p>
-            ) : (
-              <p className="text-[14px] text-[#666]">No services data — ask them what they offer</p>
-            ),
-          },
-          // Step 2: Why they need a website
-          {
-            title: 'Why they need you',
-            content: (
-              <ul className="space-y-2">
-                <li className="text-[14px] text-[#ededed]">· No website — invisible to anyone searching online</li>
-                {lead.google_rating >= 4 && (
-                  <li className="text-[14px] text-[#ededed]">· {lead.google_rating}★ rating — great reputation that should be front and centre</li>
-                )}
-                {lead.google_review_count > 20 && (
-                  <li className="text-[14px] text-[#ededed]">· {lead.google_review_count} reviews — social proof that belongs on a homepage</li>
-                )}
-                {hasDemoSite && (
-                  <li className="text-[14px] text-green-400">· Demo site ready — show them what it looks like</li>
-                )}
-              </ul>
-            ),
-          },
-          // Step 3: What to say
-          {
-            title: 'What to say',
-            content: (
-              <div className="space-y-3">
-                <p className="text-[14px] text-[#ededed] leading-relaxed">
-                  &ldquo;Hi, I help local businesses get found online. I actually built a demo website for {lead.business_name} — can I show you? Takes 30 seconds.&rdquo;
-                </p>
-                {lead.phone && (
-                  <p className="text-[13px] text-[#666]">Ask for the owner if they&apos;re not at the counter</p>
-                )}
-              </div>
-            ),
-          },
-          // Step 4: Don't mention
-          {
-            title: 'Don\u2019t mention',
-            content: (
-              <ul className="space-y-2">
-                {(avoidTopics.length > 0 ? avoidTopics : ['SEO guarantees or #1 rankings', 'Criticism of their current setup', 'Pressure — let them decide']).map((t: string, i: number) => (
-                  <li key={i} className="text-[14px] text-yellow-500/80">· {t}</li>
-                ))}
-              </ul>
-            ),
-          },
-          // Step 5: Pricing
-          {
-            title: 'The offer',
-            content: (
-              <div className="space-y-2">
-                <p className="text-[20px] font-semibold text-white">{'\u00A3'}350 <span className="text-[14px] text-[#666] font-normal">one-time</span></p>
-                <p className="text-[14px] text-[#999]">{'\u00A3'}25/mo hosting &amp; support</p>
-                <p className="text-[13px] text-[#666] mt-3">Live in 48 hours. They can see changes before paying.</p>
-              </div>
-            ),
-          },
-          // Step 6: Go
-          {
-            title: 'You\u2019re ready',
-            content: (
-              <div className="space-y-3">
-                <p className="text-[14px] text-[#ededed]">Walk in, ask for the owner, show the demo on your phone.</p>
-                {hasDemoSite && (
-                  <button
-                    onClick={() => { setBriefing(false); window.open(`/demo/${lead.id}`, '_blank'); }}
-                    className="text-[13px] text-blue-400 hover:text-blue-300 transition-colors"
-                  >
-                    Open demo site ↗
-                  </button>
-                )}
-              </div>
-            ),
-          },
-        ];
-
-        const step = steps[briefingStep];
-        const isLast = briefingStep === steps.length - 1;
-
-        return (
-          <>
-            <div className="fixed inset-0 z-40 bg-black/60" onClick={() => setBriefing(false)} />
-            <div className="fixed inset-0 z-50 flex items-center justify-center p-6">
-              <div className="bg-[#111] border border-[#333] rounded-xl w-full max-w-md overflow-hidden">
-                {/* Progress */}
-                <div className="flex gap-1 px-5 pt-4">
-                  {steps.map((_, i) => (
-                    <div key={i} className={`h-[2px] flex-1 rounded-full transition-colors ${i <= briefingStep ? 'bg-white' : 'bg-[#333]'}`} />
-                  ))}
-                </div>
-
-                {/* Content */}
-                <div className="px-5 pt-5 pb-4" key={briefingStep}>
-                  <p className="text-[11px] text-[#666] mb-1">{briefingStep + 1} of {steps.length}</p>
-                  <h2 className="text-[20px] font-semibold text-white tracking-[-0.02em] mb-4">{step.title}</h2>
-                  {step.content}
-                </div>
-
-                {/* Nav */}
-                <div className="flex items-center justify-between px-5 py-4 border-t border-[#222]">
-                  {briefingStep > 0 ? (
-                    <button onClick={() => setBriefingStep(briefingStep - 1)} className="text-[13px] text-[#666] hover:text-white transition-colors">
-                      Back
-                    </button>
-                  ) : (
-                    <button onClick={() => setBriefing(false)} className="text-[13px] text-[#666] hover:text-white transition-colors">
-                      Close
-                    </button>
-                  )}
-                  <button
-                    onClick={() => isLast ? setBriefing(false) : setBriefingStep(briefingStep + 1)}
-                    className="text-[13px] text-white font-medium hover:text-blue-400 transition-colors"
-                  >
-                    {isLast ? 'Done' : 'Next'}
-                  </button>
-                </div>
-              </div>
-            </div>
-          </>
-        );
-      })()}
+      {/* ── Sticky action bar ── */}
+      <ActionBar status={lead.assignment_status} />
     </div>
   );
 }
 
-function Row({ label, right }: { label: string; right: React.ReactNode }) {
+// -----------------------------------------------------------------------------
+// Building blocks
+// -----------------------------------------------------------------------------
+function Section({
+  title,
+  eyebrow,
+  children,
+}: {
+  title: string;
+  eyebrow: string;
+  children: React.ReactNode;
+}) {
   return (
-    <div className="flex items-center justify-between px-4 py-2.5">
-      <span className="text-[12px] text-[#666]">{label}</span>
-      {right}
+    <section>
+      <div
+        className="text-[10.5px] uppercase mb-2"
+        style={{ fontFamily: MONO_FONT, letterSpacing: '0.14em', color: SIGNAL }}
+      >
+        / {eyebrow}
+      </div>
+      <h2
+        className="text-[22px] tracking-[-0.025em] font-medium m-0 mb-4"
+        style={{ fontFamily: DISPLAY_FONT, color: CREAM }}
+      >
+        {title}
+      </h2>
+      {children}
+    </section>
+  );
+}
+
+function InfoCard({
+  children,
+  accent = false,
+}: {
+  children: React.ReactNode;
+  accent?: boolean;
+}) {
+  return (
+    <div
+      className="rounded-2xl p-5"
+      style={{
+        background: accent ? 'rgb(184 134 11 / 0.08)' : BG_STRONG,
+        border: accent ? '1px solid rgb(184 134 11 / 0.3)' : `1px solid ${LINE}`,
+      }}
+    >
+      {children}
     </div>
   );
+}
+
+function Eyebrow({
+  children,
+  accent = false,
+}: {
+  children: React.ReactNode;
+  accent?: boolean;
+}) {
+  return (
+    <div
+      className="text-[10px] uppercase mb-3"
+      style={{
+        fontFamily: MONO_FONT,
+        letterSpacing: '0.14em',
+        color: accent ? SIGNAL : CREAM_MUTED,
+      }}
+    >
+      {children}
+    </div>
+  );
+}
+
+function InfoRow({
+  label,
+  value,
+  mono = false,
+}: {
+  label: string;
+  value: React.ReactNode;
+  mono?: boolean;
+}) {
+  return (
+    <div>
+      <div
+        className="text-[10px] uppercase mb-1"
+        style={{ fontFamily: MONO_FONT, letterSpacing: '0.14em', color: CREAM_MUTED }}
+      >
+        {label}
+      </div>
+      <div
+        className="text-[14px] break-words"
+        style={{ color: CREAM, fontFamily: mono ? MONO_FONT : undefined }}
+      >
+        {value}
+      </div>
+    </div>
+  );
+}
+
+function PitchCard({ index, text }: { index: number; text: string }) {
+  return (
+    <div
+      className="rounded-xl p-4 flex gap-4"
+      style={{
+        background: BG_STRONG,
+        border: `1px solid ${LINE}`,
+        borderLeft: `3px solid ${SIGNAL}`,
+      }}
+    >
+      <div
+        className="text-[12px] pt-0.5"
+        style={{ fontFamily: MONO_FONT, color: SIGNAL, letterSpacing: '0.1em', minWidth: 24 }}
+      >
+        0{index}
+      </div>
+      <p className="m-0 text-[14.5px] leading-[1.55]" style={{ color: CREAM }}>
+        {text}
+      </p>
+    </div>
+  );
+}
+
+function TimelineItem({
+  label,
+  at,
+  done,
+  accent = false,
+}: {
+  label: string;
+  at: string | null;
+  done: boolean;
+  accent?: boolean;
+}) {
+  return (
+    <li className="flex items-center gap-3">
+      <span
+        className="w-[9px] h-[9px] rounded-full flex-shrink-0"
+        style={{
+          background: done ? (accent ? SIGNAL : CREAM) : 'transparent',
+          border: done ? 'none' : `1.5px solid ${LINE}`,
+        }}
+      />
+      <span
+        className="text-[13px] flex-1"
+        style={{ color: done ? CREAM : CREAM_MUTED }}
+      >
+        {label}
+      </span>
+      {at && (
+        <span
+          className="text-[11px]"
+          style={{ fontFamily: MONO_FONT, color: CREAM_MUTED, letterSpacing: '0.04em' }}
+        >
+          {relTime(at)}
+        </span>
+      )}
+    </li>
+  );
+}
+
+function ActionBar({ status }: { status: Lead['assignment_status'] }) {
+  // Which action is the natural next step for this status?
+  const primary =
+    status === 'new' ? 'Mark visited' :
+    status === 'visited' ? 'Start pitch' :
+    status === 'pitched' ? 'Mark sold' :
+    status === 'sold' ? 'View payout' :
+    'Reassign';
+
+  return (
+    <div
+      className="fixed inset-x-0 bottom-0 z-40 backdrop-blur-xl"
+      style={{
+        background: 'rgb(20 20 19 / 0.92)',
+        borderTop: `1px solid ${LINE}`,
+      }}
+    >
+      <div className="max-w-[1240px] mx-auto px-6 md:px-8 py-3 flex items-center justify-between gap-3 flex-wrap">
+        <div
+          className="text-[11px] uppercase hidden md:block"
+          style={{ fontFamily: MONO_FONT, letterSpacing: '0.14em', color: CREAM_MUTED }}
+        >
+          / Status actions
+        </div>
+        <div className="flex items-center gap-2 flex-wrap ml-auto">
+          <ActionButton label="Add note" ghost />
+          <ActionButton label="Set follow-up" ghost />
+          <ActionButton label="Reject" ghost muted />
+          <ActionButton label={primary} primary />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ActionButton({
+  label,
+  primary,
+  ghost,
+  muted,
+}: {
+  label: string;
+  primary?: boolean;
+  ghost?: boolean;
+  muted?: boolean;
+}) {
+  return (
+    <button
+      className="px-4 py-2.5 rounded-full text-[13px] transition-colors"
+      style={{
+        background: primary ? CREAM : 'transparent',
+        color: primary ? 'rgb(20 20 19)' : muted ? CREAM_MUTED : CREAM,
+        border: primary ? 'none' : `1px solid ${ghost ? LINE : SIGNAL}`,
+        fontWeight: primary ? 500 : 400,
+      }}
+    >
+      {label}
+    </button>
+  );
+}
+
+// -----------------------------------------------------------------------------
+// Utils
+// -----------------------------------------------------------------------------
+function relTime(iso: string): string {
+  const t = new Date(iso).getTime();
+  if (Number.isNaN(t)) return '';
+  const diffSec = Math.floor((Date.now() - t) / 1000);
+  if (diffSec < 60) return 'just now';
+  if (diffSec < 3600) return `${Math.floor(diffSec / 60)}m ago`;
+  if (diffSec < 86400) return `${Math.floor(diffSec / 3600)}h ago`;
+  const days = Math.floor(diffSec / 86400);
+  if (days < 7) return `${days}d ago`;
+  if (days < 30) return `${Math.floor(days / 7)}w ago`;
+  return new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+}
+
+function formatDate(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  const now = new Date();
+  const tomorrow = new Date(now);
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  const sameDay = (a: Date, b: Date) =>
+    a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+  if (sameDay(d, now)) return `Today · ${d.toLocaleTimeString('en-GB', { hour: 'numeric', minute: '2-digit' })}`;
+  if (sameDay(d, tomorrow)) return `Tomorrow · ${d.toLocaleTimeString('en-GB', { hour: 'numeric', minute: '2-digit' })}`;
+  return d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
 }
