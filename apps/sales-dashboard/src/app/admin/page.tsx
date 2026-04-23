@@ -2,7 +2,22 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { Upload, UserPlus, Users, Globe } from 'lucide-react';
+import {
+  PageHero,
+  Card,
+  Eyebrow,
+  PrimaryButton,
+  GhostButton,
+  StatCell,
+  CREAM,
+  CREAM_DIM,
+  CREAM_MUTED,
+  SIGNAL,
+  BG_STRONG,
+  LINE,
+  DISPLAY_FONT,
+  MONO_FONT,
+} from '@/lib/brand';
 
 interface Salesperson {
   id: string;
@@ -11,124 +26,156 @@ interface Salesperson {
   area_postcode: string | null;
   active: boolean;
   created_at: string;
+  last_active_at?: string | null;
 }
 
-interface Demo {
+interface LeadRow {
   id: string;
-  business_name: string;
-  category: string;
-  city: string | null;
-  postcode_prefix: string | null;
-  created_at: string;
+  user_id: string;
+  status: string;
+  assigned_at: string;
+  notes: string | null;
 }
 
 export default function AdminDashboard() {
-  const [salespeople, setSalespeople] = useState<Salesperson[]>([]);
-  const [demos, setDemos] = useState<Demo[]>([]);
+  const [users, setUsers] = useState<Salesperson[]>([]);
+  const [leads, setLeads] = useState<LeadRow[]>([]);
 
   useEffect(() => {
-    fetch('/api/admin/salespeople').then(r => r.json()).then(d => setSalespeople(d.data ?? []));
-    fetch('/api/admin/demos').then(r => r.json()).then(d => setDemos(d.data ?? []));
+    fetch('/api/admin/salespeople').then((r) => r.json()).then((d) => setUsers(d.data ?? []));
+    fetch('/api/admin/leads').then((r) => r.json()).then((d) => setLeads(d.data ?? []));
   }, []);
 
+  const activeUsers = users.filter((u) => u.active).length;
+  const openLeads = leads.filter((l) => ['new', 'visited', 'pitched'].includes(l.status)).length;
+  const soldLeads = leads.filter((l) => l.status === 'sold').length;
+
   return (
-    <div className="space-y-8">
-      {/* Quick Actions */}
-      <div className="grid grid-cols-2 gap-4">
-        <Link
+    <div className="py-10">
+      <PageHero
+        eyebrow="Admin"
+        title="Your bench,"
+        accent="at a glance."
+        sub="Create contractor accounts, assign leads, and upload demo sites. Everything you give out from here flows straight into that contractor's dashboard."
+      />
+
+      <div
+        className="grid grid-cols-2 md:grid-cols-4 rounded-2xl overflow-hidden mb-10"
+        style={{ background: BG_STRONG, border: `1px solid ${LINE}` }}
+      >
+        <StatCell label="Contractors" value={users.length} />
+        <StatCell label="Active" value={activeUsers} />
+        <StatCell label="Open leads" value={openLeads} />
+        <StatCell label="Sold" value={soldLeads} accent />
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-3 mb-12">
+        <ActionCard
+          href="/admin/users"
+          eyebrow="Create"
+          title="New contractor"
+          sub="Make a login for a friend. Set their PIN, share the credentials."
+        />
+        <ActionCard
+          href="/admin/leads"
+          eyebrow="Assign"
+          title="New lead"
+          sub="Type in a business, attach brand colours and pitch hooks, send it to a contractor's queue."
+        />
+        <ActionCard
           href="/admin/upload"
-          className="flex items-center gap-3 p-4 bg-[#111] border border-[#222] rounded-xl hover:border-[#444] transition-colors"
-        >
-          <Upload className="w-5 h-5 text-emerald-400" />
-          <div>
-            <p className="text-[14px] font-medium">Upload Demo Site</p>
-            <p className="text-[12px] text-[#666]">Add a new demo HTML file</p>
-          </div>
-        </Link>
-        <Link
-          href="/admin/assign"
-          className="flex items-center gap-3 p-4 bg-[#111] border border-[#222] rounded-xl hover:border-[#444] transition-colors"
-        >
-          <UserPlus className="w-5 h-5 text-blue-400" />
-          <div>
-            <p className="text-[14px] font-medium">Assign Lead</p>
-            <p className="text-[12px] text-[#666]">Give a demo to a salesperson</p>
-          </div>
-        </Link>
+          eyebrow="Upload"
+          title="Demo site HTML"
+          sub="Ship a static demo site tied to a business. Public URL goes with the lead."
+        />
       </div>
 
-      {/* Salespeople */}
-      <div>
-        <div className="flex items-center gap-2 mb-3">
-          <Users className="w-4 h-4 text-[#666]" />
-          <h2 className="text-[14px] font-semibold text-[#999]">Salespeople ({salespeople.length})</h2>
-        </div>
-        <div className="bg-[#111] border border-[#222] rounded-xl overflow-hidden">
-          {salespeople.length === 0 ? (
-            <p className="text-[13px] text-[#555] p-4 text-center">No salespeople yet. They sign up at /signup</p>
-          ) : (
-            <table className="w-full">
-              <thead>
-                <tr className="border-b border-[#222] text-[11px] text-[#666] uppercase tracking-wider">
-                  <th className="text-left p-3">Name</th>
-                  <th className="text-left p-3">Phone</th>
-                  <th className="text-left p-3">Area</th>
-                  <th className="text-left p-3">Joined</th>
-                </tr>
-              </thead>
-              <tbody>
-                {salespeople.map(sp => (
-                  <tr key={sp.id} className="border-b border-[#222] last:border-0">
-                    <td className="p-3 text-[13px] font-medium">{sp.name}</td>
-                    <td className="p-3 text-[13px] text-[#888]">{sp.phone ?? '-'}</td>
-                    <td className="p-3 text-[13px] text-[#888]">{sp.area_postcode ?? '-'}</td>
-                    <td className="p-3 text-[13px] text-[#666]">{new Date(sp.created_at).toLocaleDateString()}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-        </div>
-      </div>
-
-      {/* Demo Sites */}
-      <div>
-        <div className="flex items-center gap-2 mb-3">
-          <Globe className="w-4 h-4 text-[#666]" />
-          <h2 className="text-[14px] font-semibold text-[#999]">Demo Sites ({demos.length})</h2>
-        </div>
-        <div className="bg-[#111] border border-[#222] rounded-xl overflow-hidden">
-          {demos.length === 0 ? (
-            <div className="p-4 text-center">
-              <p className="text-[13px] text-[#555]">No demos uploaded yet</p>
-              <Link href="/admin/upload" className="text-[13px] text-blue-400 hover:underline mt-1 inline-block">
-                Upload your first demo
-              </Link>
+      <section className="mb-12">
+        <Eyebrow accent>Recent contractors</Eyebrow>
+        {users.length === 0 ? (
+          <Card padding="lg" className="text-center">
+            <p className="text-[15px] m-0" style={{ color: CREAM_DIM }}>
+              No contractors yet. <Link href="/admin/users" style={{ color: SIGNAL }}>Create one →</Link>
+            </p>
+          </Card>
+        ) : (
+          <Card padding="none">
+            <div
+              className="grid grid-cols-[1fr_140px_120px_90px] gap-4 px-5 py-3 text-[10.5px] uppercase"
+              style={{ fontFamily: MONO_FONT, letterSpacing: '0.14em', color: CREAM_MUTED, borderBottom: `1px solid ${LINE}` }}
+            >
+              <span>Name</span>
+              <span>Postcode</span>
+              <span>Joined</span>
+              <span>Status</span>
             </div>
-          ) : (
-            <table className="w-full">
-              <thead>
-                <tr className="border-b border-[#222] text-[11px] text-[#666] uppercase tracking-wider">
-                  <th className="text-left p-3">Business</th>
-                  <th className="text-left p-3">Category</th>
-                  <th className="text-left p-3">Location</th>
-                  <th className="text-left p-3">Uploaded</th>
-                </tr>
-              </thead>
-              <tbody>
-                {demos.map(d => (
-                  <tr key={d.id} className="border-b border-[#222] last:border-0">
-                    <td className="p-3 text-[13px] font-medium">{d.business_name}</td>
-                    <td className="p-3 text-[13px] text-[#888]">{d.category}</td>
-                    <td className="p-3 text-[13px] text-[#888]">{d.city ?? d.postcode_prefix ?? '-'}</td>
-                    <td className="p-3 text-[13px] text-[#666]">{new Date(d.created_at).toLocaleDateString()}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-        </div>
-      </div>
+            {users.slice(0, 8).map((u, i) => (
+              <div
+                key={u.id}
+                className="grid grid-cols-[1fr_140px_120px_90px] gap-4 px-5 py-3.5"
+                style={{ borderBottom: i === Math.min(users.length, 8) - 1 ? 'none' : `1px solid rgb(255 255 255 / 0.05)` }}
+              >
+                <span className="text-[14.5px]" style={{ color: CREAM, fontFamily: DISPLAY_FONT, fontWeight: 500 }}>
+                  {u.name}
+                </span>
+                <span className="text-[13px]" style={{ color: CREAM_DIM, fontFamily: MONO_FONT }}>
+                  {u.area_postcode ?? '—'}
+                </span>
+                <span className="text-[12px]" style={{ color: CREAM_MUTED, fontFamily: MONO_FONT, letterSpacing: '0.04em' }}>
+                  {formatDate(u.created_at)}
+                </span>
+                <span
+                  className="text-[11px] uppercase"
+                  style={{ fontFamily: MONO_FONT, letterSpacing: '0.14em', color: u.active ? SIGNAL : CREAM_MUTED }}
+                >
+                  {u.active ? 'Active' : 'Paused'}
+                </span>
+              </div>
+            ))}
+          </Card>
+        )}
+      </section>
     </div>
   );
+}
+
+function ActionCard({
+  href,
+  eyebrow,
+  title,
+  sub,
+}: {
+  href: string;
+  eyebrow: string;
+  title: string;
+  sub: string;
+}) {
+  return (
+    <Link href={href} className="no-underline block">
+      <Card padding="lg" style={{ cursor: 'pointer', height: '100%' }}>
+        <div
+          className="text-[10px] uppercase mb-2"
+          style={{ fontFamily: MONO_FONT, letterSpacing: '0.14em', color: SIGNAL }}
+        >
+          / {eyebrow}
+        </div>
+        <p
+          className="text-[20px] m-0 mb-2"
+          style={{ fontFamily: DISPLAY_FONT, fontWeight: 500, color: CREAM, letterSpacing: '-0.02em' }}
+        >
+          {title}
+        </p>
+        <p className="text-[13.5px] m-0" style={{ color: CREAM_DIM, lineHeight: 1.55 }}>
+          {sub}
+        </p>
+      </Card>
+    </Link>
+  );
+}
+
+function formatDate(iso: string | null | undefined): string {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '—';
+  return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }).toUpperCase();
 }

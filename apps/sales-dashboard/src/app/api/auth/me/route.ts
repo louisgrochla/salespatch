@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { resolveUserFromRequest } from '@/lib/auth';
-import { queryOne } from '@/lib/db';
+import { findUserById } from '@/lib/auth-db';
 import type { SalesUser } from '@/lib/types';
 
 export async function GET(req: NextRequest) {
@@ -12,11 +12,7 @@ export async function GET(req: NextRequest) {
     );
   }
 
-  const row = queryOne<Record<string, unknown>>(
-    'SELECT id, name, email, phone, area_postcode, commission_rate, device_type, last_active_at, created_at FROM sales_users WHERE id = ?',
-    auth.user_id,
-  );
-
+  const row = await findUserById(auth.user_id);
   if (!row) {
     return NextResponse.json(
       { error: 'User not found', code: 'USER_NOT_FOUND' },
@@ -25,16 +21,16 @@ export async function GET(req: NextRequest) {
   }
 
   const user: SalesUser = {
-    id: row.id as string,
-    name: row.name as string,
-    email: row.email as string | null,
-    phone: row.phone as string | null,
-    area_postcode: row.area_postcode as string | null,
-    commission_rate: (row.commission_rate as number) ?? 0.1,
-    active: true,
+    id: row.id,
+    name: row.name,
+    email: row.email,
+    phone: row.phone,
+    area_postcode: row.area_postcode,
+    commission_rate: row.commission_rate,
+    active: row.active,
     device_type: (row.device_type as SalesUser['device_type']) ?? null,
-    last_active_at: row.last_active_at as string | null,
-    created_at: row.created_at as string,
+    last_active_at: row.last_active_at ?? null,
+    created_at: row.created_at ?? '',
   };
 
   return NextResponse.json({ data: user });

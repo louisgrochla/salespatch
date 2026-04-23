@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { resolveUserFromRequest } from '@/lib/auth';
-import { queryAll } from '@/lib/db';
+import { listAssignments, type LeadAssignmentRow } from '@/lib/leads-db';
 import type { LeadCard } from '@/lib/types';
 
 export async function GET(req: NextRequest) {
@@ -13,85 +13,54 @@ export async function GET(req: NextRequest) {
   const status = searchParams.get('status');
   const search = searchParams.get('search');
 
-  let sql = `
-    SELECT
-      la.id as assignment_id,
-      la.status as assignment_status,
-      la.assigned_at,
-      la.lead_id,
-      la.notes,
-      la.commission_amount,
-      la.visited_at,
-      la.pitched_at,
-      la.sold_at,
-      COALESCE(json_extract(la.notes, '$.business_name'), la.lead_id) as business_name,
-      json_extract(la.notes, '$.business_type') as business_type,
-      json_extract(la.notes, '$.address') as address,
-      json_extract(la.notes, '$.postcode') as postcode,
-      json_extract(la.notes, '$.phone') as phone,
-      json_extract(la.notes, '$.google_rating') as google_rating,
-      json_extract(la.notes, '$.google_review_count') as google_review_count,
-      json_extract(la.notes, '$.has_website') as has_website,
-      json_extract(la.notes, '$.website_quality_score') as website_quality_score,
-      json_extract(la.notes, '$.demo_site_domain') as demo_site_domain,
-      la.follow_up_at,
-      la.follow_up_note,
-      la.contact_name,
-      la.contact_role,
-      la.visited_at,
-      la.pitched_at
-    FROM lead_assignments la
-    WHERE la.user_id = ?
-  `;
-  const params: unknown[] = [auth.user_id];
-
-  if (status && status !== 'all') {
-    sql += ' AND la.status = ?';
-    params.push(status);
-  }
-
-  if (search) {
-    sql += ` AND json_extract(la.notes, '$.business_name') LIKE ?`;
-    params.push(`%${search}%`);
-  }
-
-  sql += `
-    ORDER BY
-      CASE la.status
-        WHEN 'new' THEN 1
-        WHEN 'visited' THEN 2
-        WHEN 'pitched' THEN 3
-        WHEN 'sold' THEN 4
-        WHEN 'rejected' THEN 5
-      END,
-      la.assigned_at DESC
-  `;
-
-  const rows = queryAll<Record<string, unknown>>(sql, ...params);
-
-  const leads: LeadCard[] = rows.map((r) => ({
-    assignment_id: r.assignment_id as string,
-    assignment_status: (r.assignment_status as LeadCard['assignment_status']) ?? 'new',
-    assigned_at: r.assigned_at as string,
-    lead_id: r.lead_id as string,
-    business_name: (r.business_name as string) ?? 'Unknown Business',
-    business_type: r.business_type as string | null,
-    address: r.address as string | null,
-    postcode: r.postcode as string | null,
-    phone: r.phone as string | null,
-    google_rating: r.google_rating as number | null,
-    google_review_count: r.google_review_count as number | null,
-    has_website: !!(r.has_website),
-    website_quality_score: r.website_quality_score as number | null,
-    has_demo_site: !!(r.demo_site_domain),
-    demo_site_domain: r.demo_site_domain as string | null,
-    follow_up_at: r.follow_up_at as string | null,
-    follow_up_note: r.follow_up_note as string | null,
-    contact_name: r.contact_name as string | null,
-    contact_role: r.contact_role as string | null,
-    visited_at: r.visited_at as string | null,
-    pitched_at: r.pitched_at as string | null,
-  }));
+  const rows = await listAssignments(auth.user_id, { status, search });
+  const leads: LeadCard[] = rows
+    .map((r) => rowToCard(r))
+    .sort(statusOrderThenDate);
 
   return NextResponse.json({ data: leads });
+}
+
+function rowToCard(r: LeadAssignmentRow): LeadCard {
+  const n = safeParse<Record<string, unknown>>(r.notes, {});
+  return {
+    assignment_id: r.id,
+    assignment_status: r.status ?? 'new',
+    assigned_at: r.assigned_at,
+    lead_id: r.lead_id,
+    business_name: (n.business_name as string) ?? 'Unknown Business',
+    business_type: (n.business_type as string | null) ?? null,
+    address: (n.address as string | null) ?? null,
+    postcode: (n.postcode as string | null) ?? null,
+    phone: (n.phone as string | null) ?? null,
+    google_rating: (n.google_rating as number | null) ?? null,
+    google_review_count: (n.google_review_count as number | null) ?? null,
+    has_website: !!n.has_website,
+    website_quality_score: (n.website_quality_score as number | null) ?? null,
+    has_demo_site: !!n.demo_site_domain,
+    demo_site_domain: (n.demo_site_domain as string | null) ?? null,
+    follow_up_at: r.follow_up_at,
+    follow_up_note: r.follow_up_note,
+    contact_name: r.contact_name,
+    contact_role: r.contact_role,
+    visited_at: r.visited_at,
+    pitched_at: r.pitched_at,
+  };
+}
+
+function statusOrderThenDate(a: LeadCard, b: LeadCard): number {
+  const order = ['new', 'visited', 'pitched', 'sold', 'rejected'];
+  const oa = order.indexOf(a.assignment_status);
+  const ob = order.indexOf(b.assignment_status);
+  if (oa !== ob) return oa - ob;
+  return (b.assigned_at ?? '').localeCompare(a.assigned_at ?? '');
+}
+
+function safeParse<T>(val: string | null | undefined, fallback: T): T {
+  if (!val) return fallback;
+  try {
+    return JSON.parse(val) as T;
+  } catch {
+    return fallback;
+  }
 }

@@ -109,6 +109,21 @@ export async function updateUserPinHash(userId: string, pinHash: string): Promis
   run('UPDATE sales_users SET pin_hash = ?, active = 1 WHERE id = ?', pinHash, userId);
 }
 
+/** Look up user by id (used by /api/auth/me). */
+export async function findUserById(id: string): Promise<SalesUserRow | null> {
+  if (isSupabaseMode()) {
+    const sb = getSupabaseServer();
+    const { data } = await sb.from('sales_users').select('*').eq('id', id).maybeSingle();
+    return data ? normaliseRow(data) : null;
+  }
+  const row = queryOne<Record<string, unknown>>(
+    `SELECT id, name, pin_hash, email, phone, area_postcode, commission_rate, active, device_type, last_active_at, created_at
+       FROM sales_users WHERE id = ?`,
+    id,
+  );
+  return row ? normaliseRow(row) : null;
+}
+
 export async function touchLastActive(userId: string): Promise<void> {
   try {
     if (isSupabaseMode()) {
