@@ -1,0 +1,745 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Join SalesFlow — Apply</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800;900&family=Inter+Tight:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="shared/brand.css" />
+<style>
+.wrap { display: grid; grid-template-columns: 300px 1fr; gap: 64px; padding: 40px 0 100px; }
+@media (max-width: 900px) { .wrap { grid-template-columns: 1fr; gap: 32px; } }
+.rail { position: sticky; top: 88px; align-self: start; }
+.rail .lab { font-family: 'JetBrains Mono', monospace; font-size: 10.5px; letter-spacing: 0.14em; color: var(--muted); text-transform: uppercase; margin-bottom: 20px; }
+.rail ol { list-style: none; padding: 0; margin: 0; display: grid; gap: 4px; }
+.rail ol li { display: grid; grid-template-columns: 28px 1fr; gap: 14px; padding: 14px 12px 14px 0; align-items: center; border-radius: 8px; cursor: pointer; }
+.rail ol li.on { background: var(--bg2); }
+.rail ol li.locked { cursor: not-allowed; opacity: 0.7; }
+.rail ol li .n { width: 26px; height: 26px; border-radius: 50%; background: var(--bg2); border: 1px solid var(--line); display: flex; align-items: center; justify-content: center; font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 500; color: var(--muted); }
+.rail ol li.on .n { background: var(--signal); color: white; border-color: var(--signal); }
+.rail ol li.dn .n { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+.rail ol li .t { font-family: var(--display-font); font-size: 15px; letter-spacing: -0.015em; font-weight: 500; }
+.rail ol li .s { font-size: 12.5px; color: var(--muted); margin-top: 2px; }
+
+.trust-strip { display: flex; flex-wrap: wrap; gap: 10px; max-width: 900px; margin: 22px 0 0; }
+.trust-pill { display: inline-flex; gap: 10px; align-items: center; padding: 10px 16px 10px 14px; border: 1px solid var(--line); background: var(--bg); border-radius: 999px; font-size: 13.5px; color: var(--ink); }
+.trust-pill .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--signal); flex-shrink: 0; }
+.trust-pill b { font-weight: 500; }
+
+.form h2 { font-family: var(--display-font); font-size: clamp(32px, 4vw, 44px); letter-spacing: -0.03em; line-height: 1.1; font-weight: 600; margin: 0 0 14px; }
+.form h2 .acc {  color: var(--signal); font-weight: 500; }
+.form p.intro { color: var(--ink2); font-size: 16px; line-height: 1.55; margin: 0 0 28px; max-width: 540px; }
+
+.reassure { display: flex; gap: 14px; align-items: flex-start; padding: 14px 18px; border: 1px solid var(--line); border-left: 3px solid var(--signal); background: rgb(184 134 11 / 0.04); border-radius: 10px; max-width: 540px; margin: 0 0 28px; }
+.reassure .badge { font-family: 'JetBrains Mono', monospace; font-size: 10px; letter-spacing: 0.14em; color: var(--signal); text-transform: uppercase; margin-bottom: 4px; }
+.reassure p { font-size: 13.5px; color: var(--ink2); line-height: 1.55; margin: 0; }
+
+.field { margin-bottom: 24px; max-width: 520px; }
+.field.narrow { max-width: 260px; }
+.field label { display: block; font-family: 'JetBrains Mono', monospace; font-size: 10.5px; letter-spacing: 0.14em; color: var(--muted); text-transform: uppercase; margin-bottom: 8px; }
+.field .optional { color: var(--muted); font-weight: 400; text-transform: none; letter-spacing: 0; font-size: 12px; margin-left: 6px; font-family: var(--body-font); }
+.field input, .field textarea, .field select { width: 100%; background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; font-family: inherit; font-size: 15px; color: var(--ink); outline: 0; }
+.field input:focus, .field textarea:focus, .field select:focus { border-color: var(--signal); }
+.field .hint { font-size: 12.5px; color: var(--muted); margin-top: 6px; }
+.field .err { font-size: 12.5px; color: var(--err); margin-top: 6px; display: none; }
+.field.has-err input, .field.has-err textarea { border-color: var(--err); }
+.field.has-err .err { display: block; }
+
+.chips { display: flex; flex-wrap: wrap; gap: 8px; max-width: 520px; }
+.chip { padding: 10px 16px; border: 1px solid var(--line); border-radius: 999px; font-size: 13.5px; color: var(--ink2); cursor: pointer; user-select: none; transition: all 0.12s; background: var(--bg); }
+.chip.on { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+.cards { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; max-width: 540px; }
+@media (max-width: 560px) { .cards { grid-template-columns: 1fr; } }
+.card { border: 1px solid var(--line); border-radius: 12px; padding: 18px; cursor: pointer; background: var(--bg); transition: all 0.12s; }
+.card.on { border-color: var(--signal); background: rgb(184 134 11 / 0.05); }
+.card h4 { font-family: var(--display-font); font-size: 17px; letter-spacing: -0.02em; font-weight: 600; margin: 0 0 4px; }
+.card p { font-size: 13px; color: var(--ink2); margin: 0; }
+
+.rtw-block { border: 1px solid var(--signal); border-radius: 14px; padding: 18px 22px; background: rgb(184 134 11 / 0.06); max-width: 540px; margin: 24px 0 0; }
+.rtw-block .eyebrow-sm { font-family: 'JetBrains Mono', monospace; font-size: 10.5px; letter-spacing: 0.14em; color: var(--signal); text-transform: uppercase; margin-bottom: 6px; }
+.rtw-block p { font-size: 14px; color: var(--ink); line-height: 1.55; margin: 0; }
+.rtw-blocked { border: 1px solid var(--line); background: var(--bg2); border-radius: 14px; padding: 20px 22px; max-width: 540px; margin: 22px 0 0; display: none; }
+.rtw-blocked.on { display: block; }
+.rtw-blocked h5 { font-family: var(--display-font); font-size: 16px; margin: 0 0 6px; font-weight: 600; }
+.rtw-blocked p { font-size: 13.5px; color: var(--ink2); line-height: 1.55; margin: 0; }
+.rtw-blocked a { color: var(--signal); }
+
+.next-steps { max-width: 540px; margin: 24px 0 0; padding: 20px 22px; border: 1px solid var(--line); border-radius: 14px; background: var(--bg); }
+.next-steps h5 { font-family: 'JetBrains Mono', monospace; font-size: 10.5px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--signal); margin: 0 0 12px; font-weight: 500; }
+.next-steps ol { margin: 0; padding: 0 0 0 20px; font-size: 14px; color: var(--ink); line-height: 1.7; }
+.next-steps ol li { padding-left: 4px; }
+.next-steps ol li b { font-weight: 500; }
+
+.legal-fine { font-size: 12.5px; color: var(--muted); margin-top: 14px; max-width: 540px; line-height: 1.55; }
+.legal-fine a { color: var(--signal); }
+
+.ctas { display: flex; gap: 10px; margin-top: 32px; align-items: center; flex-wrap: wrap; }
+.step-indicator { font-family:'JetBrains Mono',monospace; font-size:11px; letter-spacing:0.14em; color:var(--signal); text-transform:uppercase; margin-bottom:14px; display: flex; gap: 14px; align-items: center; }
+.step-indicator .meter { flex: 1; max-width: 180px; height: 3px; background: var(--line2); border-radius: 2px; overflow: hidden; }
+.step-indicator .meter .fill { height: 100%; background: var(--signal); transition: width 0.35s ease; }
+
+.saved { margin-left:auto; font-family:'JetBrains Mono',monospace; font-size:11px; color:var(--muted); letter-spacing:0.08em; }
+.saved.ok { color: var(--signal); }
+
+.review { border: 1px solid var(--line); border-radius: 14px; padding: 20px 24px; max-width: 540px; background: var(--bg); }
+.review .row { display: grid; grid-template-columns: 160px 1fr; gap: 16px; padding: 10px 0; border-bottom: 1px solid var(--line2); }
+.review .row:last-child { border-bottom: 0; }
+.review .row .k { font-family:'JetBrains Mono',monospace; font-size:10.5px; letter-spacing:0.14em; color:var(--muted); text-transform:uppercase; padding-top:2px; }
+.review .row .v { font-size:14.5px; color:var(--ink); white-space: pre-wrap; word-wrap: break-word; }
+.review .row .v.empty { color:var(--muted); font-style: italic; }
+.pin-group { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; max-width: 420px; }
+@media (max-width: 560px) { .pin-group { grid-template-columns: 1fr; } }
+
+.submit-err { color: var(--err); font-size: 14px; margin-top: 14px; max-width: 520px; display: none; }
+.submit-err.on { display: block; }
+#btn-submit.loading { opacity: 0.6; pointer-events: none; }
+#btn-next.disabled { opacity: 0.4; pointer-events: none; }
+.hidden { display: none !important; }
+
+/* ================================================================
+   DARK THEME — scoped to apply page only via body.theme-dark-apply
+   Top nav + footer keep cream styling; everything else inverts.
+   ================================================================ */
+body.theme-dark-apply { background: var(--ink); color: var(--bg); }
+body.theme-dark-apply::before {
+  content: '';
+  position: fixed; inset: 0;
+  z-index: 0; pointer-events: none;
+  background-image:
+    linear-gradient(rgb(255 255 255 / 0.022) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(255 255 255 / 0.022) 1px, transparent 1px);
+  background-size: 72px 72px;
+  background-color: transparent;
+  mix-blend-mode: normal;
+  opacity: 1;
+  -webkit-mask-image: radial-gradient(ellipse 80% 70% at 50% 28%, #000, transparent 85%);
+          mask-image: radial-gradient(ellipse 80% 70% at 50% 28%, #000, transparent 85%);
+}
+body.theme-dark-apply::after {
+  content: '';
+  position: fixed; inset: 0;
+  z-index: 0; pointer-events: none;
+  background: radial-gradient(circle at 50% 8%, rgb(184 134 11 / 0.10), transparent 55%);
+  opacity: 0.9;
+}
+
+/* Page hero */
+body.theme-dark-apply .page-hero h1 { color: var(--bg); }
+body.theme-dark-apply .page-hero h1 .t-signal,
+body.theme-dark-apply .page-hero h1 .t-italic { color: var(--signal); }
+body.theme-dark-apply .page-hero .lead { color: rgb(210 200 185); }
+body.theme-dark-apply .page-hero .eyebrow { color: var(--signal); }
+
+/* Trust pills */
+body.theme-dark-apply .trust-pill { background: rgb(28 26 23); border-color: rgb(255 255 255 / 0.1); color: var(--bg); }
+body.theme-dark-apply .trust-pill b { color: var(--bg); font-weight: 500; }
+
+/* Rail */
+body.theme-dark-apply .rail .lab { color: rgb(210 200 185 / 0.55); }
+body.theme-dark-apply .rail ol li .t { color: var(--bg); }
+body.theme-dark-apply .rail ol li .s { color: rgb(210 200 185 / 0.7); }
+body.theme-dark-apply .rail ol li:hover,
+body.theme-dark-apply .rail ol li.on { background: rgb(255 255 255 / 0.04); }
+body.theme-dark-apply .rail ol li .n { background: rgb(255 255 255 / 0.06); border-color: rgb(255 255 255 / 0.12); color: rgb(210 200 185); }
+body.theme-dark-apply .rail ol li.on .n { background: var(--signal); color: white; border-color: var(--signal); }
+body.theme-dark-apply .rail ol li.dn .n { background: var(--bg); color: var(--ink); border-color: var(--bg); }
+
+/* Form heading + intro */
+body.theme-dark-apply .form h2 { color: var(--bg); }
+body.theme-dark-apply .form h2 .acc { color: var(--signal); }
+body.theme-dark-apply .form p.intro { color: rgb(210 200 185); }
+
+/* Fields */
+body.theme-dark-apply .field label { color: rgb(210 200 185 / 0.6); }
+body.theme-dark-apply .field .optional { color: rgb(210 200 185 / 0.5); }
+body.theme-dark-apply .field input,
+body.theme-dark-apply .field textarea,
+body.theme-dark-apply .field select {
+  background: rgb(28 26 23);
+  border-color: rgb(255 255 255 / 0.1);
+  color: var(--bg);
+}
+body.theme-dark-apply .field input::placeholder,
+body.theme-dark-apply .field textarea::placeholder { color: rgb(210 200 185 / 0.35); }
+body.theme-dark-apply .field input:focus,
+body.theme-dark-apply .field textarea:focus,
+body.theme-dark-apply .field select:focus { border-color: var(--signal); background: rgb(32 30 27); }
+body.theme-dark-apply .field .hint { color: rgb(210 200 185 / 0.55); }
+body.theme-dark-apply .field .err { color: rgb(255 138 128); }
+body.theme-dark-apply .field.has-err input,
+body.theme-dark-apply .field.has-err textarea { border-color: rgb(255 138 128 / 0.6); }
+
+/* Chips */
+body.theme-dark-apply .chip { background: rgb(28 26 23); border-color: rgb(255 255 255 / 0.1); color: rgb(210 200 185); }
+body.theme-dark-apply .chip:hover { background: rgb(34 31 27); }
+body.theme-dark-apply .chip.on { background: var(--signal); color: white; border-color: var(--signal); }
+
+/* Cards */
+body.theme-dark-apply .card { background: rgb(28 26 23); border-color: rgb(255 255 255 / 0.1); }
+body.theme-dark-apply .card h4 { color: var(--bg); }
+body.theme-dark-apply .card p { color: rgb(210 200 185 / 0.8); }
+body.theme-dark-apply .card:hover { background: rgb(34 31 27); }
+body.theme-dark-apply .card.on { background: rgb(58 42 20); border-color: var(--signal); }
+
+/* Reassure banner */
+body.theme-dark-apply .reassure {
+  background: rgb(46 34 14);
+  border-color: rgb(184 134 11 / 0.35);
+  border-left-color: var(--signal);
+}
+body.theme-dark-apply .reassure p { color: rgb(232 224 210); }
+body.theme-dark-apply .reassure .badge { color: var(--signal); }
+
+/* RTW block + blocked card */
+body.theme-dark-apply .rtw-block {
+  background: rgb(52 38 14);
+  border-color: rgb(184 134 11 / 0.5);
+}
+body.theme-dark-apply .rtw-block .eyebrow-sm { color: var(--signal); }
+body.theme-dark-apply .rtw-block p { color: var(--bg); }
+body.theme-dark-apply .rtw-blocked {
+  background: rgb(30 28 25);
+  border-color: rgb(255 255 255 / 0.12);
+}
+body.theme-dark-apply .rtw-blocked h5 { color: var(--bg); }
+body.theme-dark-apply .rtw-blocked p { color: rgb(210 200 185); }
+body.theme-dark-apply .rtw-blocked a { color: var(--signal); }
+
+/* Review */
+body.theme-dark-apply .review {
+  background: rgb(30 28 25);
+  border-color: rgb(255 255 255 / 0.1);
+}
+body.theme-dark-apply .review .row { border-bottom-color: rgb(255 255 255 / 0.06); }
+body.theme-dark-apply .review .row .k { color: rgb(210 200 185 / 0.55); }
+body.theme-dark-apply .review .row .v { color: var(--bg); }
+body.theme-dark-apply .review .row .v.empty { color: rgb(210 200 185 / 0.4); }
+
+/* Next steps */
+body.theme-dark-apply .next-steps {
+  background: rgb(30 28 25);
+  border-color: rgb(255 255 255 / 0.1);
+}
+body.theme-dark-apply .next-steps h5 { color: var(--signal); }
+body.theme-dark-apply .next-steps ol { color: var(--bg); }
+body.theme-dark-apply .next-steps ol li::marker { color: var(--signal); }
+
+/* Step indicator + meter */
+body.theme-dark-apply .step-indicator { color: var(--signal); }
+body.theme-dark-apply .step-indicator .meter { background: rgb(255 255 255 / 0.08); }
+
+/* Saved label */
+body.theme-dark-apply .saved { color: rgb(210 200 185 / 0.55); }
+body.theme-dark-apply .saved.ok { color: var(--signal); }
+
+/* Legal fine */
+body.theme-dark-apply .legal-fine { color: rgb(210 200 185 / 0.6); }
+body.theme-dark-apply .legal-fine a { color: var(--signal); }
+
+/* CTA buttons — scoped to .ctas so the cream top-nav isn't affected */
+body.theme-dark-apply .ctas .btn-primary { background: var(--bg); color: var(--ink); }
+body.theme-dark-apply .ctas .btn-primary:hover { background: rgb(232 224 210); }
+body.theme-dark-apply .ctas .btn-ghost { border-color: rgb(255 255 255 / 0.15); color: var(--bg); background: transparent; }
+body.theme-dark-apply .ctas .btn-ghost:hover { background: rgb(255 255 255 / 0.05); }
+
+/* Submit error */
+body.theme-dark-apply .submit-err { color: rgb(255 138 128); }
+</style></head><body class="theme-dark-apply">
+<div id="shell-top"></div>
+
+<section class="page-hero container-xl" style="padding-bottom:0;">
+  <div class="eyebrow">Join SalesFlow</div>
+  <h1>Walk in. <span class="t-signal t-italic">We'll catch you up.</span></h1>
+  <p class="lead" style="margin-bottom:0;max-width:640px;">The only qualifier is <b>right to work in the UK</b>. Past sales experience, location, and CV don't affect approval — they're just colour so we can coach you. Finish the form, land in your dashboard, we verify your docs before your first payout.</p>
+  <div class="trust-strip">
+    <span class="trust-pill"><span class="dot"></span><b>Right to work in the UK</b> — the only gate</span>
+    <span class="trust-pill"><span class="dot"></span><b>Any UK postcode</b> — we run the whole country</span>
+    <span class="trust-pill"><span class="dot"></span><b>No sales experience needed</b> — most started with none</span>
+  </div>
+</section>
+
+<div class="container-xl wrap">
+  <aside class="rail">
+    <div class="lab">/ Application · 5 min</div>
+    <ol id="rail-list">
+      <li data-rail="1"><div class="n">1</div><div><div class="t">About you</div><div class="s">Name and how we reach you</div></div></li>
+      <li data-rail="2"><div class="n">2</div><div><div class="t">Right to work</div><div class="s">The only real gate</div></div></li>
+      <li data-rail="3"><div class="n">3</div><div><div class="t">Your background</div><div class="s">Optional — doesn't affect approval</div></div></li>
+      <li data-rail="4"><div class="n">4</div><div><div class="t">Where & when</div><div class="s">Your patch and availability</div></div></li>
+      <li data-rail="5"><div class="n">5</div><div><div class="t">One quick question</div><div class="s">Optional — we read every one</div></div></li>
+      <li data-rail="6"><div class="n">6</div><div><div class="t">Review & join</div><div class="s">Set your PIN, land in your dashboard</div></div></li>
+    </ol>
+  </aside>
+
+  <section class="form">
+    <div class="step-indicator">
+      <span id="step-indicator-text">Step 1 of 6</span>
+      <span class="meter"><span class="fill" id="step-meter-fill" style="width:16%"></span></span>
+    </div>
+
+    <!-- STEP 1: About you -->
+    <div data-step="1">
+      <h2>The <span class="acc">basics.</span></h2>
+      <p class="intro">Who you are and how we reach you. We'll never share your details — this stays between you and SalesFlow.</p>
+      <div class="field" data-required>
+        <label>Full name</label>
+        <input type="text" id="f-name" placeholder="Jane Smith" autocomplete="name" />
+        <div class="err">Enter your full name (at least 2 characters).</div>
+      </div>
+      <div class="field" data-required>
+        <label>Mobile phone</label>
+        <input type="tel" id="f-phone" placeholder="+44 7700 900000" autocomplete="tel" inputmode="tel" />
+        <div class="hint">A working UK mobile. This is how we send lead alerts and payout confirmations.</div>
+        <div class="err">A working mobile is required — it's how we contact you.</div>
+      </div>
+      <div class="field">
+        <label>Email <span class="optional">(optional)</span></label>
+        <input type="email" id="f-email" placeholder="you@example.com" autocomplete="email" inputmode="email" />
+        <div class="hint">For invoices and dashboard receipts. Not used for marketing.</div>
+      </div>
+    </div>
+
+    <!-- STEP 2: Right to work -->
+    <div data-step="2" hidden>
+      <h2>Right to <span class="acc">work in the UK.</span></h2>
+      <p class="intro">This is the only thing that affects approval. If you can legally work in the UK — as a citizen, settled resident, or on a valid work visa — you're in.</p>
+      <div class="field" data-required>
+        <label>Do you have right to work in the UK?</label>
+        <div class="cards" data-single id="cards-rtw" style="grid-template-columns:1fr 1fr;">
+          <div class="card" data-v="yes"><h4>Yes</h4><p>Citizen, settled status, or valid visa with work permission.</p></div>
+          <div class="card" data-v="no"><h4>Not currently</h4><p>Student visa without work, waiting on status, or no UK permission yet.</p></div>
+        </div>
+        <div class="err">Please pick one to continue.</div>
+      </div>
+      <div class="rtw-block">
+        <div class="eyebrow-sm">What happens next</div>
+        <p>We'll verify your documents (passport, visa, or share code) before your first payout. Nothing to upload now — this is just a declaration.</p>
+      </div>
+      <div class="rtw-blocked" id="rtw-blocked">
+        <h5>We can't progress this right now — but keep us in mind.</h5>
+        <p>Right to work is the one thing we can't move around. If your status changes — a visa grant, settled status, anything — email us at <a href="mailto:hello@salesflow.co">hello@salesflow.co</a> and we'll pick up where you left off. Sorry we can't do more.</p>
+      </div>
+    </div>
+
+    <!-- STEP 3: Background -->
+    <div data-step="3" hidden>
+      <h2>A bit about <span class="acc">your background.</span></h2>
+      <p class="intro">Honest answers. We've approved retail managers, teachers, tradespeople, actors, stay-at-home parents, and people who've never sold a thing in their life.</p>
+      <div class="reassure">
+        <div>
+          <div class="badge">Doesn't affect approval</div>
+          <p>This section is purely so we can coach you properly. Skip any question you like — it has no bearing on whether we sign you up.</p>
+        </div>
+      </div>
+      <div class="field">
+        <label>Industries you've worked in <span class="optional">(pick any)</span></label>
+        <div class="chips" data-multi id="chips-industries">
+          <span class="chip" data-v="Retail">Retail</span>
+          <span class="chip" data-v="Hospitality">Hospitality</span>
+          <span class="chip" data-v="Door-to-door">Door-to-door</span>
+          <span class="chip" data-v="Telesales">Telesales</span>
+          <span class="chip" data-v="Trades">Trades</span>
+          <span class="chip" data-v="Teaching">Teaching</span>
+          <span class="chip" data-v="Customer service">Customer service</span>
+          <span class="chip" data-v="Freelance / creative">Freelance / creative</span>
+          <span class="chip" data-v="None of these">None of these</span>
+        </div>
+      </div>
+      <div class="field">
+        <label>Your sales experience</label>
+        <div class="cards" data-single id="cards-experience">
+          <div class="card" data-v="none"><h4>None</h4><p>Never closed a sale. Willing to learn.</p></div>
+          <div class="card" data-v="some"><h4>Some</h4><p>Customer-facing role, occasional selling.</p></div>
+          <div class="card" data-v="a-lot"><h4>A lot</h4><p>Sold full-time before. Commission roles.</p></div>
+          <div class="card" data-v="professional"><h4>Professional</h4><p>Currently closing in a sales job.</p></div>
+        </div>
+      </div>
+      <div class="field">
+        <label>One line about a time you convinced someone of something <span class="optional">(optional)</span></label>
+        <textarea rows="3" id="f-blurb" placeholder="e.g. Worked the market stall on Saturdays, closed maybe 20 customers a day on impulse buys."></textarea>
+        <div class="hint">Doesn't have to be sales. Coaching, negotiating, persuading — all count.</div>
+      </div>
+    </div>
+
+    <!-- STEP 4: Where & when -->
+    <div data-step="4" hidden>
+      <h2>Where & <span class="acc">when.</span></h2>
+      <p class="intro">So we can assign leads close to you and in your hours.</p>
+      <div class="reassure">
+        <div>
+          <div class="badge">Location doesn't affect approval</div>
+          <p>We run in every UK postcode. Any area works — we'll match you to leads within about a mile of where you are.</p>
+        </div>
+      </div>
+      <div class="field narrow" data-required>
+        <label>Area postcode <span class="optional">(outward only)</span></label>
+        <input type="text" id="f-postcode" placeholder="E8" autocomplete="postal-code" maxlength="5" style="text-transform:uppercase;" />
+        <div class="hint">Just the outward part — <b>E8</b>, <b>SE15</b>, <b>NW1</b>, <b>M4</b>, <b>BS8</b>, anywhere.</div>
+        <div class="err">Enter your area postcode (e.g. E8).</div>
+      </div>
+      <div class="field">
+        <label>Days you can work <span class="optional">(pick any)</span></label>
+        <div class="chips" data-multi id="chips-days">
+          <span class="chip" data-v="mon">Mon</span>
+          <span class="chip" data-v="tue">Tue</span>
+          <span class="chip" data-v="wed">Wed</span>
+          <span class="chip" data-v="thu">Thu</span>
+          <span class="chip" data-v="fri">Fri</span>
+          <span class="chip" data-v="sat">Sat</span>
+          <span class="chip" data-v="sun">Sun</span>
+        </div>
+        <div class="hint">Flex it however you want — most contractors work 3–5 days.</div>
+      </div>
+      <div class="field">
+        <label>Phone preference</label>
+        <div class="cards" data-single id="cards-phone-pref" style="grid-template-columns:repeat(2,1fr);">
+          <div class="card" data-v="own"><h4>I'll use my own</h4><p>You already carry a smartphone. Install the app, claim leads, walk.</p></div>
+          <div class="card" data-v="provided"><h4>I need a handset</h4><p>We can lend approved contractors a phone on the patch.</p></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- STEP 5: One quick question -->
+    <div data-step="5" hidden>
+      <h2>Why now, <span class="acc">in your words?</span></h2>
+      <p class="intro">One short answer in your own voice. Short is fine. We read every one.</p>
+      <div class="reassure">
+        <div>
+          <div class="badge">Fully optional</div>
+          <p>Skip it if you'd rather get to your dashboard — it doesn't affect approval. We just enjoy reading them.</p>
+        </div>
+      </div>
+      <div class="field">
+        <label>In your words <span class="optional">(optional)</span></label>
+        <textarea rows="6" id="f-why" placeholder="Between jobs and I like talking to people. I walk a lot anyway — might as well get paid for it."></textarea>
+        <div class="hint">Write like you'd text a mate.</div>
+      </div>
+    </div>
+
+    <!-- STEP 6: Review & submit -->
+    <div data-step="6" hidden>
+      <h2>Last look. <span class="acc">Then you're in.</span></h2>
+      <p class="intro">Check the summary, set a PIN, and we'll drop you into your dashboard. You can update anything from settings later.</p>
+      <div class="review" id="review-block"></div>
+      <div class="field" style="margin-top:24px;" data-required>
+        <label>Create a 4–6 digit PIN</label>
+        <div class="pin-group">
+          <input type="password" id="f-pin" placeholder="••••" maxlength="6" inputmode="numeric" pattern="\d*" autocomplete="new-password" />
+          <input type="password" id="f-pin2" placeholder="Confirm PIN" maxlength="6" inputmode="numeric" pattern="\d*" autocomplete="new-password" />
+        </div>
+        <div class="hint">This is how you'll log in to your dashboard. Pick something memorable, not your birthday.</div>
+        <div class="err">PINs don't match, or must be 4–6 digits.</div>
+      </div>
+      <div class="next-steps">
+        <h5>What happens after you submit</h5>
+        <ol>
+          <li><b>You land in your dashboard</b> — immediately. No waiting, no email chains.</li>
+          <li><b>We verify your right-to-work docs</b> (passport, visa, or share code) — this clears your first payout.</li>
+          <li><b>First leads appear in your patch</b> within [TBD] days. You'll see them in the map view.</li>
+        </ol>
+      </div>
+      <div class="submit-err" id="submit-err"></div>
+      <p class="legal-fine">By submitting you agree to our <a href="legal-contractor-agreement.html">Contractor agreement</a>, <a href="legal-terms.html">Terms</a>, and <a href="legal-privacy.html">Privacy policy</a>. We'll verify right to work before your first payout — nothing to upload today.</p>
+    </div>
+
+    <div class="ctas">
+      <a class="btn btn-ghost btn-lg" id="btn-back" href="javascript:void(0)">← Back</a>
+      <a class="btn btn-primary btn-lg" id="btn-next" href="javascript:void(0)">Continue →</a>
+      <a class="btn btn-primary btn-lg hidden" id="btn-submit" href="javascript:void(0)">Create my dashboard →</a>
+      <div class="saved" id="saved-label">Not saved yet</div>
+    </div>
+  </section>
+</div>
+
+<div id="shell-footer"></div>
+<script src="shared/shell.js"></script>
+<script>renderShell({currentPath: ''});</script>
+
+<script>
+/* ================================================================
+   SalesFlow — Apply form state machine (v2)
+   ================================================================ */
+const DRAFT_KEY = 'sf_apply_draft_v2';
+const TOTAL_STEPS = 6;
+let currentStep = 1;
+let lastSavedAt = 0;
+
+const state = {
+  name: '',
+  phone: '',
+  email: '',
+  right_to_work: '',     // 'yes' | 'no'
+  industries: [],
+  experience: '',
+  blurb: '',
+  postcode: '',
+  days: [],
+  phone_pref: '',
+  why: '',
+};
+
+/* ---------------- Draft persistence ---------------- */
+function saveDraft() {
+  try {
+    localStorage.setItem(DRAFT_KEY, JSON.stringify({ state, currentStep, ts: Date.now() }));
+    lastSavedAt = Date.now();
+    renderSavedLabel();
+  } catch (e) { /* ignore */ }
+}
+function loadDraft() {
+  try {
+    const raw = localStorage.getItem(DRAFT_KEY);
+    if (!raw) return;
+    const parsed = JSON.parse(raw);
+    if (parsed && parsed.state) {
+      Object.assign(state, parsed.state);
+      currentStep = Math.max(1, Math.min(TOTAL_STEPS, parsed.currentStep || 1));
+      lastSavedAt = parsed.ts || 0;
+    }
+  } catch (e) { /* ignore */ }
+}
+function clearDraft() { try { localStorage.removeItem(DRAFT_KEY); } catch (e) {} }
+function renderSavedLabel() {
+  const el = document.getElementById('saved-label'); if (!el) return;
+  if (!lastSavedAt) { el.textContent = 'Not saved yet'; el.classList.remove('ok'); return; }
+  const sec = Math.max(1, Math.floor((Date.now() - lastSavedAt) / 1000));
+  const label = sec < 60 ? `${sec}s ago` : `${Math.floor(sec/60)}m ago`;
+  el.textContent = `Saved · ${label}`;
+  el.classList.add('ok');
+}
+setInterval(renderSavedLabel, 5000);
+
+/* ---------------- Hydrate ---------------- */
+function hydrate() {
+  document.getElementById('f-name').value = state.name;
+  document.getElementById('f-phone').value = state.phone;
+  document.getElementById('f-email').value = state.email;
+  document.getElementById('f-blurb').value = state.blurb;
+  document.getElementById('f-postcode').value = state.postcode;
+  document.getElementById('f-why').value = state.why;
+
+  document.querySelectorAll('#cards-rtw .card').forEach(c => c.classList.toggle('on', state.right_to_work === c.dataset.v));
+  document.querySelectorAll('#chips-industries .chip').forEach(c => c.classList.toggle('on', state.industries.includes(c.dataset.v)));
+  document.querySelectorAll('#cards-experience .card').forEach(c => c.classList.toggle('on', state.experience === c.dataset.v));
+  document.querySelectorAll('#chips-days .chip').forEach(c => c.classList.toggle('on', state.days.includes(c.dataset.v)));
+  document.querySelectorAll('#cards-phone-pref .card').forEach(c => c.classList.toggle('on', state.phone_pref === c.dataset.v));
+  updateRtwBlockedCard();
+}
+
+/* ---------------- Field wiring ---------------- */
+function bindInput(id, key, transform) {
+  const el = document.getElementById(id);
+  el.addEventListener('input', () => {
+    state[key] = transform ? transform(el.value) : el.value;
+    saveDraft();
+  });
+}
+bindInput('f-name', 'name');
+bindInput('f-phone', 'phone');
+bindInput('f-email', 'email');
+bindInput('f-blurb', 'blurb');
+bindInput('f-postcode', 'postcode', v => v.toUpperCase());
+bindInput('f-why', 'why');
+
+/* chip toggles (multi) */
+document.querySelectorAll('.chips[data-multi] .chip').forEach(chip => {
+  chip.addEventListener('click', () => {
+    const group = chip.closest('.chips');
+    const key = group.id === 'chips-industries' ? 'industries' : 'days';
+    const v = chip.dataset.v;
+    const idx = state[key].indexOf(v);
+    if (idx === -1) state[key].push(v); else state[key].splice(idx, 1);
+    chip.classList.toggle('on');
+    saveDraft();
+  });
+});
+/* card toggles (single) */
+document.querySelectorAll('.cards[data-single] .card').forEach(card => {
+  card.addEventListener('click', () => {
+    const group = card.closest('.cards');
+    const idMap = {'cards-rtw':'right_to_work','cards-experience':'experience','cards-phone-pref':'phone_pref'};
+    const key = idMap[group.id];
+    if (!key) return;
+    state[key] = card.dataset.v;
+    group.querySelectorAll('.card').forEach(c => c.classList.toggle('on', c === card));
+    if (key === 'right_to_work') updateRtwBlockedCard();
+    saveDraft();
+    updateNextButton();
+  });
+});
+
+function updateRtwBlockedCard() {
+  const blockedEl = document.getElementById('rtw-blocked');
+  if (!blockedEl) return;
+  blockedEl.classList.toggle('on', state.right_to_work === 'no');
+}
+
+/* ---------------- Rail / step rendering ---------------- */
+function renderRail() {
+  document.querySelectorAll('#rail-list li').forEach(li => {
+    const n = parseInt(li.dataset.rail, 10);
+    li.classList.remove('on', 'dn');
+    if (n < currentStep) { li.classList.add('dn'); li.querySelector('.n').textContent = '✓'; }
+    else if (n === currentStep) { li.classList.add('on'); li.querySelector('.n').textContent = String(n); }
+    else { li.querySelector('.n').textContent = String(n); }
+  });
+}
+function showStep(n, opts) {
+  const skipScroll = opts && opts.skipScroll;
+  currentStep = Math.max(1, Math.min(TOTAL_STEPS, n));
+  document.querySelectorAll('.form [data-step]').forEach(el => {
+    el.hidden = parseInt(el.dataset.step, 10) !== currentStep;
+  });
+  document.getElementById('step-indicator-text').textContent = `Step ${currentStep} of ${TOTAL_STEPS}`;
+  document.getElementById('step-meter-fill').style.width = `${Math.round((currentStep / TOTAL_STEPS) * 100)}%`;
+  document.getElementById('btn-back').classList.toggle('hidden', currentStep === 1);
+  document.getElementById('btn-next').classList.toggle('hidden', currentStep === TOTAL_STEPS);
+  document.getElementById('btn-submit').classList.toggle('hidden', currentStep !== TOTAL_STEPS);
+  document.getElementById('submit-err').classList.remove('on');
+  if (currentStep === TOTAL_STEPS) renderReview();
+  renderRail();
+  saveDraft();
+  updateNextButton();
+  if (!skipScroll) scrollToForm();
+}
+
+function scrollToForm() {
+  const form = document.querySelector('.form');
+  if (!form) return;
+  const navH = document.querySelector('.top-nav')?.offsetHeight || 60;
+  const top = form.getBoundingClientRect().top + window.scrollY - navH - 24;
+  window.scrollTo({ top: Math.max(0, top), behavior: 'smooth' });
+}
+
+function updateNextButton() {
+  const btn = document.getElementById('btn-next');
+  if (!btn) return;
+  // Disable Continue on step 2 if user selected "No" for right-to-work
+  if (currentStep === 2 && state.right_to_work === 'no') {
+    btn.classList.add('disabled');
+  } else {
+    btn.classList.remove('disabled');
+  }
+}
+
+/* Rail jump: only allow going back, or to steps already reached */
+document.querySelectorAll('#rail-list li').forEach(li => {
+  li.addEventListener('click', () => {
+    const n = parseInt(li.dataset.rail, 10);
+    if (n <= currentStep) showStep(n);
+  });
+});
+
+/* ---------------- Validation ---------------- */
+function setFieldError(inputEl, hasErr) {
+  const field = inputEl.closest('[data-required], .field');
+  if (field) field.classList.toggle('has-err', hasErr);
+}
+function validateStep(n) {
+  let ok = true;
+  if (n === 1) {
+    const name = document.getElementById('f-name');
+    const phone = document.getElementById('f-phone');
+    const nameOk = state.name.trim().length >= 2;
+    const phoneOk = state.phone.replace(/\D/g, '').length >= 7;
+    setFieldError(name, !nameOk); if (!nameOk) ok = false;
+    setFieldError(phone, !phoneOk); if (!phoneOk) ok = false;
+  }
+  if (n === 2) {
+    const rtwGroup = document.getElementById('cards-rtw').closest('.field');
+    const rtwOk = state.right_to_work === 'yes';
+    rtwGroup.classList.toggle('has-err', !rtwOk);
+    if (!rtwOk) ok = false;
+  }
+  if (n === 4) {
+    const pc = document.getElementById('f-postcode');
+    const pcOk = /^[A-Z]{1,2}\d{1,2}[A-Z]?$/.test(state.postcode.trim());
+    setFieldError(pc, !pcOk); if (!pcOk) ok = false;
+  }
+  if (n === TOTAL_STEPS) {
+    const pin = document.getElementById('f-pin');
+    const pin2 = document.getElementById('f-pin2');
+    const pinOk = /^\d{4,6}$/.test(pin.value) && pin.value === pin2.value;
+    setFieldError(pin, !pinOk); if (!pinOk) ok = false;
+  }
+  return ok;
+}
+
+/* ---------------- Review ---------------- */
+function renderReview() {
+  const rows = [
+    ['Name', state.name],
+    ['Phone', state.phone],
+    ['Email', state.email],
+    ['Right to work', state.right_to_work === 'yes' ? '✓ Confirmed — to be verified with documents' : ''],
+    ['Industries', state.industries.join(', ')],
+    ['Experience', ({none:'None',some:'Some',"a-lot":'A lot',professional:'Professional'})[state.experience] || ''],
+    ['Background note', state.blurb],
+    ['Postcode', state.postcode],
+    ['Days available', state.days.join(', ')],
+    ['Phone preference', state.phone_pref === 'own' ? 'Using own phone' : state.phone_pref === 'provided' ? 'Needs handset' : ''],
+    ['Why now', state.why],
+  ];
+  document.getElementById('review-block').innerHTML = rows.map(([k, v]) => {
+    const empty = !v || !String(v).trim();
+    return `<div class="row"><div class="k">${k}</div><div class="v ${empty ? 'empty' : ''}">${empty ? '—' : escapeHtml(String(v))}</div></div>`;
+  }).join('');
+}
+function escapeHtml(s) { return s.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+/* ---------------- Nav buttons ---------------- */
+document.getElementById('btn-back').addEventListener('click', () => { if (currentStep > 1) showStep(currentStep - 1); });
+document.getElementById('btn-next').addEventListener('click', () => {
+  if (document.getElementById('btn-next').classList.contains('disabled')) return;
+  if (!validateStep(currentStep)) return;
+  if (currentStep < TOTAL_STEPS) showStep(currentStep + 1);
+});
+
+/* ---------------- Submit ---------------- */
+const submitBtn = document.getElementById('btn-submit');
+const submitErr = document.getElementById('submit-err');
+submitBtn.addEventListener('click', async () => {
+  if (!validateStep(TOTAL_STEPS)) return;
+  submitErr.classList.remove('on');
+  submitBtn.classList.add('loading');
+  submitBtn.textContent = 'Creating your dashboard…';
+
+  const pin = document.getElementById('f-pin').value;
+  const payload = {
+    name: state.name.trim(),
+    pin,
+    area_postcode: state.postcode.trim().toUpperCase(),
+    phone: state.phone.trim(),
+  };
+
+  try {
+    const res = await fetch('/api/auth/signup', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      submitErr.textContent = (body && body.error) ? body.error : `Couldn't submit (${res.status}). Try again.`;
+      submitErr.classList.add('on');
+      submitBtn.classList.remove('loading');
+      submitBtn.textContent = 'Create my dashboard →';
+      return;
+    }
+    clearDraft();
+    window.location.href = '/dashboard';
+  } catch (e) {
+    submitErr.textContent = 'Network problem. Check your connection and try again.';
+    submitErr.classList.add('on');
+    submitBtn.classList.remove('loading');
+    submitBtn.textContent = 'Create my dashboard →';
+  }
+});
+
+/* ---------------- Init ---------------- */
+loadDraft();
+hydrate();
+// Skip the auto-scroll on initial render — new visitors should see the hero; returning
+// visitors with a saved draft should remain where the browser restored them.
+showStep(currentStep, { skipScroll: true });
+renderSavedLabel();
+</script>
+</body></html>

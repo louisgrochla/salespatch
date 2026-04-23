@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>How it works — SalesFlow</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800;900&family=Inter+Tight:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="shared/brand.css" />
+<style>
+.stage { padding: 80px 0; border-top: 1px solid var(--line); }
+.stage:first-of-type { border-top: 0; }
+.stage-inner { display: grid; grid-template-columns: 160px 1fr 1fr; gap: 48px; align-items: start; }
+@media (max-width: 900px) { .stage-inner { grid-template-columns: 1fr; gap: 24px; } }
+.stage .mark { font-family: 'JetBrains Mono', monospace; font-size: 12px; letter-spacing: 0.14em; color: var(--signal); text-transform: uppercase; padding-top: 8px; }
+.stage h2 { font-family: var(--display-font); font-size: clamp(36px, 5vw, 56px); letter-spacing: -0.035em; line-height: 1.02; font-weight: 600; margin: 0 0 20px; }
+.stage h2 .acc {  color: var(--signal); font-weight: 500; }
+.stage .body p { font-size: 16px; color: var(--ink2); line-height: 1.6; margin: 0 0 14px; max-width: 520px; }
+.stage .visual { background: var(--bg2); border: 1px solid var(--line); border-radius: 16px; padding: 24px; min-height: 280px; display: flex; flex-direction: column; justify-content: center; gap: 14px; }
+.stage .visual .cap { font-family: 'JetBrains Mono', monospace; font-size: 10.5px; color: var(--muted); letter-spacing: 0.12em; text-transform: uppercase; }
+.stage .visual .row { background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 14px; display: flex; justify-content: space-between; align-items: center; font-size: 13px; }
+.stage .visual .row .tg { font-family: 'JetBrains Mono', monospace; font-size: 10.5px; color: var(--signal); background: rgb(184 134 11 / 0.1); padding: 2px 8px; border-radius: 4px; letter-spacing: 0.1em; }
+.stage .visual .row.hi { border-color: var(--signal); background: rgb(184 134 11 / 0.05); }
+</style></head>
+<body>
+<div id="shell-top"></div>
+<section class="page-hero container-xl">
+  <div class="eyebrow">How it works</div>
+  <h1>Claim. Walk. Show. <span class="t-signal t-italic">Close.</span></h1>
+  <p class="lead">The whole loop, in honest detail. No buzzwords, no funnel language. This is what the job looks like from morning coffee to wallet withdrawal.</p>
+</section>
+
+<section class="container-xl" style="padding-top:40px;">
+  <div class="stage"><div class="stage-inner">
+    <div class="mark">Step 01 / Claim</div>
+    <div class="body"><h2>A queue in your <span class="acc">pocket.</span></h2>
+      <p>Open the app. Leads appear on the map — all within walking distance of where you are right now. Each card shows the business name, vertical, and a one-line read on how warm they look.</p>
+      <p>Tap claim. The lead locks to you for the claim window. While you walk, the demo generates in the background.</p></div>
+    <div class="visual"><div class="cap">/ Queue — 0.6 mi radius</div>
+      <div class="row hi"><span>Mario's Deli · cafe</span><span class="tg">warm</span></div>
+      <div class="row"><span>Kent & Son · barbers</span><span class="tg">new</span></div>
+      <div class="row"><span>The Corner Fix · repairs</span><span class="tg">new</span></div>
+      <div class="row"><span>Oak St Florist · retail</span><span class="tg">revisit</span></div></div>
+  </div></div>
+
+  <div class="stage"><div class="stage-inner">
+    <div class="mark">Step 02 / Demo</div>
+    <div class="body"><h2>Personalised <span class="acc">on the walk over.</span></h2>
+      <p>By the time you push the door, the site is ready. Business name, a hero image that fits their vertical, three lines of copy you didn't write, and the right functional widget — menu, gallery, booking.</p>
+      <p>If the generator stalls, you have a backup static preview. You never show a blank screen.</p></div>
+    <div class="visual"><div class="cap">/ Generator — ready in 47s</div>
+      <div class="row"><span>· Logo extracted</span><span style="color:var(--ok);">✓</span></div>
+      <div class="row"><span>· Hero image matched</span><span style="color:var(--ok);">✓</span></div>
+      <div class="row"><span>· Copy drafted (3 lines)</span><span style="color:var(--ok);">✓</span></div>
+      <div class="row hi"><span>· Menu widget inserted</span><span style="color:var(--signal);">live</span></div></div>
+  </div></div>
+
+  <div class="stage"><div class="stage-inner">
+    <div class="mark">Step 03 / Pitch</div>
+    <div class="body"><h2>The phone does the <span class="acc">talking.</span></h2>
+      <p>Push the door, greet the owner, name the thing, hand the phone over. Stop talking. Let them scroll. Price reveal at fifteen seconds.</p>
+      <p>No scripts. No objection-handling flashcards. The product is on the screen — it's already doing the work.</p></div>
+    <div class="visual"><div class="cap">/ Pitch rhythm</div>
+      <div class="row"><span>00:00 — "I built a site for your shop."</span><span class="tg">open</span></div>
+      <div class="row"><span>00:05 — hand phone over</span><span class="tg">silence</span></div>
+      <div class="row"><span>00:20 — "£350 upfront."</span><span class="tg">price</span></div>
+      <div class="row hi"><span>00:40 — owner signs</span><span style="color:var(--ok);font-weight:500;">closed</span></div></div>
+  </div></div>
+
+  <div class="stage"><div class="stage-inner">
+    <div class="mark">Step 04 / Paid</div>
+    <div class="body"><h2>£50. In your wallet. <span class="acc">Now.</span></h2>
+      <p>Signature triggers wallet credit. Not on install. Not on activation. On signature. You can withdraw to your bank account before you've walked back to the pavement.</p>
+      <p>The client's site deploys. The orchestration desk picks up future change requests via WhatsApp, Telegram or Discord. You're done with this one.</p></div>
+    <div class="visual"><div class="cap">/ Wallet — +£50</div>
+      <div class="row hi"><span style="font-family:var(--display-font);font-size:22px;letter-spacing:-0.02em;font-weight:600;">£50.00</span><span class="tg">credited</span></div>
+      <div class="row"><span>Mario's Deli · 10:32</span><span style="color:var(--muted);font-family:'JetBrains Mono',monospace;font-size:10.5px;">#A8341</span></div>
+      <div class="row"><span>Balance</span><span style="font-family:var(--display-font);font-weight:600;">£250.00</span></div></div>
+  </div></div>
+</section>
+<div id="shell-footer"></div>
+<script src="shared/shell.js"></script>
+<script>renderShell({currentPath: 'product'});</script>
+</body></html>

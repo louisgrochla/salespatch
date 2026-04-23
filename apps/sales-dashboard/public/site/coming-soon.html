@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Coming soon — SalesFlow</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800;900&family=Inter+Tight:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="shared/brand.css" />
+<style>
+.wrap { padding: 60px 0 120px; display: grid; grid-template-columns: 1fr 1fr; gap: 64px; align-items: center; }
+@media (max-width: 900px) { .wrap { grid-template-columns: 1fr; } }
+.wrap h1 { font-family: var(--display-font); font-size: clamp(44px, 6.5vw, 84px); letter-spacing: -0.04em; line-height: 0.98; font-weight: 600; margin: 0 0 24px; max-width: 14ch; }
+.wrap h1 .acc {  color: var(--signal); font-weight: 500; }
+.wrap .lead { font-size: 18px; color: var(--ink2); line-height: 1.55; margin: 0 0 32px; max-width: 440px; }
+.subscribe { border: 1px solid var(--line); border-radius: 999px; background: var(--bg2); padding: 6px 6px 6px 22px; display: flex; align-items: center; gap: 12px; max-width: 440px; }
+.subscribe input { flex: 1; background: transparent; border: 0; outline: 0; font-family: inherit; font-size: 15px; padding: 10px 0; color: var(--ink); }
+.subscribe button { background: var(--ink); color: var(--bg); border: 0; padding: 12px 22px; border-radius: 999px; font-family: inherit; font-size: 14px; font-weight: 500; cursor: pointer; }
+.viz { background: var(--ink); border-radius: 20px; padding: 40px; position: relative; overflow: hidden; min-height: 440px; }
+.viz::before { content:''; position:absolute; inset:0; background-image: radial-gradient(rgba(255 255 255 / 0.08) 1.5px, transparent 1.5px); background-size: 14px 14px; opacity: 0.6; }
+.viz .tag { position: relative; font-family: 'JetBrains Mono', monospace; font-size: 11px; letter-spacing: 0.14em; color: var(--signal); text-transform: uppercase; margin-bottom: 24px; }
+.viz .city { position: relative; color: var(--bg); font-family: var(--display-font); font-size: 48px; letter-spacing: -0.035em; line-height: 1; font-weight: 600; margin-bottom: 14px; }
+.viz .city .acc {  color: var(--signal); font-weight: 500; }
+.viz .sub { position: relative; color: rgb(210 200 185); font-size: 14px; margin: 0 0 32px; max-width: 280px; line-height: 1.5; }
+.viz .wait { position: relative; display: grid; gap: 1px; background: rgb(255 255 255 / 0.08); border-radius: 12px; overflow: hidden; border: 1px solid rgb(255 255 255 / 0.08); }
+.viz .wait .r { background: rgb(255 255 255 / 0.03); padding: 14px 18px; display: flex; justify-content: space-between; font-size: 13px; color: rgb(210 200 185); font-family: 'JetBrains Mono', monospace; letter-spacing: 0.08em; }
+.viz .wait .r.hi { color: var(--signal); background: rgb(184 134 11 / 0.08); }
+.timeline { padding: 80px 0; border-top: 1px solid var(--line); }
+.ms { display: grid; grid-template-columns: 180px 1fr; gap: 32px; padding: 24px 0; border-top: 1px solid var(--line); }
+.ms:first-of-type { border-top: 0; }
+.ms .d { font-family: 'JetBrains Mono', monospace; font-size: 11px; letter-spacing: 0.12em; color: var(--signal); text-transform: uppercase; padding-top: 4px; }
+.ms h4 { font-family: var(--display-font); font-size: 20px; letter-spacing: -0.02em; font-weight: 500; margin: 0 0 6px; }
+.ms h4 .acc {  color: var(--signal); font-weight: 500; }
+.ms p { color: var(--ink2); font-size: 14.5px; line-height: 1.55; margin: 0; max-width: 560px; }
+.ms .tag { font-family: 'JetBrains Mono', monospace; font-size: 10px; letter-spacing: 0.14em; color: var(--muted); text-transform: uppercase; padding: 2px 8px; border: 1px solid var(--line); border-radius: 3px; display: inline-block; margin-top: 10px; }
+.ms .tag.live { color: var(--ok); border-color: rgb(70 130 70 / 0.3); background: rgb(70 130 70 / 0.08); }
+</style></head><body>
+<div id="shell-top"></div>
+<div class="container-xl wrap">
+  <div>
+    <div class="eyebrow" style="margin-bottom:18px;">Coming soon</div>
+    <h1>Not <span class="t-signal t-italic">yet.</span> Soon.</h1>
+    <p class="lead">This route isn't live. Drop your email and we'll tell you when it is — nothing else, no nurture sequence, no pitch.</p>
+    <div class="subscribe"><input type="email" placeholder="you@example.com" /><button>Notify me →</button></div>
+    <p style="margin-top:16px;font-size:12.5px;color:var(--muted);">[TBD] interested · we'll let you know the moment this ships.</p>
+  </div>
+  <div class="viz">
+    <div class="tag">/ Patch roll-out · next cities</div>
+    <div class="city">Where <span class="acc">next?</span></div>
+    <p class="sub">Expansion list — roughly in the order we're hiring contractors and switching lead generation on.</p>
+    <div class="wait">
+      <div class="r hi"><span>[City 01]</span><span>Live soon</span></div>
+      <div class="r"><span>[City 02]</span><span>[TBD]</span></div>
+      <div class="r"><span>[City 03]</span><span>[TBD]</span></div>
+      <div class="r"><span>[City 04]</span><span>[TBD]</span></div>
+      <div class="r"><span>[City 05]</span><span>Waitlist</span></div>
+    </div>
+  </div>
+</div>
+<section class="timeline container-xl">
+  <div style="max-width:640px;"><div class="eyebrow" style="margin-bottom:16px;">What's in flight</div><h2 class="h2">What we're <span class="t-signal t-italic">shipping</span> next.</h2></div>
+  <div style="margin-top:40px;">
+    <div class="ms"><div class="d">In progress</div><div><h4>Android app <span class="acc">parity.</span></h4><p>iOS is live. Android is [TBD] weeks out. Feature parity at launch; not a stripped-down version.</p><span class="tag live">Live target: [TBD]</span></div></div>
+    <div class="ms"><div class="d">Next up</div><div><h4>Patch analytics for closers.</h4><p>See your close rate by vertical, time of day, day of week. Personal — not a leaderboard.</p><span class="tag">[TBD]</span></div></div>
+    <div class="ms"><div class="d">Later</div><div><h4>Demo <span class="acc">A/B</span> variants.</h4><p>Two layouts per lead, chosen at claim. Feeds back into the generator.</p><span class="tag">[TBD]</span></div></div>
+    <div class="ms"><div class="d">Exploring</div><div><h4>Language packs.</h4><p>Multilingual demos for neighbourhoods where it matters. Under research.</p><span class="tag">[TBD]</span></div></div>
+  </div>
+</section>
+<div id="shell-footer"></div>
+<script src="shared/shell.js"></script>
+<script>renderShell({currentPath: ''});</script>
+</body></html>

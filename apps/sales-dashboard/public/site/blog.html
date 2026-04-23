@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Field reports — SalesFlow</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800;900&family=Inter+Tight:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="shared/brand.css" />
+<style>
+.feat { display: grid; grid-template-columns: 1.3fr 1fr; gap: 48px; align-items: end; border-bottom: 1px solid var(--line); padding-bottom: 60px; margin-top: 40px; }
+@media (max-width: 820px) { .feat { grid-template-columns: 1fr; } }
+.feat .cov { aspect-ratio: 4/3; background: linear-gradient(135deg, var(--signal) 0%, rgb(40 30 25) 100%); border-radius: 16px; position: relative; overflow: hidden; }
+.feat .cov::after { content:''; position: absolute; inset: 0; background-image: radial-gradient(rgba(255 255 255 / 0.15) 1.5px, transparent 1.5px); background-size: 8px 8px; }
+.feat .cov .tag { position: absolute; bottom: 20px; left: 20px; color: white; font-family: 'JetBrains Mono', monospace; font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; background: rgb(0 0 0 / 0.35); padding: 6px 10px; border-radius: 4px; }
+.feat .meta { font-family: 'JetBrains Mono', monospace; font-size: 11px; letter-spacing: 0.14em; color: var(--signal); text-transform: uppercase; margin-bottom: 16px; }
+.feat h2 { font-family: var(--display-font); font-size: clamp(36px, 5vw, 58px); letter-spacing: -0.035em; line-height: 1.02; font-weight: 600; margin: 0 0 20px; }
+.feat h2 .acc {  color: var(--signal); font-weight: 500; }
+.feat p { color: var(--ink2); font-size: 17px; line-height: 1.55; margin: 0 0 20px; }
+.feat .by { font-size: 13px; color: var(--muted); font-family: 'JetBrains Mono', monospace; letter-spacing: 0.08em; }
+.filter { display: flex; gap: 10px; margin: 60px 0 32px; flex-wrap: wrap; border-bottom: 1px solid var(--line); padding-bottom: 16px; }
+.filter a { padding: 8px 16px; border-radius: 999px; font-size: 13px; color: var(--ink2); border: 1px solid var(--line); }
+.filter a.on { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+.grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 36px 28px; }
+@media (max-width: 900px) { .grid { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 600px) { .grid { grid-template-columns: 1fr; } }
+.post .cov { aspect-ratio: 4/3; border-radius: 12px; margin-bottom: 16px; position: relative; overflow: hidden; }
+.post .cov .t { position: absolute; bottom: 12px; left: 12px; color: white; font-family: 'JetBrains Mono', monospace; font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; background: rgb(0 0 0 / 0.4); padding: 4px 8px; border-radius: 3px; }
+.post h3 { font-family: var(--display-font); font-size: 22px; letter-spacing: -0.02em; line-height: 1.2; font-weight: 600; margin: 0 0 10px; }
+.post h3 .acc {  color: var(--signal); font-weight: 500; }
+.post p { font-size: 14px; color: var(--ink2); line-height: 1.55; margin: 0 0 12px; }
+.post .m { font-family: 'JetBrains Mono', monospace; font-size: 10.5px; color: var(--muted); letter-spacing: 0.1em; text-transform: uppercase; }
+</style></head><body>
+<div id="shell-top"></div>
+<section class="page-hero container-xl">
+  <div class="eyebrow">Field reports</div>
+  <h1>What we <span class="t-signal t-italic">learn</span> on the high street.</h1>
+  <p class="lead">Short, honest notes from the team and from the contractors on the ground. Nothing gated. No lead magnets.</p>
+</section>
+<section class="container-xl">
+  <a class="feat" href="blog-post.html">
+    <div class="cov" style="background: linear-gradient(135deg, rgb(184 134 11), rgb(70 55 20));"><div class="tag">/ Featured · The closer's read</div></div>
+    <div>
+      <div class="meta">Featured · [TBD min] read</div>
+      <h2>Twenty seconds of <span class="acc">silence</span> is louder than a script.</h2>
+      <p>What we learned from watching [TBD] pitches: the closers who win are the ones who hand the phone over and stop talking. A note on pacing, posture, and the micro-moment before "yes".</p>
+      <div class="by">By [Author TBD] · [Date TBD]</div>
+    </div>
+  </a>
+  <div class="filter">
+    <a class="on">All</a><a>Field notes</a><a>Engineering</a><a>Ops</a><a>AI & demo</a><a>Contractor voices</a>
+  </div>
+  <div class="grid">
+    ${''}
+  </div>
+  <div id="posts" class="grid"></div>
+</section>
+<div id="shell-footer"></div>
+<script src="shared/shell.js"></script>
+<script>renderShell({currentPath: 'resources'});
+const posts = [
+  ['Field notes','The cafe that said yes in <span class="acc">twelve minutes.</span>','A step-by-step walkthrough of one real close, from claim to signature. Timing, body language, and the one line that sealed it.'],
+  ['Engineering','How we cut demo <span class="acc">generation</span> to 47 seconds.','Chipping away at the walk-over window. Image retrieval, copy parallelism, and a handful of unglamorous caching fixes.'],
+  ['AI & demo','Twenty thousand pitches, one <span class="acc">feedback loop.</span>','Why outcome data — closed, soft-no, hard-no — is worth more than any amount of pre-training on generic web copy.'],
+  ['Ops','The orchestration desk, <span class="acc">explained.</span>','How change requests come in via WhatsApp, Telegram and Discord — and who handles them so you don’t have to.'],
+  ['Contractor voices','Five weeks on the patch — <span class="acc">an honest diary.</span>','One contractor’s week-by-week: what worked, what didn’t, what they’d tell their past self.'],
+  ['Field notes','Why <span class="acc">Tuesday morning</span> beats Friday afternoon.','Pattern we keep seeing: shop owners are calmer, more curious, and more willing to sign at the start of the week.'],
+  ['Engineering','What we broke (and <span class="acc">fixed</span>) in April.','A plain-English changelog-behind-the-changelog. The platform work you don’t usually read about.'],
+  ['AI & demo','Hero imagery: why we <span class="acc">stopped</span> using stock.','A long argument with ourselves about when generated imagery beats stock and when it doesn’t.'],
+  ['Field notes','The pitch that went sideways in a <span class="acc">barber’s chair.</span>','What happens when the owner is mid-haircut and has no hands free for your phone. A small lesson.'],
+];
+const colors = [
+  'linear-gradient(135deg, rgb(184 134 11), rgb(40 30 25))',
+  'linear-gradient(135deg, rgb(40 40 40), rgb(20 20 19))',
+  'linear-gradient(135deg, rgb(170 135 60), rgb(60 30 20))',
+  'linear-gradient(135deg, rgb(242 236 228), rgb(180 150 120))',
+  'linear-gradient(135deg, rgb(120 80 50), rgb(40 30 25))',
+  'linear-gradient(135deg, rgb(184 134 11), rgb(130 90 10))',
+];
+document.getElementById('posts').innerHTML = posts.map((p,i) => `<a class="post" href="blog-post.html"><div class="cov" style="background:${colors[i%colors.length]}"><div class="t">/ ${p[0]}</div></div><div class="m">[Date TBD] · [TBD] min</div><h3>${p[1]}</h3><p>${p[2]}</p></a>`).join('');
+</script>
+</body></html>

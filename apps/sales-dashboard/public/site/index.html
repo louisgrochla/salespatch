@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>SalesFlow — Site index</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800;900&family=Inter+Tight:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="shared/brand.css" />
+<style>
+.hero { padding: 80px 0 60px; }
+.hero h1 { font-family: var(--display-font); font-size: clamp(48px, 7vw, 96px); letter-spacing: -0.04em; line-height: 0.96; font-weight: 600; margin: 0 0 20px; }
+.hero h1 .acc {  color: var(--signal); font-weight: 500; }
+.sec { padding: 40px 0; border-top: 1px solid var(--line); }
+.sec h2 { font-family: 'JetBrains Mono', monospace; font-size: 12px; letter-spacing: 0.16em; color: var(--signal); text-transform: uppercase; margin: 0 0 24px; font-weight: 500; }
+.pgrid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+@media (max-width: 900px) { .pgrid { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 560px) { .pgrid { grid-template-columns: 1fr; } }
+.pg { background: var(--bg2); border: 1px solid var(--line); border-radius: 12px; padding: 20px; transition: all 0.15s; display: block; }
+.pg:hover { border-color: var(--signal); transform: translateY(-2px); }
+.pg .n { font-family: 'JetBrains Mono', monospace; font-size: 10.5px; letter-spacing: 0.14em; color: var(--muted); text-transform: uppercase; }
+.pg h3 { font-family: var(--display-font); font-size: 19px; letter-spacing: -0.02em; font-weight: 600; margin: 10px 0 6px; line-height: 1.25; }
+.pg p { color: var(--ink2); font-size: 13px; line-height: 1.5; margin: 0; }
+</style></head><body>
+<div id="shell-top"></div>
+<section class="hero container-xl">
+  <div class="eyebrow">Site map</div>
+  <h1>Every <span class="t-signal t-italic">page</span>, in one place.</h1>
+  <p class="lead">A working index of the SalesFlow marketing site. Click anything.</p>
+</section>
+<section class="sec container-xl"><h2>/ Marketing</h2>
+  <div class="pgrid">
+    <a class="pg" href="home.html"><div class="n">01</div><h3>Home</h3><p>Paid on signature. The headline page.</p></a>
+    <a class="pg" href="product.html"><div class="n">02</div><h3>How it works</h3><p>Claim → Walk → Show → Paid.</p></a>
+    <a class="pg" href="contractors.html"><div class="n">03</div><h3>For contractors</h3><p>Why this job, a Tuesday breakdown.</p></a>
+    <a class="pg" href="pricing.html"><div class="n">04</div><h3>Earnings</h3><p>The £50, the calculator, every line.</p></a>
+    <a class="pg" href="company.html"><div class="n">05</div><h3>Company</h3><p>The manifesto, the team, milestones.</p></a>
+  </div>
+</section>
+<section class="sec container-xl"><h2>/ Resources</h2>
+  <div class="pgrid">
+    <a class="pg" href="blog.html"><div class="n">06</div><h3>Field reports</h3><p>Essays and notes from the team.</p></a>
+    <a class="pg" href="blog-post.html"><div class="n">07</div><h3>Field report — post</h3><p>Sample long-form article view.</p></a>
+    <a class="pg" href="guides.html"><div class="n">08</div><h3>Guides</h3><p>Practical how-tos for contractors.</p></a>
+    <a class="pg" href="guide.html"><div class="n">09</div><h3>Guide — detail</h3><p>Sample guide reader view.</p></a>
+    <a class="pg" href="case-studies.html"><div class="n">10</div><h3>Contractor stories</h3><p>Profiles of closers on the ground.</p></a>
+  </div>
+</section>
+<section class="sec container-xl"><h2>/ Apply & support</h2>
+  <div class="pgrid">
+    <a class="pg" href="apply.html"><div class="n">11</div><h3>Apply</h3><p>Contractor application flow.</p></a>
+    <a class="pg" href="login.html"><div class="n">12</div><h3>Log in</h3><p>Contractor portal sign-in.</p></a>
+    <a class="pg" href="careers.html"><div class="n">13</div><h3>Careers</h3><p>Full-time roles at SalesFlow.</p></a>
+    <a class="pg" href="contact.html"><div class="n">14</div><h3>Contact</h3><p>Press, partners, general enquiries.</p></a>
+    <a class="pg" href="help.html"><div class="n">15</div><h3>Help centre</h3><p>FAQs grouped by topic.</p></a>
+    <a class="pg" href="changelog.html"><div class="n">16</div><h3>Changelog</h3><p>What shipped, when.</p></a>
+  </div>
+</section>
+<section class="sec container-xl"><h2>/ Trust</h2>
+  <div class="pgrid">
+    <a class="pg" href="security.html"><div class="n">17</div><h3>Security</h3><p>How we handle data and access.</p></a>
+    <a class="pg" href="status.html"><div class="n">18</div><h3>Status</h3><p>Live uptime of platform services.</p></a>
+    <a class="pg" href="404.html"><div class="n">19</div><h3>404</h3><p>Page-not-found screen.</p></a>
+    <a class="pg" href="coming-soon.html"><div class="n">20</div><h3>Coming soon</h3><p>Placeholder for unreleased routes.</p></a>
+  </div>
+</section>
+<section class="sec container-xl"><h2>/ Legal</h2>
+  <div class="pgrid">
+    <a class="pg" href="legal-terms.html"><div class="n">21</div><h3>Terms of service</h3><p>Platform terms.</p></a>
+    <a class="pg" href="legal-privacy.html"><div class="n">22</div><h3>Privacy</h3><p>Data handling, your rights.</p></a>
+    <a class="pg" href="legal-contractor-agreement.html"><div class="n">23</div><h3>Contractor agreement</h3><p>The self-employed contract.</p></a>
+    <a class="pg" href="legal-cookies.html"><div class="n">24</div><h3>Cookies</h3><p>Cookie policy.</p></a>
+    <a class="pg" href="legal-accessibility.html"><div class="n">25</div><h3>Accessibility</h3><p>Our WCAG commitments.</p></a>
+  </div>
+</section>
+<div id="shell-footer"></div>
+<script src="shared/shell.js"></script>
+<script>renderShell({currentPath: ''});</script>
+</body></html>

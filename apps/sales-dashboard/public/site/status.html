@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Status — SalesFlow</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800;900&family=Inter+Tight:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="shared/brand.css" />
+<style>
+.banner { background: rgb(70 130 70 / 0.1); border: 1px solid rgb(70 130 70 / 0.3); border-radius: 14px; padding: 28px 32px; display: flex; gap: 24px; align-items: center; margin-top: 32px; }
+.banner .dot { width: 14px; height: 14px; border-radius: 50%; background: var(--ok); box-shadow: 0 0 0 6px rgb(70 130 70 / 0.2); animation: pulse 2s infinite; flex-shrink: 0; }
+@keyframes pulse { 0%,100% { box-shadow: 0 0 0 6px rgb(70 130 70 / 0.2); } 50% { box-shadow: 0 0 0 10px rgb(70 130 70 / 0.05); } }
+.banner h3 { font-family: var(--display-font); font-size: 24px; letter-spacing: -0.025em; font-weight: 600; margin: 0 0 4px; }
+.banner p { margin: 0; font-size: 14px; color: var(--ink2); font-family: 'JetBrains Mono', monospace; letter-spacing: 0.06em; }
+.services { border: 1px solid var(--line); border-radius: 14px; overflow: hidden; margin-top: 48px; }
+.srow { display: grid; grid-template-columns: 1fr 1.5fr 100px; gap: 24px; padding: 22px 28px; border-top: 1px solid var(--line); align-items: center; }
+.srow:first-child { border-top: 0; background: var(--bg2); }
+.srow:first-child .a, .srow:first-child .b, .srow:first-child .c { font-family: 'JetBrains Mono', monospace; font-size: 11px; letter-spacing: 0.14em; color: var(--muted); text-transform: uppercase; }
+.srow .a { font-family: var(--display-font); font-size: 17px; font-weight: 500; letter-spacing: -0.015em; display: flex; align-items: center; gap: 10px; }
+.srow .a .d { width: 8px; height: 8px; border-radius: 50%; background: var(--ok); }
+.srow .a .d.warn { background: var(--warn); }
+.srow .a .d.err { background: var(--err); }
+.srow .bars { display: flex; gap: 2px; }
+.srow .bar { flex: 1; height: 28px; border-radius: 2px; background: var(--ok); min-width: 3px; }
+.srow .bar.warn { background: var(--warn); }
+.srow .bar.err { background: var(--err); }
+.srow .bar.na { background: var(--line); }
+.srow .c { font-family: 'JetBrains Mono', monospace; font-size: 13px; color: var(--ok); letter-spacing: 0.06em; text-align: right; font-weight: 500; }
+.legend { display: flex; gap: 20px; margin-top: 16px; font-family: 'JetBrains Mono', monospace; font-size: 11px; letter-spacing: 0.08em; color: var(--muted); text-transform: uppercase; }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.legend .d { width: 10px; height: 10px; border-radius: 2px; }
+.incidents { padding: 80px 0; border-top: 1px solid var(--line); margin-top: 80px; }
+.inc { display: grid; grid-template-columns: 160px 1fr; gap: 40px; padding: 28px 0; border-top: 1px solid var(--line); align-items: start; }
+.inc:first-of-type { border-top: 0; }
+.inc .d { font-family: 'JetBrains Mono', monospace; font-size: 12px; letter-spacing: 0.1em; color: var(--muted); padding-top: 4px; }
+.inc h4 { font-family: var(--display-font); font-size: 19px; letter-spacing: -0.02em; font-weight: 500; margin: 0 0 8px; }
+.inc h4 .acc {  color: var(--signal); font-weight: 500; }
+.inc p { font-size: 14px; color: var(--ink2); line-height: 1.6; margin: 0 0 6px; max-width: 640px; }
+.inc .tag { display: inline-block; font-family: 'JetBrains Mono', monospace; font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; padding: 3px 8px; border-radius: 3px; margin-right: 8px; font-weight: 500; }
+.inc .tag.res { background: rgb(70 130 70 / 0.12); color: var(--ok); }
+.inc .tag.deg { background: rgb(200 140 50 / 0.15); color: var(--warn); }
+</style></head><body>
+<div id="shell-top"></div>
+<section class="page-hero container-xl">
+  <div class="eyebrow">Status</div>
+  <h1>Everything's <span class="t-signal t-italic">running.</span></h1>
+  <p class="lead">Live uptime of the services that matter to contractors and clients. Last checked moments ago.</p>
+  <div class="banner">
+    <div class="dot"></div>
+    <div><h3>All systems operational</h3><p>As of [TBD] · updated every [TBD]s</p></div>
+  </div>
+</section>
+<section class="container-xl">
+  <div class="services" id="services"></div>
+  <div class="legend"><span><span class="d" style="background:var(--ok);"></span>Operational</span><span><span class="d" style="background:var(--warn);"></span>Degraded</span><span><span class="d" style="background:var(--err);"></span>Down</span><span><span class="d" style="background:var(--line);"></span>No data</span></div>
+</section>
+<section class="incidents container-xl">
+  <div style="max-width:640px;"><div class="eyebrow" style="margin-bottom:16px;">Past 90 days</div><h2 class="h2">Incident <span class="t-signal t-italic">log.</span></h2></div>
+  <div style="margin-top:36px;">
+    <div class="inc"><div class="d">[TBD]</div><div><span class="tag res">Resolved</span><h4>Demo generator <span class="acc">slowdown.</span></h4><p>Generation times elevated for approximately [TBD] minutes. Root cause traced to a single upstream image-search provider. Failover to secondary completed in [TBD]s going forward.</p></div></div>
+    <div class="inc"><div class="d">[TBD]</div><div><span class="tag deg">Degraded</span><h4>Wallet withdrawal <span class="acc">delays.</span></h4><p>Withdrawals processed but delayed by [TBD] minutes due to upstream banking partner maintenance. All transactions completed. No data affected.</p></div></div>
+    <div class="inc"><div class="d">[TBD]</div><div><span class="tag res">Resolved</span><h4>Push notification backlog.</h4><p>Brief queue backup after a platform update. Notifications arrived within [TBD] minutes of intended time. Addressed with capacity bump.</p></div></div>
+  </div>
+  <p style="font-size:13px;color:var(--muted);margin-top:36px;font-family:'JetBrains Mono',monospace;letter-spacing:0.08em;">/ Subscribe to <a href="#" style="color:var(--signal);">updates via email</a> or <a href="#" style="color:var(--signal);">RSS</a>.</p>
+</section>
+<div id="shell-footer"></div>
+<script src="shared/shell.js"></script>
+<script>renderShell({currentPath: 'company'});
+const services = [['Contractor app','Claim, pitch, sign flow'],['Demo generator','Website generation pipeline'],['Wallet & payouts','Balance + withdrawal'],['Lead queue','Scrape + prioritise'],['Orchestration desk','Client change requests'],['Marketing site','Public pages & login'],['Status & observability','This page + internal monitoring'],['ID verification','Onboarding checks']];
+function bars(){const out=[];for(let i=0;i<90;i++){const r=Math.random();let cls='';if(r>0.995) cls='err';else if(r>0.98) cls='warn';out.push(`<div class="bar ${cls}"></div>`);}return out.join('');}
+document.getElementById('services').innerHTML = `<div class="srow"><div class="a">Service</div><div class="b">Last 90 days</div><div class="c">Uptime</div></div>` + services.map(s=>`<div class="srow"><div class="a"><span class="d"></span>${s[0]}<span style="font-weight:400;color:var(--muted);font-size:12px;margin-left:8px;font-family:'JetBrains Mono',monospace;letter-spacing:0.06em;">/ ${s[1]}</span></div><div class="bars">${bars()}</div><div class="c">[TBD]%</div></div>`).join('');
+</script>
+</body></html>
