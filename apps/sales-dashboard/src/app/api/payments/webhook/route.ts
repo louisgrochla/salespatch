@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import Stripe from 'stripe';
+import Stripe from 'stripe'; // kept for type references (Stripe.Event, Stripe.Checkout.Session)
 import { createClient } from '@supabase/supabase-js';
+import { getStripe } from '@/lib/stripe';
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
 const COMMISSION_GBP = 5000; // £50 in pence
 
 function getSupabase() {
@@ -28,7 +28,7 @@ export async function POST(req: NextRequest) {
     if (!secret) {
       return NextResponse.json({ error: 'Webhook secret not configured' }, { status: 500 });
     }
-    event = stripe.webhooks.constructEvent(rawBody, signature, secret);
+    event = getStripe().webhooks.constructEvent(rawBody, signature, secret);
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Webhook verification failed';
     console.error('[payments/webhook] Signature verification failed:', message);
