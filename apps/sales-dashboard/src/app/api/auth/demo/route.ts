@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { randomUUID } from 'crypto';
-import { queryOne, queryAll, run } from '@/lib/db';
+import { queryAll, run } from '@/lib/db';
 import { hashPin, createToken } from '@/lib/auth';
+import { findUserByName, createUser, updateUserPinHash, touchLastActive, isSupabaseMode } from '@/lib/auth-db';
 
 const TOKEN_EXPIRY_DAYS = 30;
 
@@ -335,45 +336,42 @@ export async function POST(_req: NextRequest) {
   try {
     const pinHash = hashPin(DEMO_PIN);
 
-    // Find-or-create demo user
-    let user = queryOne<Record<string, unknown>>(
-      `SELECT id, name, email, phone, area_postcode, commission_rate, active, pin_hash
-         FROM sales_users WHERE LOWER(name) = LOWER(?)`,
-      DEMO_NAME,
-    );
+    // Find-or-create demo user (dual-mode: Supabase in prod, SQLite locally)
+    let user = await findUserByName(DEMO_NAME);
 
     if (!user) {
       const id = randomUUID();
-      run(
-        `INSERT INTO sales_users
-           (id, name, pin_hash, phone, area_postcode, commission_rate, active, device_type)
-         VALUES (?, ?, ?, ?, ?, 0.1, 1, 'web')`,
+      await createUser({
         id,
-        DEMO_NAME,
-        pinHash,
-        DEMO_PHONE,
-        DEMO_POSTCODE,
-      );
-      user = queryOne<Record<string, unknown>>(
-        `SELECT id, name, email, phone, area_postcode, commission_rate, active, pin_hash
-           FROM sales_users WHERE id = ?`,
-        id,
-      );
+        name: DEMO_NAME,
+        pin_hash: pinHash,
+        phone: DEMO_PHONE,
+        area_postcode: DEMO_POSTCODE,
+      });
+      user = await findUserByName(DEMO_NAME);
     } else if (user.pin_hash !== pinHash) {
-      run('UPDATE sales_users SET pin_hash = ?, active = 1 WHERE id = ?', pinHash, user.id);
+      // Reset drifted PIN so the demo PIN always works
+      await updateUserPinHash(user.id, pinHash);
     }
 
     if (!user) {
       return NextResponse.json({ error: 'Failed to create demo account' }, { status: 500 });
     }
 
-    // Seed demo leads (idempotent — only inserts if missing)
-    seedDemoLeads(user.id as string);
+    // Seed demo leads — SQLite only. Supabase doesn't have the lead_assignments
+    // table yet; when it does, move seedDemoLeads behind the dual-mode helper too.
+    if (!isSupabaseMode()) {
+      try {
+        seedDemoLeads(user.id);
+      } catch (e) {
+        console.warn('[Demo] seed failed (non-fatal):', e);
+      }
+    }
 
-    run("UPDATE sales_users SET last_active_at = datetime('now') WHERE id = ?", user.id);
+    await touchLastActive(user.id);
 
     const exp = Math.floor(Date.now() / 1000) + TOKEN_EXPIRY_DAYS * 24 * 60 * 60;
-    const token = createToken({ user_id: user.id as string, name: user.name as string, exp });
+    const token = createToken({ user_id: user.id, name: user.name, exp });
 
     const response = NextResponse.json({
       data: {
@@ -382,7 +380,7 @@ export async function POST(_req: NextRequest) {
           name: user.name,
           phone: user.phone,
           area_postcode: user.area_postcode,
-          commission_rate: user.commission_rate ?? 0.1,
+          commission_rate: user.commission_rate,
           active: true,
         },
         token,

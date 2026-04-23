@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { queryOne, run } from '@/lib/db';
 import { hashPin, createToken } from '@/lib/auth';
 import { checkRateLimit } from '@/lib/rate-limit';
+import { findUserByName, touchLastActive } from '@/lib/auth-db';
 import type { SalesUser } from '@/lib/types';
 
 const TOKEN_EXPIRY_DAYS = 30;
@@ -28,40 +28,27 @@ export async function POST(req: NextRequest) {
     const pin = body.pin.trim();
     const pinHash = hashPin(pin);
 
-    const row = queryOne<Record<string, unknown>>(
-      `SELECT id, name, email, phone, area_postcode, commission_rate, device_type, last_active_at, created_at, active
-         FROM sales_users
-        WHERE LOWER(name) = LOWER(?) AND pin_hash = ? AND active = 1`,
-      name,
-      pinHash,
-    );
-
-    if (!row) {
+    const row = await findUserByName(name);
+    if (!row || row.pin_hash !== pinHash || !row.active) {
       return NextResponse.json(
         { error: 'Invalid name or PIN', code: 'INVALID_CREDENTIALS' },
         { status: 401 },
       );
     }
 
-    // Bump last_active_at
-    try {
-      run("UPDATE sales_users SET last_active_at = datetime('now') WHERE id = ?", row.id);
-    } catch (e) {
-      // Non-fatal — log and continue
-      console.warn('[Auth] Failed to update last_active_at', e);
-    }
+    await touchLastActive(row.id);
 
     const user: SalesUser = {
-      id: row.id as string,
-      name: row.name as string,
-      email: (row.email as string | null) ?? null,
-      phone: (row.phone as string | null) ?? null,
-      area_postcode: (row.area_postcode as string | null) ?? null,
-      commission_rate: (row.commission_rate as number) ?? 0.1,
-      active: !!row.active,
+      id: row.id,
+      name: row.name,
+      email: row.email,
+      phone: row.phone,
+      area_postcode: row.area_postcode,
+      commission_rate: row.commission_rate,
+      active: row.active,
       device_type: (row.device_type as SalesUser['device_type']) ?? null,
-      last_active_at: (row.last_active_at as string | null) ?? null,
-      created_at: row.created_at as string,
+      last_active_at: row.last_active_at ?? null,
+      created_at: row.created_at ?? '',
     };
 
     const exp = Math.floor(Date.now() / 1000) + TOKEN_EXPIRY_DAYS * 24 * 60 * 60;

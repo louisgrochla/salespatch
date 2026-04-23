@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { randomUUID } from 'crypto';
-import { queryOne, run } from '@/lib/db';
 import { hashPin, createToken } from '@/lib/auth';
 import { checkRateLimit } from '@/lib/rate-limit';
+import { findUserByName, createUser } from '@/lib/auth-db';
 
 const TOKEN_EXPIRY_DAYS = 30;
 
@@ -40,11 +40,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Area postcode is required' }, { status: 400 });
     }
 
-    // Uniqueness check — name is UNIQUE in the SQLite schema
-    const existing = queryOne<{ id: string }>(
-      'SELECT id FROM sales_users WHERE LOWER(name) = LOWER(?)',
-      name,
-    );
+    const existing = await findUserByName(name);
     if (existing) {
       return NextResponse.json({ error: 'That name is already taken' }, { status: 409 });
     }
@@ -53,17 +49,7 @@ export async function POST(req: NextRequest) {
     const pin_hash = hashPin(pin);
 
     try {
-      run(
-        `INSERT INTO sales_users
-           (id, name, pin_hash, email, phone, area_postcode, commission_rate, active, device_type)
-         VALUES (?, ?, ?, ?, ?, ?, 0.1, 1, 'web')`,
-        id,
-        name,
-        pin_hash,
-        email,
-        phone,
-        area_postcode,
-      );
+      await createUser({ id, name, pin_hash, email, phone, area_postcode });
     } catch (dbErr) {
       console.error('Signup: insert failed', dbErr);
       return NextResponse.json({ error: 'Failed to create account' }, { status: 500 });
