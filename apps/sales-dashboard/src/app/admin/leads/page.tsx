@@ -73,6 +73,8 @@ export default function AdminLeadsPage() {
   // Drop-zone state
   const [dropActive, setDropActive] = useState(false);
   const [dropMsg, setDropMsg] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [uploadedDemoUrl, setUploadedDemoUrl] = useState<string | null>(null);
 
   const load = () => {
     fetch('/api/admin/salespeople').then((r) => r.json()).then((d) => setUsers(d.data ?? []));
@@ -161,19 +163,61 @@ export default function AdminLeadsPage() {
   const handleFiles = async (files: FileList | File[]) => {
     setDropMsg(null);
     const arr = Array.from(files);
-    const jsonFile = arr.find((f) => /\.json$/i.test(f.name)) ?? arr[0];
-    if (!jsonFile) return;
-    try {
-      const text = await jsonFile.text();
-      const parsed = JSON.parse(text);
-      applyBrief(parsed, jsonFile.name);
-    } catch (err) {
-      setDropMsg({
-        kind: 'err',
-        text: `Couldn't parse ${jsonFile.name}. Is it valid JSON?`,
-      });
+    const jsonFile = arr.find((f) => /\.json$/i.test(f.name));
+    const htmlFile = arr.find((f) => /\.html?$/i.test(f.name));
+
+    // Parse JSON first (we may need business_name as the upload slug)
+    let briefBusinessName = '';
+    if (jsonFile) {
+      try {
+        const text = await jsonFile.text();
+        const parsed = JSON.parse(text);
+        applyBrief(parsed, jsonFile.name);
+        if (parsed && typeof parsed === 'object' && typeof (parsed as any).business_name === 'string') {
+          briefBusinessName = (parsed as any).business_name;
+        }
+      } catch {
+        setDropMsg({ kind: 'err', text: `Couldn't parse ${jsonFile.name}. Is it valid JSON?` });
+        return;
+      }
+    }
+
+    // Upload HTML demo if present
+    if (htmlFile) {
+      setUploading(true);
+      try {
+        const fd = new FormData();
+        fd.append('file', htmlFile);
+        const slugSource = briefBusinessName || businessName || stripExt(htmlFile.name);
+        if (slugSource) fd.append('slug', slugSource);
+        const res = await fetch('/api/admin/demo-upload', { method: 'POST', body: fd });
+        const body = await res.json();
+        if (!res.ok) {
+          setDropMsg({ kind: 'err', text: body.error ?? `Upload failed (${res.status})` });
+        } else {
+          const url = body.data.public_url as string;
+          setUploadedDemoUrl(url);
+          setDemoDomain(url); // stash on the lead payload
+          setDropMsg({
+            kind: 'ok',
+            text:
+              (jsonFile ? `Filled from ${jsonFile.name} · ` : '') +
+              `Uploaded ${htmlFile.name} (${body.data.size_kb} KB)`,
+          });
+        }
+      } catch (err) {
+        setDropMsg({ kind: 'err', text: 'Network error uploading demo.' });
+      } finally {
+        setUploading(false);
+      }
+    }
+
+    if (!jsonFile && !htmlFile) {
+      setDropMsg({ kind: 'err', text: 'Drop a .json brief or an .html demo (or both).' });
     }
   };
+
+  const stripExt = (filename: string) => filename.replace(/\.[^.]+$/, '');
 
   const handleCreate = async () => {
     setError('');
@@ -408,29 +452,38 @@ export default function AdminLeadsPage() {
               className="text-[10.5px] uppercase mb-3"
               style={{ fontFamily: MONO_FONT, letterSpacing: '0.14em', color: SIGNAL }}
             >
-              / Auto-fill from Claude brief
+              / Claude Desktop handoff
             </div>
             <p
               className="text-[16px] m-0 mb-1"
               style={{ fontFamily: DISPLAY_FONT, fontWeight: 500, color: CREAM, letterSpacing: '-0.015em' }}
             >
-              Drop a JSON brief here
+              Drop the brief + demo site
             </p>
             <p className="text-[12.5px] m-0" style={{ color: CREAM_DIM, lineHeight: 1.55 }}>
-              or <span style={{ color: SIGNAL, textDecoration: 'underline' }}>click to browse</span>. The form fills
-              in itself — brand colours, pitch hooks, reviews, everything.
+              JSON fills the form. HTML uploads and becomes the live demo link. Drop both at
+              once, or <span style={{ color: SIGNAL, textDecoration: 'underline' }}>click to browse</span>.
             </p>
             <input
               id="brief-file"
               type="file"
-              accept=".json,application/json"
+              accept=".json,.html,.htm,application/json,text/html"
+              multiple
               onChange={(e) => {
                 if (e.target.files?.length) handleFiles(e.target.files);
                 e.target.value = '';
               }}
               style={{ display: 'none' }}
             />
-            {dropMsg && (
+            {uploading && (
+              <p
+                className="text-[11.5px] uppercase mt-3 mb-0"
+                style={{ fontFamily: MONO_FONT, letterSpacing: '0.14em', color: CREAM_MUTED }}
+              >
+                Uploading demo…
+              </p>
+            )}
+            {dropMsg && !uploading && (
               <p
                 className="text-[12.5px] mt-3 mb-0"
                 style={{
@@ -442,6 +495,24 @@ export default function AdminLeadsPage() {
                 {dropMsg.kind === 'ok' ? '✓ ' : '✗ '}
                 {dropMsg.text}
               </p>
+            )}
+            {uploadedDemoUrl && (
+              <a
+                href={uploadedDemoUrl}
+                target="_blank"
+                rel="noreferrer"
+                onClick={(e) => e.stopPropagation()}
+                className="text-[11px] mt-2 inline-block"
+                style={{
+                  fontFamily: MONO_FONT,
+                  letterSpacing: '0.08em',
+                  color: SIGNAL,
+                  textDecoration: 'underline',
+                  wordBreak: 'break-all',
+                }}
+              >
+                Open uploaded demo ↗
+              </a>
             )}
           </label>
 

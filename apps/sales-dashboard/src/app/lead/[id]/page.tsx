@@ -287,7 +287,7 @@ export default function LeadDetailPage() {
                     className="flex-1 px-3 py-1 rounded-full"
                     style={{ background: BG_CARD, border: `1px solid ${LINE2}`, letterSpacing: '0.04em' }}
                   >
-                    🔒 {lead.demo_site_domain}
+                    🔒 {prettyDomain(lead.demo_site_domain)}
                   </span>
                   {lead.demo_site_qa_score != null && (
                     <span style={{ color: SIGNAL, letterSpacing: '0.12em' }}>
@@ -331,7 +331,7 @@ export default function LeadDetailPage() {
               </div>
               <div className="mt-3 flex gap-3 flex-wrap">
                 <a
-                  href={`https://${lead.demo_site_domain}`}
+                  href={toDemoUrl(lead.demo_site_domain)}
                   target="_blank"
                   rel="noreferrer"
                   className="px-5 py-3 rounded-full text-[14px] inline-flex items-center gap-2"
@@ -849,6 +849,24 @@ function relTime(iso: string): string {
   return new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
 }
 
+function toDemoUrl(domain: string): string {
+  // Full URL? Use directly. Otherwise treat as bare domain and prepend https://.
+  if (/^https?:\/\//i.test(domain)) return domain;
+  return `https://${domain}`;
+}
+function prettyDomain(domain: string): string {
+  // Strip the protocol/host prefix when showing in the browser chrome — users just need to see the slug/domain.
+  try {
+    if (/^https?:\/\//i.test(domain)) {
+      const u = new URL(domain);
+      // For Supabase public URLs, show the file slug not the huge host path
+      const parts = u.pathname.split('/').filter(Boolean);
+      const last = parts[parts.length - 1] ?? '';
+      return last.replace(/\.html?$/i, '') || u.hostname;
+    }
+  } catch {}
+  return domain;
+}
 function formatDate(iso: string): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso;
