@@ -1,11 +1,9 @@
-import { fileURLToPath } from 'url';
-import { dirname } from 'path';
-
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  serverExternalPackages: ['better-sqlite3'],
-  turbopack: {
-    root: dirname(fileURLToPath(import.meta.url)),
+  // Next 14.x syntax: externalise native-addon packages from the RSC bundler.
+  // (The Next 15 `serverExternalPackages` top-level key is silently ignored on 14.)
+  experimental: {
+    serverComponentsExternalPackages: ['better-sqlite3'],
   },
   webpack: (config) => {
     config.externals.push({
