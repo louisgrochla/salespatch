@@ -70,6 +70,10 @@ export default function AdminLeadsPage() {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
+  // Drop-zone state
+  const [dropActive, setDropActive] = useState(false);
+  const [dropMsg, setDropMsg] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
+
   const load = () => {
     fetch('/api/admin/salespeople').then((r) => r.json()).then((d) => setUsers(d.data ?? []));
     fetch('/api/admin/leads').then((r) => r.json()).then((d) => setLeads(d.data ?? []));
@@ -99,6 +103,76 @@ export default function AdminLeadsPage() {
     setContactRole('');
     setBrandPrimary('');
     setBrandAccent('');
+  };
+
+  // Fill form state from a parsed JSON brief (shape below).
+  const applyBrief = (raw: unknown, filename?: string) => {
+    if (!raw || typeof raw !== 'object') {
+      setDropMsg({ kind: 'err', text: 'Expected a JSON object at the top level.' });
+      return;
+    }
+    const b = raw as Record<string, unknown>;
+    const s = (k: string) => (typeof b[k] === 'string' ? (b[k] as string) : '');
+    const n = (k: string) => (b[k] == null ? '' : String(b[k]));
+    const joinLines = (v: unknown): string => {
+      if (Array.isArray(v)) return v.filter((x) => typeof x === 'string' && x.trim()).join('\n');
+      if (typeof v === 'string') return v;
+      return '';
+    };
+    const joinCsv = (v: unknown): string => {
+      if (Array.isArray(v)) return v.filter((x) => typeof x === 'string' && x.trim()).join(', ');
+      if (typeof v === 'string') return v;
+      return '';
+    };
+
+    if (b.user_id && typeof b.user_id === 'string') setUserId(b.user_id);
+    setBusinessName(s('business_name'));
+    setBusinessType(s('business_type'));
+    setAddress(s('address'));
+    setPostcode(s('postcode').toUpperCase());
+    setPhone(s('phone'));
+    setEmail(s('email'));
+    setWebsiteUrl(s('website_url'));
+    setGoogleRating(n('google_rating'));
+    setGoogleReviews(n('google_review_count'));
+    setDescription(s('description'));
+    setHeroHeadline(s('hero_headline'));
+    setCtaText(s('cta_text'));
+    setServices(joinLines(b.services));
+    setPainPoints(joinLines(b.pain_points));
+    setOpeningHours(joinLines(b.opening_hours));
+    setTrustBadges(joinCsv(b.trust_badges));
+    setAvoidTopics(joinCsv(b.avoid_topics));
+    setDemoDomain(s('demo_site_domain'));
+    setContactName(s('contact_name'));
+    setContactRole(s('contact_role'));
+    const brand = b.brand_colours as Record<string, string> | undefined;
+    if (brand && typeof brand === 'object') {
+      setBrandPrimary(brand.primary ?? '');
+      setBrandAccent(brand.accent ?? '');
+    }
+
+    setDropMsg({
+      kind: 'ok',
+      text: `Filled from ${filename ?? 'brief'} · ${s('business_name') || 'unnamed'}`,
+    });
+  };
+
+  const handleFiles = async (files: FileList | File[]) => {
+    setDropMsg(null);
+    const arr = Array.from(files);
+    const jsonFile = arr.find((f) => /\.json$/i.test(f.name)) ?? arr[0];
+    if (!jsonFile) return;
+    try {
+      const text = await jsonFile.text();
+      const parsed = JSON.parse(text);
+      applyBrief(parsed, jsonFile.name);
+    } catch (err) {
+      setDropMsg({
+        kind: 'err',
+        text: `Couldn't parse ${jsonFile.name}. Is it valid JSON?`,
+      });
+    }
   };
 
   const handleCreate = async () => {
@@ -254,9 +328,9 @@ export default function AdminLeadsPage() {
           </div>
         </Card>
 
-        {/* Live preview */}
-        <div>
-          <Card padding="lg" className="sticky top-20">
+        {/* Live preview + drop zone */}
+        <div className="flex flex-col gap-5">
+          <Card padding="lg">
             <Eyebrow accent>What they'll see</Eyebrow>
             <div
               className="rounded-xl p-5 mt-2"
@@ -308,6 +382,103 @@ export default function AdminLeadsPage() {
                 </p>
               )}
             </div>
+          </Card>
+
+          {/* JSON brief drop zone */}
+          <label
+            htmlFor="brief-file"
+            onDragOver={(e) => {
+              e.preventDefault();
+              setDropActive(true);
+            }}
+            onDragLeave={() => setDropActive(false)}
+            onDrop={(e) => {
+              e.preventDefault();
+              setDropActive(false);
+              if (e.dataTransfer.files?.length) handleFiles(e.dataTransfer.files);
+            }}
+            className="rounded-2xl p-6 text-center cursor-pointer transition-colors"
+            style={{
+              background: dropActive ? 'rgb(184 134 11 / 0.08)' : BG_CARD,
+              border: `2px dashed ${dropActive ? SIGNAL : 'rgb(255 255 255 / 0.12)'}`,
+              display: 'block',
+            }}
+          >
+            <div
+              className="text-[10.5px] uppercase mb-3"
+              style={{ fontFamily: MONO_FONT, letterSpacing: '0.14em', color: SIGNAL }}
+            >
+              / Auto-fill from Claude brief
+            </div>
+            <p
+              className="text-[16px] m-0 mb-1"
+              style={{ fontFamily: DISPLAY_FONT, fontWeight: 500, color: CREAM, letterSpacing: '-0.015em' }}
+            >
+              Drop a JSON brief here
+            </p>
+            <p className="text-[12.5px] m-0" style={{ color: CREAM_DIM, lineHeight: 1.55 }}>
+              or <span style={{ color: SIGNAL, textDecoration: 'underline' }}>click to browse</span>. The form fills
+              in itself — brand colours, pitch hooks, reviews, everything.
+            </p>
+            <input
+              id="brief-file"
+              type="file"
+              accept=".json,application/json"
+              onChange={(e) => {
+                if (e.target.files?.length) handleFiles(e.target.files);
+                e.target.value = '';
+              }}
+              style={{ display: 'none' }}
+            />
+            {dropMsg && (
+              <p
+                className="text-[12.5px] mt-3 mb-0"
+                style={{
+                  color: dropMsg.kind === 'ok' ? SIGNAL : ERR,
+                  fontFamily: MONO_FONT,
+                  letterSpacing: '0.04em',
+                }}
+              >
+                {dropMsg.kind === 'ok' ? '✓ ' : '✗ '}
+                {dropMsg.text}
+              </p>
+            )}
+          </label>
+
+          {/* Schema hint */}
+          <Card padding="md">
+            <div
+              className="text-[10px] uppercase mb-2"
+              style={{ fontFamily: MONO_FONT, letterSpacing: '0.14em', color: CREAM_MUTED }}
+            >
+              Ask Claude Desktop for this shape
+            </div>
+            <pre
+              className="text-[11px] m-0 overflow-auto"
+              style={{ fontFamily: MONO_FONT, color: CREAM_DIM, lineHeight: 1.55, whiteSpace: 'pre-wrap' }}
+            >{`{
+  "business_name": "Mario's Deli",
+  "business_type": "Italian deli & cafe",
+  "address": "142 Wilton Way, London E8 3BA",
+  "postcode": "E8",
+  "phone": "+44 20 7249 0214",
+  "email": "owner@example.co.uk",
+  "website_url": "https://existing-site.co.uk",
+  "google_rating": 4.7,
+  "google_review_count": 184,
+  "description": "Short paragraph on what they do…",
+  "hero_headline": "Fresh from the counter.",
+  "cta_text": "Order ahead →",
+  "services": ["…", "…"],
+  "pain_points": ["…", "…"],
+  "opening_hours": ["Mon–Fri 7:00–18:00", "…"],
+  "trust_badges": ["Est. 1994", "Family-owned"],
+  "avoid_topics": ["Franchising"],
+  "contact_name": "Mario",
+  "contact_role": "Owner",
+  "brand_colours": { "primary": "#B8860B", "accent": "#3C2820" },
+  "demo_site_domain": "marios-deli.shop"
+}`}</pre>
           </Card>
         </div>
       </div>
