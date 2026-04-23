@@ -516,13 +516,16 @@ export default function AdminLeadsPage() {
             )}
           </label>
 
+          {/* Handoff prompt for Claude Desktop */}
+          <HandoffPromptCard />
+
           {/* Schema hint */}
           <Card padding="md">
             <div
               className="text-[10px] uppercase mb-2"
               style={{ fontFamily: MONO_FONT, letterSpacing: '0.14em', color: CREAM_MUTED }}
             >
-              Ask Claude Desktop for this shape
+              JSON schema
             </div>
             <pre
               className="text-[11px] m-0 overflow-auto"
@@ -618,6 +621,103 @@ export default function AdminLeadsPage() {
         )}
       </Section>
     </div>
+  );
+}
+
+const HANDOFF_PROMPT = `You've finished researching this business and designing their SalesFlow demo site. Now output two files for hand-off to the admin portal — one JSON brief and one self-contained HTML demo.
+
+── FILE 1 · {slug}.json ───────────────────────────────────
+Exactly this shape. Omit a key rather than include an empty/made-up value. Use plain strings, not markdown.
+
+{
+  "business_name": "string (required)",
+  "business_type": "short category, e.g. 'Italian deli & cafe'",
+  "address": "full street address if you found it",
+  "postcode": "UK outward postcode only, e.g. 'E8'",
+  "phone": "international format",
+  "email": "if public",
+  "website_url": "their existing site if they have one, else omit",
+  "google_rating": 4.7,
+  "google_review_count": 184,
+  "description": "2-3 sentence plain prose. What do they do, who for, why they stand out. No marketing fluff.",
+  "hero_headline": "4-6 word copy line in their voice — will appear on the demo hero",
+  "cta_text": "button label, 1-3 words, ending with an arrow (→)",
+  "services": ["3-6 concrete offerings, short strings, no full sentences"],
+  "pain_points": ["3 concrete reasons their current online presence is costing them customers — specific, not generic"],
+  "opening_hours": ["Mon–Fri 7:00–18:00", "Sat 8:00–17:00", "Sun closed"],
+  "trust_badges": ["Est. 1994", "Family-owned", "Hackney favourite"],
+  "avoid_topics": ["things a salesperson should NOT bring up — owner's sensitivities"],
+  "contact_name": "who to ask for at the counter, if known",
+  "contact_role": "Owner / Manager / etc.",
+  "brand_colours": {
+    "primary": "#HEXCODE — dominant colour from their logo/shopfront",
+    "accent": "#HEXCODE — secondary, used for CTAs on the demo"
+  },
+  "demo_site_domain": "slug-kebab-case.shop (short, memorable — used as the public URL)"
+}
+
+Rules:
+- Write in the business's own voice, not a marketing agency's.
+- "pain_points" must be things you actually observed (e.g. "No online booking — they lose weekend walk-ins"), not template copy.
+- "brand_colours" should reflect their actual brand — pull hex codes from their logo, signage, or existing site.
+- Don't invent data. If you don't know it, omit the key.
+
+── FILE 2 · {slug}.html ───────────────────────────────────
+One self-contained HTML file. Requirements:
+- Inline all CSS and JS. Only external dep allowed: Google Fonts.
+- Must work opened directly in a browser on a phone — no backend, no fetch calls, no server routes.
+- Use the brand_colours you identified. The hero background should use a gradient from primary → accent.
+- The hero headline and CTA from the JSON appear prominently.
+- Include sections that match a real small-business site: hero, what-we-offer (matching "services"), hours, contact, a small gallery/placeholders if useful.
+- Mobile-first layout — this will be shown on a salesperson's phone, handed to the business owner.
+- Feel crafted, not templated. Typography should feel right for the business (a butcher and a florist need different vibes).
+- Keep total file size under 80KB.
+
+Save both files with the same slug (matching "demo_site_domain" minus the TLD). I'll drop them onto the SalesFlow admin portal's lead page — the JSON auto-fills the form and the HTML uploads as the live demo.`;
+
+function HandoffPromptCard() {
+  const [copied, setCopied] = useState(false);
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(HANDOFF_PROMPT);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {}
+  };
+  return (
+    <Card accent padding="lg">
+      <div className="flex items-start justify-between gap-3 mb-3 flex-wrap">
+        <div
+          className="text-[10.5px] uppercase"
+          style={{ fontFamily: MONO_FONT, letterSpacing: '0.14em', color: SIGNAL }}
+        >
+          / Claude Desktop prompt
+        </div>
+        <button
+          onClick={copy}
+          className="px-4 py-2 rounded-full text-[12px] transition-colors"
+          style={{
+            background: copied ? SIGNAL : CREAM,
+            color: copied ? 'white' : 'rgb(20 20 19)',
+            border: 'none',
+            fontWeight: 500,
+            cursor: 'pointer',
+          }}
+        >
+          {copied ? '✓ Copied' : 'Copy prompt'}
+        </button>
+      </div>
+      <p
+        className="text-[16px] m-0 mb-2"
+        style={{ fontFamily: DISPLAY_FONT, fontWeight: 500, color: CREAM, letterSpacing: '-0.015em' }}
+      >
+        Paste at the end of your research chat.
+      </p>
+      <p className="text-[12.5px] m-0" style={{ color: CREAM_DIM, lineHeight: 1.55 }}>
+        After Claude Desktop finishes researching the business and designing the demo, paste this prompt. It'll output
+        two files in the exact format this page expects — drop them back in above.
+      </p>
+    </Card>
   );
 }
 
