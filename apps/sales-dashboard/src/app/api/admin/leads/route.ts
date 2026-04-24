@@ -86,6 +86,16 @@ export async function POST(req: NextRequest) {
     avoid_topics: arrOfStr(body.avoid_topics),
     demo_site_domain: strOrNull(body.demo_site_domain),
     demo_site_qa_score: numOrNull(body.demo_site_qa_score),
+
+    // Sales-brief extensions — written verbatim into notes JSON so the
+    // contractor lead-detail page + iOS lead view can render them.
+    hook: strOrNull(body.hook),
+    opener: strOrNull(body.opener),
+    demo_moments: arrOfStr(body.demo_moments),
+    specific_objections: arrOfObjections(body.specific_objections),
+    close_script: strOrNull(body.close_script),
+    next_visit_reason: strOrNull(body.next_visit_reason),
+    pain_points_extended: strOrNull(body.pain_points_extended),
   };
 
   const assignmentId = randomUUID();
@@ -158,6 +168,16 @@ function arrOfStr(v: unknown): string[] {
       .filter((s) => s.length);
   }
   return [];
+}
+function arrOfObjections(v: unknown): Array<{ objection: string; response: string }> {
+  if (!Array.isArray(v)) return [];
+  return v
+    .filter((x) => x && typeof x === 'object')
+    .map((x) => ({
+      objection: String((x as any).objection ?? '').trim(),
+      response: String((x as any).response ?? '').trim(),
+    }))
+    .filter((p) => p.objection.length > 0);
 }
 function arrOfReviews(v: unknown): Array<{ author: string; rating: number; text: string }> {
   if (!Array.isArray(v)) return [];

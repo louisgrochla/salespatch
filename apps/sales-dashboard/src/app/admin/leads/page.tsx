@@ -66,6 +66,14 @@ export default function AdminLeadsPage() {
   const [brandPrimary, setBrandPrimary] = useState('');
   const [brandAccent, setBrandAccent] = useState('');
 
+  // Sales-brief extensions (new Claude Desktop fields)
+  const [hook, setHook] = useState('');
+  const [opener, setOpener] = useState('');
+  const [demoMoments, setDemoMoments] = useState('');
+  const [closeScript, setCloseScript] = useState('');
+  const [nextVisitReason, setNextVisitReason] = useState('');
+  const [specificObjections, setSpecificObjections] = useState<Array<{ objection: string; response: string }>>([]);
+
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -105,6 +113,12 @@ export default function AdminLeadsPage() {
     setContactRole('');
     setBrandPrimary('');
     setBrandAccent('');
+    setHook('');
+    setOpener('');
+    setDemoMoments('');
+    setCloseScript('');
+    setNextVisitReason('');
+    setSpecificObjections([]);
   };
 
   // Fill form state from a parsed JSON brief (shape below).
@@ -153,6 +167,23 @@ export default function AdminLeadsPage() {
       setBrandPrimary(brand.primary ?? '');
       setBrandAccent(brand.accent ?? '');
     }
+
+    // Sales-brief extensions
+    setHook(s('hook'));
+    setOpener(s('opener'));
+    setCloseScript(s('close_script'));
+    setNextVisitReason(s('next_visit_reason'));
+    setDemoMoments(joinLines(b.demo_moments));
+    const objs = Array.isArray(b.specific_objections) ? b.specific_objections : [];
+    setSpecificObjections(
+      objs
+        .filter((x: unknown) => x && typeof x === 'object')
+        .map((x: any) => ({
+          objection: String(x.objection ?? '').trim(),
+          response: String(x.response ?? '').trim(),
+        }))
+        .filter((p: { objection: string }) => p.objection.length > 0),
+    );
 
     setDropMsg({
       kind: 'ok',
@@ -256,6 +287,13 @@ export default function AdminLeadsPage() {
         contact_name: contactName,
         contact_role: contactRole,
         brand_colours,
+        // Sales-brief extensions
+        hook,
+        opener,
+        demo_moments: demoMoments,
+        close_script: closeScript,
+        next_visit_reason: nextVisitReason,
+        specific_objections: specificObjections.filter((p) => p.objection.trim().length > 0),
       }),
     });
     const body = await res.json();
@@ -352,6 +390,70 @@ export default function AdminLeadsPage() {
             <Input label="Brand accent hex" value={brandAccent} onChange={(e) => setBrandAccent(e.target.value)} placeholder="#3C2820" />
           </div>
           <Input label="Demo site domain" value={demoDomain} onChange={(e) => setDemoDomain(e.target.value)} placeholder="marios-deli.shop" />
+
+          <SubHead label="Sales brief" />
+          <Input label="Hook (≤18 words)" value={hook} onChange={(e) => setHook(e.target.value)} placeholder="Amy runs monthly book clubs that fill up — every booking goes through DMs and she turns people away." />
+          <Textarea label="Opener — exact first line at the door (≤30 words)" value={opener} onChange={(e) => setOpener(e.target.value)} rows={2} placeholder="Hi, is Amy in? I'm Kevin. I noticed Fable's got 5.0 from 60 reviews and I thought you'd want to see something we built." />
+          <Textarea label="Demo moments (one per line, ≤14 words each)" value={demoMoments} onChange={(e) => setDemoMoments(e.target.value)} rows={3} placeholder={'Tap Events — show Amy she can take book-club bookings here.\nScroll to hours — point out the Sunday discrepancy.\nTap Buy Gift Cards — live on their custom domain.'} />
+          <Textarea label="Close script (≤40 words)" value={closeScript} onChange={(e) => setCloseScript(e.target.value)} rows={2} placeholder="It's £350 and we can have it live by Friday. I can take a card number now or come back Thursday — which works?" />
+          <Textarea label="Next-visit reason (≤25 words)" value={nextVisitReason} onChange={(e) => setNextVisitReason(e.target.value)} rows={2} placeholder="Fine. Can I drop back Thursday — by then I'll have the live search-ranking numbers for 'bookshop Aberdeen' to show you." />
+
+          <div
+            className="text-[10px] uppercase mt-6 mb-3"
+            style={{ fontFamily: MONO_FONT, letterSpacing: '0.14em', color: SIGNAL }}
+          >
+            / Specific objections
+          </div>
+          {specificObjections.length === 0 && (
+            <p className="text-[12.5px] mb-3" style={{ color: CREAM_MUTED }}>
+              None added yet. Drop the JSON brief or add pairs manually.
+            </p>
+          )}
+          {specificObjections.map((pair, idx) => (
+            <div key={idx} className="grid md:grid-cols-2 gap-3 mb-3">
+              <Input
+                label={`Objection ${idx + 1}`}
+                value={pair.objection}
+                onChange={(e) => {
+                  const next = [...specificObjections];
+                  next[idx] = { ...next[idx], objection: e.target.value };
+                  setSpecificObjections(next);
+                }}
+                placeholder="Instagram is working fine for me"
+              />
+              <Textarea
+                label="Response"
+                value={pair.response}
+                onChange={(e) => {
+                  const next = [...specificObjections];
+                  next[idx] = { ...next[idx], response: e.target.value };
+                  setSpecificObjections(next);
+                }}
+                rows={2}
+                placeholder="Fair. How many DMs did you miss last weekend? A site takes bookings while you sleep."
+              />
+            </div>
+          ))}
+          <div className="flex gap-2 mb-4">
+            <button
+              type="button"
+              onClick={() => setSpecificObjections([...specificObjections, { objection: '', response: '' }])}
+              className="px-4 py-2 rounded-full text-[12px]"
+              style={{ background: 'transparent', color: CREAM_DIM, border: `1px solid ${LINE}`, cursor: 'pointer' }}
+            >
+              + Add objection
+            </button>
+            {specificObjections.length > 0 && (
+              <button
+                type="button"
+                onClick={() => setSpecificObjections(specificObjections.slice(0, -1))}
+                className="px-4 py-2 rounded-full text-[12px]"
+                style={{ background: 'transparent', color: CREAM_MUTED, border: `1px solid ${LINE}`, cursor: 'pointer' }}
+              >
+                Remove last
+              </button>
+            )}
+          </div>
 
           {error && (
             <p className="text-[13px] mb-4" style={{ color: ERR }}>
@@ -531,27 +633,38 @@ export default function AdminLeadsPage() {
               className="text-[11px] m-0 overflow-auto"
               style={{ fontFamily: MONO_FONT, color: CREAM_DIM, lineHeight: 1.55, whiteSpace: 'pre-wrap' }}
             >{`{
-  "business_name": "Mario's Deli",
-  "business_type": "Italian deli & cafe",
-  "address": "142 Wilton Way, London E8 3BA",
-  "postcode": "E8",
-  "phone": "+44 20 7249 0214",
-  "email": "owner@example.co.uk",
-  "website_url": "https://existing-site.co.uk",
-  "google_rating": 4.7,
-  "google_review_count": 184,
-  "description": "Short paragraph on what they do…",
-  "hero_headline": "Fresh from the counter.",
-  "cta_text": "Order ahead →",
-  "services": ["…", "…"],
-  "pain_points": ["…", "…"],
-  "opening_hours": ["Mon–Fri 7:00–18:00", "…"],
-  "trust_badges": ["Est. 1994", "Family-owned"],
-  "avoid_topics": ["Franchising"],
-  "contact_name": "Mario",
+  "business_name": "Fable",
+  "business_type": "Speciality coffee & bookshop",
+  "address": "…",
+  "postcode": "AB10 1XL",
+  "phone": "+44 …",
+  "email": "…",
+  "website_url": null,
+  "google_rating": 5.0,
+  "google_review_count": 60,
+  "contact_name": "Amy",
   "contact_role": "Owner",
-  "brand_colours": { "primary": "#B8860B", "accent": "#3C2820" },
-  "demo_site_domain": "marios-deli.shop"
+  "demo_site_domain": "fable-aberdeen.shop",
+  "opening_hours": ["Mon-Fri 08:00-18:00", "…"],
+
+  // sales brief — these fields drive the closer
+  "hook": "One-sentence sharpest reason. ≤18 words.",
+  "opener": "Exact first line at the door. ≤30 words.",
+  "pain_points": ["3–5 concrete problems a £350 site fixes"],
+  "demo_moments": ["Tap Events — show book-club bookings"],
+  "specific_objections": [
+    { "objection": "Instagram works fine", "response": "Fair. How many DMs…" }
+  ],
+  "close_script": "It's £350 and we can have it live by Friday…",
+  "next_visit_reason": "Drop back Thursday — I'll have search-ranking numbers.",
+
+  // structured content
+  "services": [], "trust_badges": [], "avoid_topics": [],
+  "best_reviews": [{ "author": "", "rating": 5, "text": "" }],
+
+  // demo-gen only (optional)
+  "description": null, "hero_headline": null, "cta_text": null,
+  "brand_colours": { "primary": "#…", "accent": "#…" }
 }`}</pre>
           </Card>
         </div>
@@ -624,56 +737,168 @@ export default function AdminLeadsPage() {
   );
 }
 
-const HANDOFF_PROMPT = `You've finished researching this business and designing their SalesFlow demo site. Now output two files for hand-off to the admin portal — one JSON brief and one self-contained HTML demo.
+const HANDOFF_PROMPT = `You are a senior B2B sales strategist specialising in website sales to UK small & independent businesses. You've been handed research on a single local business. Your job is to turn that research into a tactical pitch brief that a door-to-door salesperson will use on their phone to close a £350 website sale.
 
-── FILE 1 · {slug}.json ───────────────────────────────────
-Exactly this shape. Omit a key rather than include an empty/made-up value. Use plain strings, not markdown.
+Your output is a single JSON object — nothing else. No preamble, no markdown fences, no commentary. Just the JSON, ready for me to paste into the admin upload.
+
+────────────────────────────────────────
+CONTEXT FOR YOUR WRITING
+────────────────────────────────────────
+The salesperson is NOT a digital-marketing expert. They're a gig-economy rep walking into a deli / barber / café / florist / bookshop etc. with their phone. They have 90 seconds to get inside the door, 5 minutes to show a demo site we've already built for this business, and one shot at the close.
+
+The buyer is the owner — usually 35–65, skeptical of "web agencies", proud of their business, time-poor. They've had Instagram since 2014 and it "works fine". They hate being sold to. They respond to:
+  • Specifics about their business (prove you researched)
+  • Real money (lost customers, not "engagement")
+  • Honesty (admit when Instagram is enough; sell when it's not)
+  • Short sentences
+  • Zero jargon
+
+────────────────────────────────────────
+TONE RULES (apply to every string field)
+────────────────────────────────────────
+- British English (colour, organisation, favourite).
+- No em-dashes in strings. Use a period, comma, or — if you must — a hyphen with spaces.
+- No exclamation marks. Ever.
+- No "unlock", "leverage", "synergy", "seamless", "game-changing", "transform".
+- No "I hope this helps" / "Let me know" / any AI tells.
+- Write like a sharp friend who runs a corner-shop agency, not a SaaS brochure.
+- Every sentence should survive a skeptical owner reading it aloud without cringing.
+
+────────────────────────────────────────
+OUTPUT SHAPE (return ALL keys; use null for unknowns)
+────────────────────────────────────────
 
 {
-  "business_name": "string (required)",
-  "business_type": "short category, e.g. 'Italian deli & cafe'",
-  "address": "full street address if you found it",
-  "postcode": "UK outward postcode only, e.g. 'E8'",
-  "phone": "international format",
-  "email": "if public",
-  "website_url": "their existing site if they have one, else omit",
-  "google_rating": 4.7,
-  "google_review_count": 184,
-  "description": "2-3 sentence plain prose. What do they do, who for, why they stand out. No marketing fluff.",
-  "hero_headline": "4-6 word copy line in their voice — will appear on the demo hero",
-  "cta_text": "button label, 1-3 words, ending with an arrow (→)",
-  "services": ["3-6 concrete offerings, short strings, no full sentences"],
-  "pain_points": ["3 concrete reasons their current online presence is costing them customers — specific, not generic"],
-  "opening_hours": ["Mon–Fri 7:00–18:00", "Sat 8:00–17:00", "Sun closed"],
-  "trust_badges": ["Est. 1994", "Family-owned", "Hackney favourite"],
-  "avoid_topics": ["things a salesperson should NOT bring up — owner's sensitivities"],
-  "contact_name": "who to ask for at the counter, if known",
-  "contact_role": "Owner / Manager / etc.",
-  "brand_colours": {
-    "primary": "#HEXCODE — dominant colour from their logo/shopfront",
-    "accent": "#HEXCODE — secondary, used for CTAs on the demo"
-  },
-  "demo_site_domain": "slug-kebab-case.shop (short, memorable — used as the public URL)"
+  "user_id": "REPLACE_WITH_SALESPERSON_UUID",
+
+  // IDENTITY — match exactly what's on Google / their sign
+  "business_name": "",
+  "business_type": "",         // short human label, e.g. "Speciality coffee & bookshop"
+  "address": "",
+  "postcode": "",              // UK format, uppercase, e.g. "AB10 1XL"
+  "phone": null,               // include country code if known
+  "email": null,
+  "website_url": null,         // existing site if any
+  "google_rating": null,       // number 0.0-5.0
+  "google_review_count": null, // integer
+
+  // ASSIGNMENT META
+  "contact_name": null,        // owner/manager first name if known — e.g. "Amy"
+  "contact_role": null,        // e.g. "Owner", "Manager", "Founder"
+
+  // DEMO
+  "demo_site_domain": "",      // the subdomain of the demo we built, e.g. "fable-aberdeen.shop"
+
+  // HOURS — one line per day or grouped days, mono-readable
+  "opening_hours": [
+    "Mon-Fri 08:00-18:00",
+    "Sat 09:00-17:00",
+    "Sun closed"
+  ],
+
+  // ─── SALES BRIEF (this is where the closing power lives) ────────────
+
+  // HOOK — the single sharpest reason THIS business needs a site.
+  // One sentence, ≤ 18 words. Specific to their situation, not generic.
+  // BAD:  "They need a professional online presence."
+  // GOOD: "Amy runs monthly book clubs that fill up — every booking
+  //        goes through DMs and she turns people away."
+  "hook": "",
+
+  // PAIN POINTS — 3 to 5 concrete problems a £350 site fixes for THIS
+  // business. Each one ≤ 16 words. Name a behaviour, not an abstraction.
+  // BAD:  "Poor online visibility"
+  // GOOD: "Lunch queue turns walk-ins away; no way to pre-order."
+  "pain_points": [
+    "",
+    "",
+    ""
+  ],
+
+  // OPENER — the EXACT first line the rep says walking in.
+  // ≤ 30 words. Include the business's name. Must sound like a human,
+  // not a script. Lead with a fact that proves research.
+  // BAD:  "Hi, I'm Kevin, I'm here to talk about websites!"
+  // GOOD: "Hi, is Amy in? I'm Kevin. I noticed Fable's got 5.0 from 60
+  //        reviews and I thought you'd want to see something we built."
+  "opener": "",
+
+  // DEMO MOMENTS — 3 specific things to tap/point out when showing the
+  // demo, each ≤ 14 words. Tied to what matters for this owner.
+  // BAD:  "The home page"
+  // GOOD: "Tap Events — show Amy she can take book-club bookings here."
+  "demo_moments": [
+    "",
+    "",
+    ""
+  ],
+
+  // SPECIFIC OBJECTIONS — 3 to 4 objections THIS owner is most likely to
+  // raise, with a response. Not the generic 4 (those are fallbacks in
+  // the app). Use what the research tells you about them.
+  // Each objection ≤ 12 words, each response ≤ 28 words.
+  "specific_objections": [
+    {
+      "objection": "",
+      "response": ""
+    },
+    {
+      "objection": "",
+      "response": ""
+    },
+    {
+      "objection": "",
+      "response": ""
+    }
+  ],
+
+  // CLOSE — the exact ask. ≤ 40 words. Ask for the sale directly. Name
+  // the price. Offer one concrete next step. No "think about it".
+  // BAD:  "Would you be interested in hearing more?"
+  // GOOD: "It's £350 and we can have it live by Friday. I can take a
+  //        card number now or come back Thursday — which works?"
+  "close_script": "",
+
+  // NEXT VISIT — if they say no today, the one reason to come back.
+  // ≤ 25 words. Must be value for THEM, not a guilt trip.
+  // BAD:  "I'll pop back next week."
+  // GOOD: "Fine. Can I drop back Thursday — by then I'll have the live
+  //        search ranking numbers for 'bookshop Aberdeen' to show you."
+  "next_visit_reason": "",
+
+  // EXISTING STRUCTURED FIELDS (still rendered on iOS)
+  "services": [],              // 3-6 string items
+  "trust_badges": [],          // 3-5 credibility signals, e.g. "Est. 1994"
+  "best_reviews": [            // 2-3 quoted reviews
+    { "author": "", "rating": 5, "text": "" }
+  ],
+  "avoid_topics": [],          // 1-3 things NOT to mention
+
+  // OPTIONAL — used by the demo generator, not iOS
+  "description": null,
+  "hero_headline": null,
+  "cta_text": null,
+  "pain_points_extended": null,
+  "brand_colours": null
 }
 
-Rules:
-- Write in the business's own voice, not a marketing agency's.
-- "pain_points" must be things you actually observed (e.g. "No online booking — they lose weekend walk-ins"), not template copy.
-- "brand_colours" should reflect their actual brand — pull hex codes from their logo, signage, or existing site.
-- Don't invent data. If you don't know it, omit the key.
+────────────────────────────────────────
+GROUNDING RULES (hard)
+────────────────────────────────────────
+1. Every fact must be traceable to the research you were given. If you don't know something, use null. Never fabricate numbers, dates, names, awards, or reviews.
+2. If the business has <20 Google reviews, do not lean on Google in the opener — pick a different hook.
+3. If there's no phone in the research, \`phone\` is null. Don't guess.
+4. If the research implies the owner is anti-tech or anti-digital, the hook and opener must acknowledge it (e.g. "I know you've done fine on word-of-mouth for 20 years, but…").
+5. If the business already has a modern site, you don't have a sale. In that case, output \`"hook": "PASS — existing site at <url> is already functional."\` and set pain_points/opener/close_script/etc. to null.
+6. UK compliance: do not include GDPR/cookie-banner talk in the pitch. That's our job at fulfilment, not the rep's.
 
-── FILE 2 · {slug}.html ───────────────────────────────────
-One self-contained HTML file. Requirements:
-- Inline all CSS and JS. Only external dep allowed: Google Fonts.
-- Must work opened directly in a browser on a phone — no backend, no fetch calls, no server routes.
-- Use the brand_colours you identified. The hero background should use a gradient from primary → accent.
-- The hero headline and CTA from the JSON appear prominently.
-- Include sections that match a real small-business site: hero, what-we-offer (matching "services"), hours, contact, a small gallery/placeholders if useful.
-- Mobile-first layout — this will be shown on a salesperson's phone, handed to the business owner.
-- Feel crafted, not templated. Typography should feel right for the business (a butcher and a florist need different vibes).
-- Keep total file size under 80KB.
+────────────────────────────────────────
+RESEARCH YOU'VE BEEN GIVEN
+────────────────────────────────────────
+<paste the business research / demo site URL / screenshots here>
 
-Save both files with the same slug (matching "demo_site_domain" minus the TLD). I'll drop them onto the SalesFlow admin portal's lead page — the JSON auto-fills the form and the HTML uploads as the live demo.`;
+────────────────────────────────────────
+Return ONLY the JSON object. Begin now.`;
 
 function HandoffPromptCard() {
   const [copied, setCopied] = useState(false);

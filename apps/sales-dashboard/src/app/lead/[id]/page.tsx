@@ -50,6 +50,15 @@ interface Lead {
   visited_at: string | null;
   pitched_at: string | null;
   sold_at: string | null;
+
+  // Sales brief (from Claude Desktop pitch-strategist prompt)
+  hook: string | null;
+  opener: string | null;
+  demo_moments: string[];
+  specific_objections: Array<{ objection: string; response: string }>;
+  close_script: string | null;
+  next_visit_reason: string | null;
+  pain_points_extended: string | null;
 }
 
 // -----------------------------------------------------------------------------
@@ -247,16 +256,82 @@ export default function LeadDetailPage() {
         </div>
       )}
 
+      {/* ── HOOK — the sharpest reason, front and centre ── */}
+      {lead.hook && (
+        <div
+          className="mb-10 rounded-2xl p-7"
+          style={{
+            background: 'rgb(184 134 11 / 0.12)',
+            border: '1px solid rgb(184 134 11 / 0.4)',
+          }}
+        >
+          <div
+            className="text-[10px] uppercase mb-3"
+            style={{ fontFamily: MONO_FONT, letterSpacing: '0.14em', color: SIGNAL }}
+          >
+            / The hook
+          </div>
+          <p
+            className="m-0 text-[26px] leading-[1.2]"
+            style={{ fontFamily: DISPLAY_FONT, fontWeight: 500, color: CREAM, letterSpacing: '-0.025em' }}
+          >
+            {lead.hook}
+          </p>
+        </div>
+      )}
+
       {/* ── Two-column grid ── */}
       <div className="grid gap-8" style={{ gridTemplateColumns: 'minmax(0, 1.4fr) minmax(0, 1fr)' }}>
         {/* LEFT — the pitch */}
         <div className="flex flex-col gap-8 min-w-0">
-          {/* Pain points / talking hooks */}
+          {/* OPENER — exact first line at the door */}
+          {lead.opener && (
+            <Section title="First line at the door" eyebrow="Opener">
+              <div
+                className="rounded-2xl p-6"
+                style={{ background: BG_STRONG, border: `1px solid ${LINE}`, borderLeft: `3px solid ${SIGNAL}` }}
+              >
+                <p
+                  className="m-0 text-[18px] leading-[1.45]"
+                  style={{ fontFamily: DISPLAY_FONT, fontWeight: 400, color: CREAM }}
+                >
+                  &ldquo;{lead.opener}&rdquo;
+                </p>
+              </div>
+            </Section>
+          )}
+
+          {/* Pain points */}
           {lead.pain_points.length > 0 && (
-            <Section title="What to say at the door" eyebrow="Pitch hooks">
+            <Section title="What's costing them money" eyebrow="Pain points">
               <div className="grid gap-3">
                 {lead.pain_points.map((p, i) => (
                   <PitchCard key={i} index={i + 1} text={p} />
+                ))}
+              </div>
+            </Section>
+          )}
+
+          {/* DEMO MOMENTS — specific taps during the demo */}
+          {lead.demo_moments.length > 0 && (
+            <Section title="What to tap during the demo" eyebrow="Demo moments">
+              <div className="grid gap-3">
+                {lead.demo_moments.map((m, i) => (
+                  <div
+                    key={i}
+                    className="rounded-xl p-4 flex gap-4"
+                    style={{ background: BG_STRONG, border: `1px solid ${LINE}` }}
+                  >
+                    <div
+                      className="text-[13px] pt-0.5 flex-shrink-0"
+                      style={{ fontFamily: MONO_FONT, color: SIGNAL, letterSpacing: '0.08em', minWidth: 28 }}
+                    >
+                      →
+                    </div>
+                    <p className="m-0 text-[14.5px] leading-[1.55]" style={{ color: CREAM }}>
+                      {m}
+                    </p>
+                  </div>
                 ))}
               </div>
             </Section>
@@ -424,6 +499,77 @@ export default function LeadDetailPage() {
                     </div>
                   </div>
                 ))}
+              </div>
+            </Section>
+          )}
+
+          {/* SPECIFIC OBJECTIONS — tailored Q&A cards */}
+          {lead.specific_objections.length > 0 && (
+            <Section title="If they push back" eyebrow="Specific objections">
+              <div className="grid gap-3">
+                {lead.specific_objections.map((o, i) => (
+                  <div
+                    key={i}
+                    className="rounded-xl p-5"
+                    style={{ background: BG_STRONG, border: `1px solid ${LINE}` }}
+                  >
+                    <div
+                      className="text-[10px] uppercase mb-2"
+                      style={{ fontFamily: MONO_FONT, letterSpacing: '0.14em', color: 'rgb(220 150 80)' }}
+                    >
+                      They say
+                    </div>
+                    <p
+                      className="m-0 text-[15.5px]"
+                      style={{ fontFamily: DISPLAY_FONT, fontWeight: 500, color: CREAM, letterSpacing: '-0.015em' }}
+                    >
+                      &ldquo;{o.objection}&rdquo;
+                    </p>
+                    <div
+                      className="text-[10px] uppercase mt-4 mb-2"
+                      style={{ fontFamily: MONO_FONT, letterSpacing: '0.14em', color: SIGNAL }}
+                    >
+                      You say
+                    </div>
+                    <p className="m-0 text-[14px] leading-[1.55]" style={{ color: CREAM_DIM }}>
+                      {o.response}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </Section>
+          )}
+
+          {/* CLOSE SCRIPT — the exact ask */}
+          {lead.close_script && (
+            <Section title="The close" eyebrow="Ask for the sale">
+              <div
+                className="rounded-2xl p-6"
+                style={{
+                  background: 'rgb(184 134 11 / 0.1)',
+                  border: '1px solid rgb(184 134 11 / 0.35)',
+                }}
+              >
+                <p
+                  className="m-0 text-[17px] leading-[1.55]"
+                  style={{ fontFamily: DISPLAY_FONT, fontWeight: 500, color: CREAM, letterSpacing: '-0.015em' }}
+                >
+                  &ldquo;{lead.close_script}&rdquo;
+                </p>
+              </div>
+            </Section>
+          )}
+
+          {/* NEXT VISIT — recovery line if today is a no */}
+          {lead.next_visit_reason && (
+            <Section title="If today's a no" eyebrow="Next visit">
+              <div
+                className="rounded-xl p-5"
+                style={{ background: BG_STRONG, border: `1px solid ${LINE}` }}
+              >
+                <p className="m-0 text-[14.5px] leading-[1.55]" style={{ color: CREAM_DIM }}>
+                  {lead.next_visit_reason}
+                </p>
               </div>
             </Section>
           )}

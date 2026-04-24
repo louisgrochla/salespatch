@@ -103,6 +103,17 @@ export interface LeadDetail extends LeadCard {
   hero_headline: string | null;
   cta_text: string | null;
 
+  // Sales-brief extensions (added for the door-to-door closer workflow).
+  // Written by Claude Desktop into the lead JSON; rendered prominently on
+  // both the web lead-detail page and the iOS lead view.
+  hook: string | null;                          // single sharpest reason, ≤18 words
+  opener: string | null;                        // exact first line at the door, ≤30 words
+  demo_moments: string[];                       // 3 things to tap/point at during the demo
+  specific_objections: ObjectionPair[];         // tailored objections + responses
+  close_script: string | null;                  // the ask with price + next step
+  next_visit_reason: string | null;             // why come back if today is a no
+  pain_points_extended: string | null;          // optional longer-form pain context
+
   // Assignment
   notes: string | null;
   commission_amount: number | null;
@@ -117,6 +128,11 @@ export interface LeadDetail extends LeadCard {
   // Contact person
   contact_name: string | null;
   contact_role: string | null;
+}
+
+export interface ObjectionPair {
+  objection: string;
+  response: string;
 }
 
 export interface ReviewItem {

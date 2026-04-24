@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { resolveUserFromRequest } from '@/lib/auth';
 import { getAssignment } from '@/lib/leads-db';
-import type { LeadDetail, ReviewItem } from '@/lib/types';
+import type { LeadDetail, ReviewItem, ObjectionPair } from '@/lib/types';
 
 export async function GET(
   req: NextRequest,
@@ -50,6 +50,14 @@ export async function GET(
     avoid_topics: toStringArray(n.avoid_topics),
     hero_headline: (n.hero_headline as string | null) ?? null,
     cta_text: (n.cta_text as string | null) ?? null,
+    // Sales-brief extensions
+    hook: (n.hook as string | null) ?? null,
+    opener: (n.opener as string | null) ?? null,
+    demo_moments: toStringArray(n.demo_moments),
+    specific_objections: toObjections(n.specific_objections),
+    close_script: (n.close_script as string | null) ?? null,
+    next_visit_reason: (n.next_visit_reason as string | null) ?? null,
+    pain_points_extended: (n.pain_points_extended as string | null) ?? null,
     notes: (n.user_notes as string | null) ?? null,
     commission_amount: row.commission_amount,
     visited_at: row.visited_at,
@@ -74,6 +82,16 @@ function safeParse<T>(val: string | null | undefined, fallback: T): T {
 }
 function toStringArray(v: unknown): string[] {
   return Array.isArray(v) ? v.filter((x) => typeof x === 'string') : [];
+}
+function toObjections(v: unknown): ObjectionPair[] {
+  if (!Array.isArray(v)) return [];
+  return v
+    .filter((x) => x && typeof x === 'object')
+    .map((x) => ({
+      objection: String((x as any).objection ?? ''),
+      response: String((x as any).response ?? ''),
+    }))
+    .filter((p) => p.objection.length > 0);
 }
 function toReviews(v: unknown): ReviewItem[] {
   if (!Array.isArray(v)) return [];
