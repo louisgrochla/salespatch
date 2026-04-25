@@ -18,13 +18,55 @@ export async function GET(req: NextRequest) {
   if (denied) return denied;
 
   const sb = getSupabaseServer();
-  const { data, error } = await sb
-    .from('sales_users')
-    .select('id, name, phone, area_postcode, active, created_at, last_active_at')
-    .order('created_at', { ascending: false });
+  const [usersRes, assignmentsRes] = await Promise.all([
+    sb
+      .from('sales_users')
+      .select('id, name, email, phone, area_postcode, commission_rate, active, device_type, created_at, last_active_at')
+      .order('created_at', { ascending: false }),
+    sb
+      .from('lead_assignments')
+      .select('user_id, status, commission_amount, assigned_at, visited_at, pitched_at, sold_at, rejected_at'),
+  ]);
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json({ data: data ?? [] });
+  if (usersRes.error) return NextResponse.json({ error: usersRes.error.message }, { status: 500 });
+
+  const assignments = (assignmentsRes.data ?? []) as Array<Record<string, unknown>>;
+  const byUser = new Map<string, Array<Record<string, unknown>>>();
+  for (const a of assignments) {
+    const uid = String(a.user_id);
+    const arr = byUser.get(uid) ?? [];
+    arr.push(a);
+    byUser.set(uid, arr);
+  }
+
+  const enriched = (usersRes.data ?? []).map((u) => {
+    const rows = byUser.get(u.id as string) ?? [];
+    const stats = {
+      total_assigned: rows.length,
+      new: rows.filter((r) => r.status === 'new').length,
+      visited: rows.filter((r) => r.status === 'visited').length,
+      pitched: rows.filter((r) => r.status === 'pitched').length,
+      sold: rows.filter((r) => r.status === 'sold').length,
+      rejected: rows.filter((r) => r.status === 'rejected').length,
+      total_commission: rows.reduce((acc, r) => acc + (typeof r.commission_amount === 'number' ? r.commission_amount : 0), 0),
+      last_activity_at: latestTimestamp(rows),
+    };
+    return { ...u, stats };
+  });
+
+  return NextResponse.json({ data: enriched });
+}
+
+function latestTimestamp(rows: Array<Record<string, unknown>>): string | null {
+  let latest: string | null = null;
+  const fields = ['sold_at', 'pitched_at', 'visited_at', 'rejected_at', 'assigned_at'];
+  for (const r of rows) {
+    for (const f of fields) {
+      const v = r[f];
+      if (typeof v === 'string' && (!latest || v > latest)) latest = v;
+    }
+  }
+  return latest;
 }
 
 /**

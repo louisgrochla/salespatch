@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import {
   PageHero,
   Card,
@@ -10,11 +11,14 @@ import {
   PrimaryButton,
   GhostButton,
   EmptyState,
+  StatCell,
   CREAM,
   CREAM_DIM,
   CREAM_MUTED,
   SIGNAL,
   BG_CARD,
+  BG_STRONG,
+  BG_HOVER,
   LINE,
   LINE2,
   DISPLAY_FONT,
@@ -22,14 +26,29 @@ import {
   ERR,
 } from '@/lib/brand';
 
+interface UserStats {
+  total_assigned: number;
+  new: number;
+  visited: number;
+  pitched: number;
+  sold: number;
+  rejected: number;
+  total_commission: number;
+  last_activity_at: string | null;
+}
+
 interface Salesperson {
   id: string;
   name: string;
+  email: string | null;
   phone: string | null;
   area_postcode: string | null;
+  commission_rate: number;
   active: boolean;
+  device_type: string | null;
   created_at: string;
   last_active_at?: string | null;
+  stats?: UserStats;
 }
 
 interface JustCreated {
@@ -39,6 +58,7 @@ interface JustCreated {
 }
 
 export default function AdminUsersPage() {
+  const router = useRouter();
   const [users, setUsers] = useState<Salesperson[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -236,7 +256,30 @@ export default function AdminUsersPage() {
         </div>
       </div>
 
-      <Section eyebrow="All contractors" title="The bench" className="mt-16">
+      {/* Overview ribbon — only when we have users */}
+      {users.length > 0 && (
+        <div
+          className="grid grid-cols-2 md:grid-cols-4 rounded-2xl overflow-hidden mt-16"
+          style={{ background: BG_STRONG, border: `1px solid ${LINE}` }}
+        >
+          <StatCell label="Contractors" value={users.length} />
+          <StatCell label="Active" value={users.filter((u) => u.active).length} />
+          <StatCell
+            label="Leads handed out"
+            value={users.reduce((a, u) => a + (u.stats?.total_assigned ?? 0), 0)}
+          />
+          <StatCell
+            label="Earned this month"
+            value={users
+              .reduce((a, u) => a + (u.stats?.total_commission ?? 0), 0)
+              .toLocaleString()}
+            prefix="£"
+            accent
+          />
+        </div>
+      )}
+
+      <Section eyebrow="All contractors" title="The bench" className="mt-10">
         {loading ? (
           <p
             className="text-[12px] uppercase"
@@ -253,44 +296,85 @@ export default function AdminUsersPage() {
         ) : (
           <Card padding="none">
             <div
-              className="grid grid-cols-[1fr_140px_160px_120px_90px] gap-4 px-5 py-3 text-[10.5px] uppercase"
+              className="grid grid-cols-[1.4fr_90px_140px_120px_140px_110px_90px] gap-4 px-5 py-3 text-[10.5px] uppercase"
               style={{ fontFamily: MONO_FONT, letterSpacing: '0.14em', color: CREAM_MUTED, borderBottom: `1px solid ${LINE}` }}
             >
               <span>Name</span>
-              <span>Postcode</span>
+              <span>Patch</span>
               <span>Phone</span>
-              <span>Joined</span>
+              <span>Last active</span>
+              <span>Leads</span>
+              <span>Earned</span>
               <span>Status</span>
             </div>
-            {users.map((u, i) => (
-              <div
-                key={u.id}
-                className="grid grid-cols-[1fr_140px_160px_120px_90px] gap-4 px-5 py-3.5"
-                style={{ borderBottom: i === users.length - 1 ? 'none' : `1px solid ${LINE2}` }}
-              >
-                <span className="text-[14.5px]" style={{ color: CREAM, fontFamily: DISPLAY_FONT, fontWeight: 500 }}>
-                  {u.name}
-                </span>
-                <span className="text-[13px]" style={{ color: CREAM_DIM, fontFamily: MONO_FONT }}>
-                  {u.area_postcode ?? '—'}
-                </span>
-                <span className="text-[13px]" style={{ color: CREAM_DIM, fontFamily: MONO_FONT }}>
-                  {u.phone ?? '—'}
-                </span>
-                <span
-                  className="text-[12px]"
-                  style={{ color: CREAM_MUTED, fontFamily: MONO_FONT, letterSpacing: '0.04em' }}
+            {users.map((u, i) => {
+              const sold = u.stats?.sold ?? 0;
+              const earned = u.stats?.total_commission ?? 0;
+              return (
+                <div
+                  key={u.id}
+                  onClick={() => router.push(`/admin/users/${u.id}`)}
+                  className="grid grid-cols-[1.4fr_90px_140px_120px_140px_110px_90px] gap-4 px-5 py-3.5 cursor-pointer transition-colors"
+                  style={{ borderBottom: i === users.length - 1 ? 'none' : `1px solid ${LINE2}` }}
+                  onMouseEnter={(e) => (e.currentTarget.style.background = BG_HOVER)}
+                  onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
                 >
-                  {formatDate(u.created_at)}
-                </span>
-                <span
-                  className="text-[11px] uppercase"
-                  style={{ fontFamily: MONO_FONT, letterSpacing: '0.14em', color: u.active ? SIGNAL : CREAM_MUTED }}
-                >
-                  {u.active ? 'Active' : 'Paused'}
-                </span>
-              </div>
-            ))}
+                  <div className="min-w-0">
+                    <p
+                      className="m-0 text-[14.5px] truncate"
+                      style={{ color: CREAM, fontFamily: DISPLAY_FONT, fontWeight: 500, letterSpacing: '-0.015em' }}
+                    >
+                      {u.name}
+                    </p>
+                    <p
+                      className="m-0 text-[12px] mt-0.5 truncate"
+                      style={{ color: CREAM_MUTED, fontFamily: MONO_FONT, letterSpacing: '0.04em' }}
+                    >
+                      {u.email ?? formatDate(u.created_at)}
+                    </p>
+                  </div>
+                  <span className="text-[13px] self-center" style={{ color: CREAM_DIM, fontFamily: MONO_FONT }}>
+                    {u.area_postcode ?? '—'}
+                  </span>
+                  <span
+                    className="text-[12.5px] self-center truncate"
+                    style={{ color: CREAM_DIM, fontFamily: MONO_FONT, letterSpacing: '0.04em' }}
+                  >
+                    {u.phone ?? '—'}
+                  </span>
+                  <span
+                    className="text-[12px] self-center"
+                    style={{ color: CREAM_MUTED, fontFamily: MONO_FONT, letterSpacing: '0.06em' }}
+                  >
+                    {relTime(u.last_active_at) ?? '—'}
+                  </span>
+                  <span
+                    className="text-[12.5px] self-center"
+                    style={{ color: CREAM_DIM, fontFamily: MONO_FONT, letterSpacing: '0.04em' }}
+                  >
+                    {(u.stats?.total_assigned ?? 0)} assigned
+                    {sold > 0 && (
+                      <>
+                        {' · '}
+                        <span style={{ color: SIGNAL }}>{sold} sold</span>
+                      </>
+                    )}
+                  </span>
+                  <span
+                    className="text-[14px] self-center"
+                    style={{ fontFamily: DISPLAY_FONT, fontWeight: 500, color: earned > 0 ? SIGNAL : CREAM_DIM }}
+                  >
+                    £{earned.toLocaleString()}
+                  </span>
+                  <span
+                    className="text-[11px] uppercase self-center"
+                    style={{ fontFamily: MONO_FONT, letterSpacing: '0.14em', color: u.active ? SIGNAL : CREAM_MUTED }}
+                  >
+                    {u.active ? 'Active' : 'Paused'}
+                  </span>
+                </div>
+              );
+            })}
           </Card>
         )}
       </Section>
@@ -341,4 +425,18 @@ function formatDate(iso: string | null | undefined): string {
 
 function randomPin(): string {
   return String(Math.floor(1000 + Math.random() * 9000));
+}
+
+function relTime(iso: string | null | undefined): string | null {
+  if (!iso) return null;
+  const t = new Date(iso).getTime();
+  if (Number.isNaN(t)) return null;
+  const diffSec = Math.floor((Date.now() - t) / 1000);
+  if (diffSec < 60) return 'JUST NOW';
+  if (diffSec < 3600) return `${Math.floor(diffSec / 60)}M AGO`;
+  if (diffSec < 86400) return `${Math.floor(diffSec / 3600)}H AGO`;
+  const days = Math.floor(diffSec / 86400);
+  if (days < 7) return `${days}D AGO`;
+  if (days < 30) return `${Math.floor(days / 7)}W AGO`;
+  return new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }).toUpperCase();
 }
