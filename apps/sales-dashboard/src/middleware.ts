@@ -1,6 +1,25 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-const PUBLIC_PATHS = ['/login', '/signup', '/api/auth/login', '/api/auth/signup', '/api/auth/demo', '/demo', '/api/demo-links', '/api/demo-site', '/legal', '/site', '/admin', '/api/admin'];
+const PUBLIC_PATHS = [
+  '/login',
+  '/signup',
+  '/api/auth/login',
+  '/api/auth/signup',
+  '/api/auth/demo',
+  '/demo',
+  '/api/demo-links',
+  '/api/demo-site',
+  '/legal',
+  '/site',
+  '/admin',
+  '/api/admin',
+  // Customer-facing payment flow — no auth, public.
+  '/preview',
+  '/onboarding',
+  '/paid',
+  '/api/payments/webhook',
+  '/api/onboarding',
+];
 
 export function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
