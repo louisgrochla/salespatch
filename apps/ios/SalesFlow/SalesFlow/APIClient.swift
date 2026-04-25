@@ -202,6 +202,36 @@ struct CreateCheckoutResponse: Decodable {
     let session_expires_at: String
 }
 
+struct LeadStatusResponse: Decodable {
+    let status: String                      // 'new' | 'visited' | 'pitched' | 'sold' | 'rejected'
+    let sold_at: String?
+    let commission_amount: Double?          // legacy, in pounds
+    let commission_amount_pence: Int?       // canonical, in pence
+}
+
+extension APIClient {
+    /// Slim status poll — used during the QR sheet to detect the sold
+    /// transition. Hits the sales-dashboard so it sees the latest webhook
+    /// state (mobile-api's SQLite copy lags).
+    func fetchLeadStatus(id: String) async throws -> LeadStatusResponse {
+        guard let url = URL(string: dashboardBaseURL + "/api/leads/\(id)/status") else {
+            throw URLError(.badURL)
+        }
+        var req = URLRequest(url: url)
+        req.httpMethod = "GET"
+        if let tok = token {
+            req.setValue("Bearer \(tok)", forHTTPHeaderField: "Authorization")
+        }
+        let (data, response) = try await URLSession.shared.data(for: req)
+        guard let http = response as? HTTPURLResponse else { throw URLError(.badServerResponse) }
+        if !(200..<300).contains(http.statusCode) {
+            let msg = (try? decoder.decode(APIError.self, from: data))?.error ?? "HTTP \(http.statusCode)"
+            throw SalesFlowError.server(msg)
+        }
+        return try decoder.decode(LeadStatusResponse.self, from: data)
+    }
+}
+
 // MARK: — Error type
 enum SalesFlowError: LocalizedError {
     case server(String)

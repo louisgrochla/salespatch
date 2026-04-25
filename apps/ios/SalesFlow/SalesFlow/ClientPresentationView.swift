@@ -24,6 +24,12 @@ struct ClientPresentationView: View {
     // raw demo URL if createCheckout fails (offline / auth / backend error).
     @State private var previewURL: String?
 
+    // Sold-detection: poll lead status every 3s while share sheet is up.
+    // When status flips to 'sold', show the celebratory paid state.
+    @State private var pollingTask: Task<Void, Never>?
+    @State private var isPaid = false
+    @State private var commissionEarnedPence: Int?
+
     var body: some View {
         ZStack(alignment: .top) {
 
@@ -175,16 +181,58 @@ struct ClientPresentationView: View {
         // routes the customer through salespatch.co.uk/preview which has the
         // sticky payment CTA). Fall back to the raw demo URL with a defensive
         // hasPrefix("http") check that fixes the historic doubled-https bug.
-        .sheet(isPresented: $showShareSheet) {
+        .sheet(isPresented: $showShareSheet, onDismiss: { stopPolling() }) {
             DemoShareSheet(
                 businessName: businessName,
                 demoURL: previewURL ?? normalisedDomainURL(domain)
+            )
+            .onAppear { startPolling() }
+        }
+
+        // Celebratory paid overlay — full-screen "✓ Paid · £X" state once the
+        // webhook has flipped the lead to sold and the polling task picked it
+        // up. Auto-dismisses the share sheet first.
+        .fullScreenCover(isPresented: $isPaid) {
+            PaidCelebrationView(
+                businessName: businessName,
+                commissionPence: commissionEarnedPence ?? 0,
+                onClose: {
+                    isPaid = false
+                    dismiss()
+                }
             )
         }
     }
 
     private func normalisedDomainURL(_ raw: String) -> String {
         raw.hasPrefix("http") ? raw : "https://\(raw)"
+    }
+
+    // MARK: — Polling
+
+    private func startPolling() {
+        pollingTask?.cancel()
+        pollingTask = Task {
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 3_000_000_000) // 3s
+                guard !Task.isCancelled else { break }
+                if let r = try? await APIClient.shared.fetchLeadStatus(id: leadAssignmentId),
+                   r.status == "sold" {
+                    await MainActor.run {
+                        commissionEarnedPence = r.commission_amount_pence
+                            ?? Int(((r.commission_amount ?? 0) * 100).rounded())
+                        showShareSheet = false   // dismiss QR sheet
+                        isPaid = true            // present celebration
+                    }
+                    break
+                }
+            }
+        }
+    }
+
+    private func stopPolling() {
+        pollingTask?.cancel()
+        pollingTask = nil
     }
 
     private func forceCache() async {
