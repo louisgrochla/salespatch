@@ -63,6 +63,24 @@ export function getStripeWebhookSecret(): string {
   return secret;
 }
 
+/**
+ * Stripe Price ID for the £25/mo "Hosting & support" subscription.
+ *
+ * Must be set up once in the Stripe Dashboard per mode:
+ *   STRIPE_TEST_HOSTING_PRICE_ID  — for STRIPE_MODE=test
+ *   STRIPE_HOSTING_PRICE_ID       — for STRIPE_MODE=live
+ *
+ * The webhook reads this when creating the £25/mo subscription after a
+ * successful £350 setup payment. If unset, the subscription is skipped and
+ * the £350 still captures — ops can manually attach a subscription.
+ */
+export function getStripeHostingPriceId(): string | null {
+  const mode = getStripeMode();
+  const envName =
+    mode === 'test' ? 'STRIPE_TEST_HOSTING_PRICE_ID' : 'STRIPE_HOSTING_PRICE_ID';
+  return process.env[envName] ?? null;
+}
+
 export function getStripe(): Stripe {
   const mode = getStripeMode();
   if (_client && _clientMode === mode) return _client;
