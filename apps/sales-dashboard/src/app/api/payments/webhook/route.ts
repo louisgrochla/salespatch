@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import Stripe from 'stripe'; // kept for type references (Stripe.Event, Stripe.Checkout.Session)
 import { createClient } from '@supabase/supabase-js';
 import { getStripe, getStripeWebhookSecret } from '@/lib/stripe';
+import { claimStripeEvent, markStripeEventProcessed } from '@/lib/stripe-events';
 
 const COMMISSION_GBP = 5000; // £50 in pence
 
@@ -38,15 +39,37 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: message }, { status: 400 });
   }
 
+  // Idempotency: claim the event before processing. If Stripe retries the
+  // same event_id, the claim returns 'already_processed' and we no-op with 200.
+  const supabase = getSupabase();
+  let claim: 'claimed' | 'already_processed';
+  try {
+    claim = await claimStripeEvent(supabase, event.id, event.type);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Idempotency check failed';
+    console.error('[payments/webhook] Idempotency claim failed:', message);
+    // Returning 500 makes Stripe retry, which is correct: we'd rather retry
+    // than silently lose the event when the DB is unreachable.
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
+
+  if (claim === 'already_processed') {
+    console.log(`[payments/webhook] Skipping duplicate event ${event.id} (${event.type})`);
+    return NextResponse.json({ received: true, duplicate: true });
+  }
+
   try {
     if (event.type === 'checkout.session.completed') {
       const session = event.data.object as Stripe.Checkout.Session;
       await handleCheckoutCompleted(session);
     }
+    await markStripeEventProcessed(supabase, event.id);
     return NextResponse.json({ received: true });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Webhook handler error';
     console.error('[payments/webhook] Handler error:', message);
+    // Handler failed; processed_at stays NULL so Stripe's retry will re-claim
+    // and run the handler again. Returning 500 makes Stripe retry sooner.
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
