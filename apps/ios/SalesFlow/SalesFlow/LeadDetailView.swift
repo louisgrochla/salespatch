@@ -403,7 +403,7 @@ struct LeadDetailView: View {
                 }
                 .buttonStyle(.plain)
                 .fullScreenCover(isPresented: $showClientPresentation) {
-                    ClientPresentationView(domain: domain, businessName: lead.businessName)
+                    ClientPresentationView(domain: domain, businessName: lead.businessName, leadAssignmentId: lead.id)
                 }
             }
 

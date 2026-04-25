@@ -12,6 +12,16 @@ final class APIClient {
     private let baseURL = "http://100.66.206.3:4350"  // Mac Tailscale IP (dev)
     #endif
 
+    // Sales-dashboard (Next.js) base URL — different host from mobile-api.
+    // Used for customer-facing payment endpoints (`/api/payments/*`) which
+    // live in the dashboard app. Same Bearer token (HMAC over SD_SECRET) works
+    // on both hosts.
+    #if targetEnvironment(simulator)
+    private let dashboardBaseURL = "http://localhost:4300"
+    #else
+    private let dashboardBaseURL = "https://salespatch.co.uk"
+    #endif
+
     var token: String?
 
     private var decoder: JSONDecoder {
@@ -151,6 +161,45 @@ final class APIClient {
         let data = try await request(path: "/stats")
         return try decoder.decode(Stats.self, from: data)
     }
+
+    // MARK: — Payments
+    // Eager Stripe Checkout session creation. Body is { lead_id }, where
+    // lead_id is the lead_assignment.id. Backend creates (or reuses) an
+    // active session and returns the customer-facing preview URL plus the
+    // direct Stripe Checkout URL.
+    //
+    // Hits the sales-dashboard host (dashboardBaseURL), NOT the mobile-api.
+    // Returns: preview_url, checkout_url, session_id, session_expires_at.
+    func createCheckout(leadId: String) async throws -> CreateCheckoutResponse {
+        guard let url = URL(string: dashboardBaseURL + "/api/payments/create-checkout") else {
+            throw URLError(.badURL)
+        }
+        var req = URLRequest(url: url)
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        if let tok = token {
+            req.setValue("Bearer \(tok)", forHTTPHeaderField: "Authorization")
+        }
+        struct Body: Encodable { let lead_id: String }
+        req.httpBody = try JSONEncoder().encode(Body(lead_id: leadId))
+
+        let (data, response) = try await URLSession.shared.data(for: req)
+        guard let http = response as? HTTPURLResponse else { throw URLError(.badServerResponse) }
+        if !(200..<300).contains(http.statusCode) {
+            let msg = (try? decoder.decode(APIError.self, from: data))?.error ?? "HTTP \(http.statusCode)"
+            throw SalesFlowError.server(msg)
+        }
+        return try decoder.decode(CreateCheckoutResponse.self, from: data)
+    }
+}
+
+// MARK: — Payments DTO
+
+struct CreateCheckoutResponse: Decodable {
+    let preview_url: String
+    let checkout_url: String
+    let session_id: String
+    let session_expires_at: String
 }
 
 // MARK: — Error type

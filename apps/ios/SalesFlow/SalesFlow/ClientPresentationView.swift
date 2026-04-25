@@ -9,6 +9,7 @@ import WebKit
 struct ClientPresentationView: View {
     let domain: String
     let businessName: String
+    let leadAssignmentId: String
 
     @Environment(\.dismiss) private var dismiss
     @StateObject private var network = NetworkMonitor.shared
@@ -18,6 +19,10 @@ struct ClientPresentationView: View {
     @State private var showShareSheet = false
     @State private var isCached = false
     @State private var isCaching = false
+
+    // Preview URL fetched lazily on first share-sheet open. Falls back to the
+    // raw demo URL if createCheckout fails (offline / auth / backend error).
+    @State private var previewURL: String?
 
     var body: some View {
         ZStack(alignment: .top) {
@@ -110,7 +115,20 @@ struct ClientPresentationView: View {
                 Spacer()
                 HStack {
                     Spacer()
-                    Button(action: { showShareSheet = true }) {
+                    Button(action: {
+                        Task {
+                            // Fetch the preview URL first if we don't have one cached.
+                            // Sets eager-attribution metadata into Stripe (salesperson_id)
+                            // BEFORE the customer scans, so commission attribution is
+                            // unambiguous when payment lands.
+                            if previewURL == nil {
+                                if let r = try? await APIClient.shared.createCheckout(leadId: leadAssignmentId) {
+                                    previewURL = r.preview_url
+                                }
+                            }
+                            showShareSheet = true
+                        }
+                    }) {
                         Image(systemName: "square.and.arrow.up")
                             .font(.system(size: 16, weight: .semibold))
                             .foregroundStyle(.white)
@@ -153,13 +171,20 @@ struct ClientPresentationView: View {
             GetWebsiteSheet(businessName: businessName)
         }
 
-        // Share sheet
+        // Share sheet — use the preview URL if we have one (preferred —
+        // routes the customer through salespatch.co.uk/preview which has the
+        // sticky payment CTA). Fall back to the raw demo URL with a defensive
+        // hasPrefix("http") check that fixes the historic doubled-https bug.
         .sheet(isPresented: $showShareSheet) {
             DemoShareSheet(
                 businessName: businessName,
-                demoURL: "https://\(domain)"
+                demoURL: previewURL ?? normalisedDomainURL(domain)
             )
         }
+    }
+
+    private func normalisedDomainURL(_ raw: String) -> String {
+        raw.hasPrefix("http") ? raw : "https://\(raw)"
     }
 
     private func forceCache() async {
@@ -377,6 +402,7 @@ private struct ClientWebView: UIViewRepresentable {
 #Preview {
     ClientPresentationView(
         domain: "barber-co.salesflow.site",
-        businessName: "Barber & Co"
+        businessName: "Barber & Co",
+        leadAssignmentId: "preview-lead-id"
     )
 }

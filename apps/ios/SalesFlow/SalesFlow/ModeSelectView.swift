@@ -161,7 +161,7 @@ struct ModeSelectView: View {
         }
         .fullScreenCover(item: $presentationLead) { lead in
             if let domain = lead.demoSiteDomain {
-                ClientPresentationView(domain: domain, businessName: lead.businessName)
+                ClientPresentationView(domain: domain, businessName: lead.businessName, leadAssignmentId: lead.id)
             }
         }
     }
