@@ -1,30 +1,81 @@
 /**
- * Lazy Stripe client accessor.
+ * Stripe client — mode-aware (test vs live).
  *
- * Initialising Stripe at module-load time (the `new Stripe(process.env...!)`
- * pattern) throws during Vercel's "Collecting page data" build step if
- * STRIPE_SECRET_KEY isn't set, killing the whole build. We defer the
- * instantiation to the first request so:
- *   - builds never fail on missing Stripe credentials
- *   - non-payment routes are untouched when payments aren't configured
- *   - payment routes return a clean 503 instead of a build-time crash
+ * STRIPE_MODE=test → uses STRIPE_TEST_* env vars (sk_test_…)
+ * STRIPE_MODE=live (default) → uses STRIPE_* env vars (sk_live_…)
+ *
+ * The mode/key prefix check is defence-in-depth: if STRIPE_MODE=test but
+ * the key starts with sk_live_, we refuse to instantiate. This stops
+ * "accidentally charged a real card in dev" failures cold.
+ *
+ * Lazy instantiation — initialising at module-load throws during Vercel's
+ * "Collecting page data" build step if env is missing. We defer to first
+ * request so non-payment routes are unaffected when Stripe isn't configured.
  */
 import Stripe from 'stripe';
 
-let _client: Stripe | null = null;
+export type StripeMode = 'test' | 'live';
 
-export function getStripe(): Stripe {
-  if (_client) return _client;
-  const key = process.env.STRIPE_SECRET_KEY;
+let _client: Stripe | null = null;
+let _clientMode: StripeMode | null = null;
+
+export function getStripeMode(): StripeMode {
+  const raw = process.env.STRIPE_MODE ?? 'live';
+  if (raw !== 'test' && raw !== 'live') {
+    throw new Error(`Invalid STRIPE_MODE: "${raw}". Must be 'test' or 'live'.`);
+  }
+  return raw;
+}
+
+export function getStripeSecretKey(): string {
+  const mode = getStripeMode();
+  const envName = mode === 'test' ? 'STRIPE_TEST_SECRET_KEY' : 'STRIPE_SECRET_KEY';
+  const key = process.env[envName];
   if (!key) {
+    throw new Error(`${envName} is not set (STRIPE_MODE=${mode}).`);
+  }
+  const expectedPrefix = mode === 'test' ? 'sk_test_' : 'sk_live_';
+  if (!key.startsWith(expectedPrefix)) {
     throw new Error(
-      'STRIPE_SECRET_KEY is not set. Payment routes require Stripe credentials.',
+      `${envName} does not start with ${expectedPrefix} (STRIPE_MODE=${mode}). Refusing to use.`,
     );
   }
-  _client = new Stripe(key);
+  return key;
+}
+
+export function getStripePublishableKey(): string | null {
+  const mode = getStripeMode();
+  const key =
+    mode === 'test'
+      ? process.env.STRIPE_TEST_PUBLISHABLE_KEY
+      : process.env.STRIPE_PUBLISHABLE_KEY;
+  return key ?? null;
+}
+
+export function getStripeWebhookSecret(): string {
+  const mode = getStripeMode();
+  const envName =
+    mode === 'test' ? 'STRIPE_TEST_WEBHOOK_SECRET' : 'STRIPE_WEBHOOK_SECRET';
+  const secret = process.env[envName];
+  if (!secret) {
+    throw new Error(`${envName} is not set (STRIPE_MODE=${mode}).`);
+  }
+  return secret;
+}
+
+export function getStripe(): Stripe {
+  const mode = getStripeMode();
+  if (_client && _clientMode === mode) return _client;
+  _client = new Stripe(getStripeSecretKey());
+  _clientMode = mode;
   return _client;
 }
 
 export function isStripeConfigured(): boolean {
-  return !!process.env.STRIPE_SECRET_KEY;
+  try {
+    getStripeSecretKey();
+    return true;
+  } catch {
+    return false;
+  }
 }

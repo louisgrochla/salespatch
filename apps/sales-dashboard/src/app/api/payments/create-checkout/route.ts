@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getStripeSecretKey } from '@/lib/stripe';
 
 const SETUP_FEE_PENCE = 34999; // £349.99 one-time
 const MONTHLY_PENCE = 2500;    // £25/month (starts 30 days after payment)
@@ -15,9 +16,12 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const stripeKey = process.env.STRIPE_SECRET_KEY;
-    if (!stripeKey) {
-      return NextResponse.json({ error: 'Stripe not configured' }, { status: 500 });
+    let stripeKey: string;
+    try {
+      stripeKey = getStripeSecretKey();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Stripe not configured';
+      return NextResponse.json({ error: message }, { status: 500 });
     }
 
     const origin = req.headers.get('origin') ?? 'https://salesflow-sigma.vercel.app';

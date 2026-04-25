@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import Stripe from 'stripe'; // kept for type references (Stripe.Event, Stripe.Checkout.Session)
 import { createClient } from '@supabase/supabase-js';
-import { getStripe } from '@/lib/stripe';
+import { getStripe, getStripeWebhookSecret } from '@/lib/stripe';
 
 const COMMISSION_GBP = 5000; // £50 in pence
 
@@ -24,9 +24,12 @@ export async function POST(req: NextRequest) {
   let event: Stripe.Event;
   try {
     const rawBody = await req.text();
-    const secret = process.env.STRIPE_WEBHOOK_SECRET;
-    if (!secret) {
-      return NextResponse.json({ error: 'Webhook secret not configured' }, { status: 500 });
+    let secret: string;
+    try {
+      secret = getStripeWebhookSecret();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Webhook secret not configured';
+      return NextResponse.json({ error: message }, { status: 500 });
     }
     event = getStripe().webhooks.constructEvent(rawBody, signature, secret);
   } catch (err: unknown) {
