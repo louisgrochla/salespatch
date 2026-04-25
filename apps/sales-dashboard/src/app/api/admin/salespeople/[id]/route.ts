@@ -24,7 +24,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
   const [userRes, leadsRes] = await Promise.all([
     sb
       .from('sales_users')
-      .select('id, name, email, phone, area_postcode, commission_rate, active, device_type, created_at, last_active_at')
+      .select('id, name, email, phone, area_postcode, commission_rate, commission_amount_pence, active, device_type, created_at, last_active_at')
       .eq('id', params.id)
       .maybeSingle(),
     sb
@@ -108,15 +108,21 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
 
 /**
  * PATCH /api/admin/salespeople/[id] — admin actions on a user.
- * Body: { active?: boolean, pin?: string }
+ * Body: { active?: boolean, pin?: string, commission_amount_pence?: number }
  *   - active: enable/disable the user (login fails if false).
  *   - pin: reset their PIN (returned ONCE so admin can share).
+ *   - commission_amount_pence: flat commission per confirmed sale, in pence.
+ *     0..100000 (£0..£1000). Default for new contractors is 15000 (£150).
  */
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
   const denied = requireAdmin(req);
   if (denied) return denied;
 
-  const body = (await req.json()) as { active?: boolean; pin?: string };
+  const body = (await req.json()) as {
+    active?: boolean;
+    pin?: string;
+    commission_amount_pence?: number;
+  };
   const sb = getSupabaseServer();
 
   const update: Record<string, unknown> = {};
@@ -127,6 +133,16 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
       return NextResponse.json({ error: 'PIN must be 4–6 digits' }, { status: 400 });
     }
     update.pin_hash = hashPin(pin);
+  }
+  if (typeof body.commission_amount_pence === 'number') {
+    const v = Math.round(body.commission_amount_pence);
+    if (!Number.isFinite(v) || v < 0 || v > 100000) {
+      return NextResponse.json(
+        { error: 'commission_amount_pence must be 0..100000 (£0..£1000)' },
+        { status: 400 },
+      );
+    }
+    update.commission_amount_pence = v;
   }
 
   if (Object.keys(update).length === 0) {

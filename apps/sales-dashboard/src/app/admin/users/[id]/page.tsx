@@ -71,6 +71,7 @@ interface UserDetail {
     phone: string | null;
     area_postcode: string | null;
     commission_rate: number;
+    commission_amount_pence: number | null;
     active: boolean;
     device_type: string | null;
     created_at: string;
@@ -102,6 +103,10 @@ export default function AdminUserDetailPage() {
   const [resetPinResult, setResetPinResult] = useState<string | null>(null);
   const [actionBusy, setActionBusy] = useState(false);
 
+  // Commission editing
+  const [commissionPounds, setCommissionPounds] = useState<string>('');
+  const [commissionSaved, setCommissionSaved] = useState(false);
+
   const load = async () => {
     setLoading(true);
     const res = await fetch(`/api/admin/salespeople/${id}`);
@@ -117,11 +122,38 @@ export default function AdminUserDetailPage() {
       return;
     }
     setData(json.data);
+    // Default the editable input to whatever's in the DB (or 150 if null).
+    const pence = json.data?.user?.commission_amount_pence ?? 15000;
+    setCommissionPounds(String(Math.round(pence) / 100));
     setLoading(false);
   };
   useEffect(() => {
     load();
   }, [id]);
+
+  const saveCommission = async () => {
+    const pounds = parseFloat(commissionPounds);
+    if (!Number.isFinite(pounds) || pounds < 0 || pounds > 1000) {
+      setErr('Commission must be £0–£1000.');
+      return;
+    }
+    const pence = Math.round(pounds * 100);
+    setActionBusy(true);
+    const res = await fetch(`/api/admin/salespeople/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ commission_amount_pence: pence }),
+    });
+    setActionBusy(false);
+    if (!res.ok) {
+      const j = await res.json();
+      setErr(j.error ?? 'Save failed.');
+      return;
+    }
+    setCommissionSaved(true);
+    setTimeout(() => setCommissionSaved(false), 2000);
+    load();
+  };
 
   const toggleActive = async () => {
     if (!data) return;
@@ -405,7 +437,6 @@ export default function AdminUserDetailPage() {
               <Row label="Phone" value={user.phone ?? '—'} mono />
               <Row label="Email" value={user.email ?? '—'} />
               <Row label="Patch postcode" value={user.area_postcode ?? '—'} mono />
-              <Row label="Commission" value={`${Math.round(user.commission_rate * 100)}% · £${50} per close`} />
               <Row label="Device" value={user.device_type ?? 'Not signed in yet'} />
               <Row label="Joined" value={formatDate(user.created_at)} mono />
               <Row label="Last active" value={user.last_active_at ? `${relTime(user.last_active_at)} · ${formatDate(user.last_active_at)}` : 'Never'} mono />
@@ -413,6 +444,61 @@ export default function AdminUserDetailPage() {
                 <Row label="Avg days to close" value={`${stats.avg_days_to_close} days`} mono />
               )}
             </div>
+          </Card>
+
+          <Card padding="lg">
+            <Eyebrow accent>Commission</Eyebrow>
+            <p className="text-[13px] mb-4" style={{ color: CREAM_DIM, lineHeight: 1.55 }}>
+              Flat amount paid to this contractor per confirmed sale (£350 setup
+              charge). Applied at the moment Stripe confirms payment — never on
+              QR scan.
+            </p>
+            <div className="flex gap-2 items-stretch mb-3">
+              <div
+                className="px-3 flex items-center text-[16px]"
+                style={{
+                  background: BG_CARD,
+                  border: `1px solid ${LINE}`,
+                  borderRight: 'none',
+                  borderRadius: '12px 0 0 12px',
+                  color: CREAM_DIM,
+                }}
+              >
+                £
+              </div>
+              <input
+                type="text"
+                inputMode="decimal"
+                value={commissionPounds}
+                onChange={(e) =>
+                  setCommissionPounds(e.target.value.replace(/[^0-9.]/g, '').slice(0, 7))
+                }
+                placeholder="150"
+                className="flex-1 px-3 py-3 text-[16px] outline-none"
+                style={{
+                  background: BG_CARD,
+                  border: `1px solid ${LINE}`,
+                  borderRadius: '0 12px 12px 0',
+                  color: CREAM,
+                  fontFamily: MONO_FONT,
+                }}
+              />
+            </div>
+            <PrimaryButton
+              onClick={saveCommission}
+              disabled={actionBusy || commissionPounds === ''}
+            >
+              {actionBusy ? 'Saving…' : commissionSaved ? '✓ Saved' : 'Update commission'}
+            </PrimaryButton>
+            <p
+              className="text-[11.5px] mt-3"
+              style={{ color: CREAM_MUTED, fontFamily: MONO_FONT, letterSpacing: '0.06em' }}
+            >
+              Currently {user.commission_amount_pence != null
+                ? `£${(user.commission_amount_pence / 100).toFixed(2)}`
+                : '£150.00 (default)'}{' '}
+              per sale.
+            </p>
           </Card>
 
           <Card padding="lg">
