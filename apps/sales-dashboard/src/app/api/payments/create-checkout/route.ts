@@ -1,76 +1,91 @@
+/**
+ * POST /api/payments/create-checkout
+ *
+ * Salesperson-authenticated endpoint. Body: { lead_id: string } where lead_id
+ * is the lead_assignment.id (named "lead_id" to match iOS terminology and the
+ * customer-facing /preview/<id> URL).
+ *
+ * Returns the cached active Stripe Checkout session for this assignment, or
+ * eagerly creates one if none exists. Eager-attribution: the session has
+ * salesperson_id locked into Stripe metadata before the customer ever scans.
+ *
+ * IMPORTANT: This endpoint does NOT touch commission state. Commission only
+ * accrues inside the webhook on checkout.session.completed with
+ * payment_status='paid'. See lib/payments.ts for money model.
+ */
 import { NextRequest, NextResponse } from 'next/server';
-import { getStripeSecretKey } from '@/lib/stripe';
+import { createClient } from '@supabase/supabase-js';
+import { resolveUserFromRequest } from '@/lib/auth';
+import { getOrCreateActiveSession, previewUrlFor } from '@/lib/payments';
 
-const SETUP_FEE_PENCE = 34999; // £349.99 one-time
-const MONTHLY_PENCE = 2500;    // £25/month (starts 30 days after payment)
+export const dynamic = 'force-dynamic';
+
+function getSupabase() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    { auth: { persistSession: false, autoRefreshToken: false } },
+  );
+}
 
 export async function POST(req: NextRequest) {
+  const auth = resolveUserFromRequest(req);
+  if (!auth) {
+    return NextResponse.json({ error: 'Auth required' }, { status: 401 });
+  }
+
+  let body: Record<string, unknown>;
   try {
-    const body = await req.json();
-    const { demo_id, salesperson_id, business_name, customer_email } = body;
+    body = (await req.json()) as Record<string, unknown>;
+  } catch {
+    return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
+  }
 
-    if (!demo_id || !salesperson_id || !business_name) {
-      return NextResponse.json(
-        { error: 'Missing required fields: demo_id, salesperson_id, business_name' },
-        { status: 400 },
-      );
-    }
+  // Accept lead_id (preferred) or lead_assignment_id (explicit alias).
+  const raw = body.lead_id ?? body.lead_assignment_id;
+  const leadAssignmentId = typeof raw === 'string' ? raw : null;
+  if (!leadAssignmentId) {
+    return NextResponse.json(
+      { error: 'Missing required field: lead_id' },
+      { status: 400 },
+    );
+  }
 
-    let stripeKey: string;
-    try {
-      stripeKey = getStripeSecretKey();
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Stripe not configured';
-      return NextResponse.json({ error: message }, { status: 500 });
-    }
+  const supabase = getSupabase();
 
-    const origin = req.headers.get('origin') ?? 'https://salesflow-sigma.vercel.app';
+  // Authorisation: assignment must belong to the calling user.
+  const { data: assignment, error: aErr } = await supabase
+    .from('lead_assignments')
+    .select('id, user_id, status')
+    .eq('id', leadAssignmentId)
+    .maybeSingle();
+  if (aErr) {
+    return NextResponse.json({ error: aErr.message }, { status: 500 });
+  }
+  if (!assignment) {
+    return NextResponse.json({ error: 'Lead not found' }, { status: 404 });
+  }
+  if (assignment.user_id !== auth.user_id) {
+    return NextResponse.json({ error: 'Not your lead' }, { status: 403 });
+  }
+  if (assignment.status === 'sold') {
+    return NextResponse.json(
+      { error: 'Lead already sold' },
+      { status: 409 },
+    );
+  }
 
-    // Payment mode: client pays £349.99 now.
-    // We save their payment method (setup_future_usage) so we can create
-    // a £25/month subscription via the webhook after payment succeeds.
-    const params = new URLSearchParams();
-    params.append('ui_mode', 'embedded');
-    params.append('mode', 'payment');
-    params.append('currency', 'gbp');
-
-    // £349.99 setup fee
-    params.append('line_items[0][price_data][currency]', 'gbp');
-    params.append('line_items[0][price_data][unit_amount]', String(SETUP_FEE_PENCE));
-    params.append('line_items[0][price_data][product_data][name]', `Website for ${business_name}`);
-    params.append('line_items[0][price_data][product_data][description]', 'Custom-designed website. Includes first month of hosting & support. £25/month thereafter.');
-    params.append('line_items[0][quantity]', '1');
-
-    // Save card for future £25/month charges
-    params.append('payment_intent_data[setup_future_usage]', 'off_session');
-
-    params.append('metadata[demo_id]', demo_id);
-    params.append('metadata[salesperson_id]', salesperson_id);
-    params.append('metadata[business_name]', business_name);
-    params.append('metadata[monthly_amount]', String(MONTHLY_PENCE));
-    params.append('return_url', `${origin}/demo/${demo_id}?session_id={CHECKOUT_SESSION_ID}`);
-    if (customer_email) params.append('customer_email', customer_email);
-
-    const res = await fetch('https://api.stripe.com/v1/checkout/sessions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${stripeKey}`,
-        'Content-Type': 'application/x-www-form-urlencoded',
-      },
-      body: params.toString(),
+  try {
+    const session = await getOrCreateActiveSession(supabase, leadAssignmentId);
+    return NextResponse.json({
+      preview_url: previewUrlFor(leadAssignmentId),
+      checkout_url: session.stripe_session_url,
+      session_id: session.stripe_session_id,
+      session_expires_at: session.expires_at,
     });
-
-    const session = await res.json();
-
-    if (!res.ok) {
-      console.error('[payments/create-checkout] Stripe error:', session);
-      return NextResponse.json({ error: session.error?.message || 'Stripe error' }, { status: 500 });
-    }
-
-    return NextResponse.json({ clientSecret: session.client_secret, session_id: session.id });
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : 'Unknown error';
-    console.error('[payments/create-checkout] Error:', message);
+    const message = err instanceof Error ? err.message : 'Failed to create session';
+    console.error('[payments/create-checkout] error:', message);
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
