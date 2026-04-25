@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Changelog — SalesFlow</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800;900&family=Inter+Tight:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="shared/brand.css" />
+<style>
+.release { display: grid; grid-template-columns: 200px 1fr; gap: 48px; padding: 48px 0; border-top: 1px solid var(--line); align-items: start; }
+.release:first-of-type { border-top: 0; }
+@media (max-width: 780px) { .release { grid-template-columns: 1fr; gap: 16px; } }
+.release .date { position: sticky; top: 88px; padding-top: 4px; }
+.release .date .d { font-family: var(--display-font); font-size: 28px; letter-spacing: -0.025em; font-weight: 600; line-height: 1; color: var(--ink); }
+.release .date .m { font-family: 'JetBrains Mono', monospace; font-size: 11px; letter-spacing: 0.14em; color: var(--signal); text-transform: uppercase; margin-top: 8px; }
+.release h3 { font-family: var(--display-font); font-size: 26px; letter-spacing: -0.025em; font-weight: 600; margin: 0 0 20px; line-height: 1.2; }
+.release h3 .acc {  color: var(--signal); font-weight: 500; }
+.release ul { list-style: none; padding: 0; margin: 0; display: grid; gap: 14px; }
+.release li { display: grid; grid-template-columns: 90px 1fr; gap: 18px; align-items: baseline; font-size: 15px; color: var(--ink2); line-height: 1.55; }
+.release li .tag { font-family: 'JetBrains Mono', monospace; font-size: 9.5px; letter-spacing: 0.14em; text-transform: uppercase; padding: 3px 8px; border-radius: 3px; width: fit-content; font-weight: 500; }
+.release li .tag.new { background: rgb(184 134 11 / 0.12); color: var(--signal); }
+.release li .tag.imp { background: rgb(70 130 70 / 0.12); color: var(--ok); }
+.release li .tag.fix { background: rgb(26 23 20 / 0.08); color: var(--ink2); }
+.release li strong { color: var(--ink); font-weight: 500; }
+</style></head><body>
+<div id="shell-top"></div>
+<section class="page-hero container-xl">
+  <div class="eyebrow">Changelog</div>
+  <h1>What we <span class="t-signal t-italic">shipped,</span> when.</h1>
+  <p class="lead">Honest release notes. Small fixes, bigger changes, and the occasional thing we undid. Updated [TBD] cadence.</p>
+</section>
+<section class="container-xl" style="padding:40px 0 80px;">
+  <div class="release">
+    <div class="date"><div class="d">[TBD]</div><div class="m">v[TBD]</div></div>
+    <div>
+      <h3>Faster <span class="acc">demo</span> generation.</h3>
+      <ul>
+        <li><span class="tag imp">Improved</span><span><strong>Demo build time</strong> down from [TBD]s to [TBD]s on average. Most of the win came from parallelising image retrieval and copy drafting.</span></li>
+        <li><span class="tag new">New</span><span><strong>Fallback preview.</strong> If the generator stalls for more than [TBD]s, a static preview shows instantly so you never hand over a blank screen.</span></li>
+        <li><span class="tag fix">Fix</span><span>Logo extraction no longer picks up favicons by mistake on certain shop websites.</span></li>
+      </ul>
+    </div>
+  </div>
+  <div class="release">
+    <div class="date"><div class="d">[TBD]</div><div class="m">v[TBD]</div></div>
+    <div>
+      <h3>Wallet, <span class="acc">simplified.</span></h3>
+      <ul>
+        <li><span class="tag new">New</span><span><strong>One-tap withdraw</strong> to your linked bank account. Previous three-step flow is gone.</span></li>
+        <li><span class="tag imp">Improved</span><span><strong>Wallet history</strong> now groups by day with a running total. Exports as CSV for self-assessment.</span></li>
+        <li><span class="tag fix">Fix</span><span>Balance occasionally lagged by a few seconds after signature — fixed.</span></li>
+      </ul>
+    </div>
+  </div>
+  <div class="release">
+    <div class="date"><div class="d">[TBD]</div><div class="m">v[TBD]</div></div>
+    <div>
+      <h3>Queue <span class="acc">clarity.</span></h3>
+      <ul>
+        <li><span class="tag new">New</span><span><strong>Warm signals</strong> on lead cards — "warm", "new", "revisit" — based on outcome history and recency.</span></li>
+        <li><span class="tag imp">Improved</span><span><strong>Map view</strong> radius now follows your patch preference rather than a fixed [TBD] mile.</span></li>
+        <li><span class="tag imp">Improved</span><span>Claim window now displays the remaining time as a thin ring around the lead card.</span></li>
+      </ul>
+    </div>
+  </div>
+  <div class="release">
+    <div class="date"><div class="d">[TBD]</div><div class="m">v[TBD]</div></div>
+    <div>
+      <h3>Orchestration handoff.</h3>
+      <ul>
+        <li><span class="tag new">New</span><span>Change requests from clients route to the orchestration desk via WhatsApp, Telegram or Discord. Contractors no longer receive them.</span></li>
+        <li><span class="tag imp">Improved</span><span>Post-close summary screen now reminds you which desk handles what.</span></li>
+      </ul>
+    </div>
+  </div>
+  <div class="release">
+    <div class="date"><div class="d">[TBD]</div><div class="m">v[TBD]</div></div>
+    <div>
+      <h3>First public release.</h3>
+      <ul>
+        <li><span class="tag new">New</span><span>Platform launch. Contractor onboarding, lead queue, demo generator, wallet — all live.</span></li>
+      </ul>
+    </div>
+  </div>
+</section>
+<div id="shell-footer"></div>
+<script src="shared/shell.js"></script>
+<script>renderShell({currentPath: 'resources'});</script>
+</body></html>

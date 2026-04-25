@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Privacy — SalesFlow</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800;900&family=Inter+Tight:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="shared/brand.css" />
+<style>
+.layout { display: grid; grid-template-columns: 240px 1fr; gap: 56px; padding: 48px 0 100px; }
+@media (max-width: 900px) { .layout { grid-template-columns: 1fr; gap: 24px; } }
+.nav-side { position: sticky; top: 88px; align-self: start; }
+.nav-side .lab { font-family: 'JetBrains Mono', monospace; font-size: 10.5px; letter-spacing: 0.14em; color: var(--muted); text-transform: uppercase; margin-bottom: 16px; }
+.nav-side ul { list-style: none; padding: 0; margin: 0; display: grid; gap: 4px; }
+.nav-side a { display: block; padding: 10px 12px; font-size: 13.5px; color: var(--ink2); border-radius: 8px; }
+.nav-side a:hover { background: var(--bg2); }
+.nav-side a.on { background: var(--ink); color: var(--bg); font-weight: 500; }
+.legal-pills { display: flex; gap: 8px; flex-wrap: wrap; margin: 40px 0 24px; padding-bottom: 16px; border-bottom: 1px solid var(--line); }
+.legal-pills a { padding: 8px 14px; border: 1px solid var(--line); border-radius: 999px; font-size: 12.5px; color: var(--ink2); }
+.legal-pills a.on { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+.doc h1 { font-family: var(--display-font); font-size: clamp(36px, 5vw, 52px); letter-spacing: -0.035em; line-height: 1.05; font-weight: 600; margin: 0 0 14px; }
+.doc h1 .acc {  color: var(--signal); font-weight: 500; }
+.doc .meta { font-family: 'JetBrains Mono', monospace; font-size: 11px; letter-spacing: 0.12em; color: var(--muted); text-transform: uppercase; margin-bottom: 32px; padding-bottom: 24px; border-bottom: 1px solid var(--line); }
+.doc h2 { font-family: var(--display-font); font-size: 24px; letter-spacing: -0.02em; line-height: 1.2; font-weight: 600; margin: 40px 0 14px; }
+.doc h2 .acc {  color: var(--signal); font-weight: 500; }
+.doc h2 .num { color: var(--signal); font-family: 'JetBrains Mono', monospace; font-size: 14px; letter-spacing: 0.08em; margin-right: 10px; font-weight: 500; }
+.doc p { font-size: 15.5px; line-height: 1.65; color: var(--ink); margin: 0 0 16px; max-width: 640px; }
+.doc ul { padding-left: 22px; max-width: 640px; margin: 0 0 16px; }
+.doc ul li { margin-bottom: 8px; font-size: 15px; line-height: 1.6; color: var(--ink2); }
+.doc .callout { background: var(--bg2); border-left: 3px solid var(--signal); padding: 18px 22px; border-radius: 0 10px 10px 0; margin: 24px 0; font-size: 14.5px; max-width: 640px; }
+.doc .callout strong { color: var(--ink); }
+.doc table { width: 100%; max-width: 640px; border-collapse: collapse; margin: 20px 0; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; font-size: 14px; }
+.doc table th, .doc table td { padding: 12px 14px; text-align: left; border-top: 1px solid var(--line); }
+.doc table th { background: var(--bg2); font-family: 'JetBrains Mono', monospace; font-size: 10.5px; letter-spacing: 0.14em; color: var(--muted); text-transform: uppercase; font-weight: 500; }
+.doc table tr:first-child th { border-top: 0; }
+</style></head><body>
+<div id="shell-top"></div>
+<div class="container-xl legal-pills">
+  <a href="legal-terms.html">Terms of service</a>
+  <a href="legal-privacy.html" class="on">Privacy</a>
+  <a href="legal-contractor-agreement.html">Contractor agreement</a>
+  <a href="legal-cookies.html">Cookies</a>
+  <a href="legal-accessibility.html">Accessibility</a>
+</div>
+<div class="container-xl layout">
+  <aside class="nav-side">
+    <div class="lab">/ On this page</div>
+    <ul>
+      <li><a href="#s1" class="on">1. Who is the controller</a></li>
+      <li><a href="#s2">2. What we collect</a></li>
+      <li><a href="#s3">3. Why we collect it</a></li>
+      <li><a href="#s4">4. Who we share with</a></li>
+      <li><a href="#s5">5. Retention</a></li>
+      <li><a href="#s6">6. Your rights</a></li>
+      <li><a href="#s7">7. International transfers</a></li>
+      <li><a href="#s8">8. Contact</a></li>
+    </ul>
+  </aside>
+  <article class="doc">
+    <h1>Privacy <span class="acc">policy.</span></h1>
+    <div class="meta">Last updated · [TBD] · UK GDPR compliant</div>
+    <div class="callout"><strong>Plain English:</strong> we collect as little as we need, we don't sell it, we keep it encrypted, we delete what we can when we can, and you can ask us what we have on you at any time.</div>
+    <h2 id="s1"><span class="num">01</span>Who is <span class="acc">the controller.</span></h2>
+    <p>[Company TBD], registered in [TBD] with company number [TBD]. ICO registration [TBD].</p>
+    <h2 id="s2"><span class="num">02</span>What we <span class="acc">collect.</span></h2>
+    <table><tr><th>Category</th><th>Examples</th></tr>
+      <tr><td>Account</td><td>Name, email, phone, address, tax ID (contractors)</td></tr>
+      <tr><td>Verification</td><td>ID document scan (deleted after [TBD] days)</td></tr>
+      <tr><td>Activity</td><td>Leads claimed, pitches logged, outcomes, wallet history</td></tr>
+      <tr><td>Device</td><td>App version, device type, IP, crash reports</td></tr>
+      <tr><td>Client data</td><td>Business name, scraped public info, pitch outcomes</td></tr>
+    </table>
+    <h2 id="s3"><span class="num">03</span>Why we <span class="acc">collect it.</span></h2>
+    <ul><li>To operate the platform (contract).</li><li>To verify identities and prevent fraud (legal obligation / legitimate interest).</li><li>To pay contractors and clients (contract).</li><li>To improve the demo generator (legitimate interest — outcome data, de-identified).</li></ul>
+    <h2 id="s4"><span class="num">04</span>Who we <span class="acc">share</span> with.</h2>
+    <p>Only our sub-processors, listed on our <a href="security.html" style="color:var(--signal);">Security page</a>. We don't sell data. We don't share for advertising.</p>
+    <h2 id="s5"><span class="num">05</span>Retention.</h2>
+    <ul><li>Account: for the life of the account + [TBD] years after closure (tax/audit).</li><li>ID verification: [TBD] days after approval or decline.</li><li>Pitch outcomes: indefinite but de-identified after [TBD].</li><li>Wallet ledger: [TBD] years (legal requirement).</li></ul>
+    <h2 id="s6"><span class="num">06</span>Your <span class="acc">rights.</span></h2>
+    <p>Under UK GDPR you have the right to access, correct, delete, port, restrict, and object. Email dpo@salesflow.[TBD]. We reply within [TBD] days.</p>
+    <h2 id="s7"><span class="num">07</span>International <span class="acc">transfers.</span></h2>
+    <p>Primary storage is UK/EU. Any transfer outside the UK uses Standard Contractual Clauses and, where applicable, UK Addendum.</p>
+    <h2 id="s8"><span class="num">08</span>Contact.</h2>
+    <p>Data Protection Officer: dpo@salesflow.[TBD]. You can also complain to the ICO at ico.org.uk, but we'd like a chance to put things right first.</p>
+  </article>
+</div>
+<div id="shell-footer"></div>
+<script src="shared/shell.js"></script>
+<script>renderShell({currentPath: ''});</script>
+</body></html>

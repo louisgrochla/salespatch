@@ -1,0 +1,222 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Log in — SalesFlow</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800;900&family=Inter+Tight:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="shared/brand.css" />
+<style>
+.split { display: grid; grid-template-columns: 1fr 1fr; min-height: calc(100vh - 72px); }
+@media (max-width: 900px) { .split { grid-template-columns: 1fr; } .side { display: none; } }
+
+.form-side { display: flex; align-items: center; justify-content: center; padding: 60px 40px; }
+.form-side .inner { max-width: 380px; width: 100%; }
+.form-side .eyebrow { margin-bottom: 18px; }
+.form-side h1 { font-family: var(--display-font); font-size: 40px; letter-spacing: -0.035em; line-height: 1.05; font-weight: 600; margin: 0 0 12px; }
+.form-side h1 .acc {  color: var(--signal); font-weight: 500; }
+.form-side .sub { color: var(--ink2); font-size: 15px; margin: 0 0 28px; line-height: 1.55; }
+
+.demo-card {
+  background: var(--ink);
+  color: var(--bg);
+  border-radius: 14px;
+  padding: 18px 20px;
+  margin-bottom: 22px;
+  position: relative;
+  overflow: hidden;
+}
+.demo-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at 85% 20%, rgb(184 134 11 / 0.25), transparent 55%);
+  pointer-events: none;
+}
+.demo-card > * { position: relative; z-index: 1; }
+.demo-card .tag { font-family: 'JetBrains Mono', monospace; font-size: 10px; letter-spacing: 0.14em; color: var(--signal); text-transform: uppercase; margin-bottom: 6px; }
+.demo-card h4 { font-family: var(--display-font); font-size: 17px; letter-spacing: -0.02em; font-weight: 500; margin: 0 0 4px; color: var(--bg); }
+.demo-card p { font-size: 13px; color: rgb(210 200 185); margin: 0 0 14px; line-height: 1.5; }
+.demo-card button {
+  width: 100%;
+  background: var(--signal);
+  color: white;
+  border: 0;
+  padding: 13px;
+  border-radius: 999px;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.demo-card button:hover { background: var(--signal2); }
+.demo-card button.loading { opacity: 0.6; pointer-events: none; }
+.demo-card .creds { font-family: 'JetBrains Mono', monospace; font-size: 10.5px; color: rgb(210 200 185 / 0.75); letter-spacing: 0.08em; margin-top: 10px; text-align: center; }
+
+.divider-or { display: flex; gap: 14px; align-items: center; margin: 0 0 22px; font-family: 'JetBrains Mono', monospace; font-size: 10.5px; letter-spacing: 0.14em; color: var(--muted); text-transform: uppercase; }
+.divider-or::before, .divider-or::after { content:''; flex:1; height: 1px; background: var(--line); }
+
+.field { margin-bottom: 14px; }
+.field label { display: block; font-family: 'JetBrains Mono', monospace; font-size: 10.5px; letter-spacing: 0.14em; color: var(--muted); text-transform: uppercase; margin-bottom: 8px; }
+.field input { width: 100%; background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; font-family: inherit; font-size: 15px; color: var(--ink); outline: 0; }
+.field input:focus { border-color: var(--signal); }
+.field.has-err input { border-color: var(--err); }
+
+.row { display: flex; justify-content: space-between; align-items: center; margin: 18px 0 18px; }
+.row label { font-size: 13px; color: var(--ink2); display: flex; gap: 8px; align-items: center; }
+.row a { font-size: 13px; color: var(--signal); }
+
+.login-btn {
+  width: 100%;
+  background: var(--ink);
+  color: var(--bg);
+  border: 0;
+  padding: 15px;
+  border-radius: 999px;
+  font-family: inherit;
+  font-size: 15px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.login-btn:hover { background: rgb(36 32 28); }
+.login-btn.loading { opacity: 0.6; pointer-events: none; }
+
+.form-err { font-size: 13px; color: var(--err); margin-top: 14px; display: none; }
+.form-err.on { display: block; }
+
+.bottom { margin-top: 26px; text-align: center; font-size: 13.5px; color: var(--ink2); }
+.bottom a { color: var(--signal); }
+
+.side { background: var(--ink); color: var(--bg); padding: 60px; display: flex; flex-direction: column; justify-content: space-between; position: relative; overflow: hidden; }
+.side::before { content:''; position:absolute; inset:0; background-image: radial-gradient(rgba(255 255 255 / 0.06) 1.5px, transparent 1.5px); background-size: 12px 12px; opacity: 0.6; }
+.side > * { position: relative; }
+.side .tag { font-family: 'JetBrains Mono', monospace; font-size: 11px; letter-spacing: 0.14em; color: var(--signal); text-transform: uppercase; }
+.side blockquote { font-family: var(--display-font); font-size: clamp(28px, 3.2vw, 40px); letter-spacing: -0.025em; line-height: 1.2; font-weight: 500; color: var(--bg); margin: 32px 0 0; max-width: 20ch; }
+.side blockquote .acc {  color: var(--signal); font-weight: 500; }
+.side .credit { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: rgb(210 200 185); letter-spacing: 0.1em; margin-top: 20px; }
+.side .bot { display: flex; justify-content: space-between; font-family: 'JetBrains Mono', monospace; font-size: 10px; color: rgb(160 150 140); letter-spacing: 0.1em; text-transform: uppercase; }
+</style></head><body>
+<div id="shell-top"></div>
+<div class="split">
+  <div class="form-side">
+    <div class="inner">
+      <div class="eyebrow">/ Contractor portal</div>
+      <h1>Welcome <span class="t-signal t-italic">back.</span></h1>
+      <p class="sub">Log in to claim leads, check your wallet, or withdraw to your bank.</p>
+
+      <div class="demo-card">
+        <div class="tag">/ Just kicking the tyres?</div>
+        <h4>Try it with a demo account</h4>
+        <p>One click — no form, no PIN. Skip the application and poke around the dashboard.</p>
+        <button type="button" id="btn-demo">Log in as demo →</button>
+        <div class="creds">Demo Account · PIN 0000</div>
+      </div>
+
+      <div class="divider-or">or</div>
+
+      <form id="login-form" novalidate>
+        <div class="field">
+          <label>Name</label>
+          <input type="text" id="f-name" placeholder="Jane Smith" autocomplete="username" required />
+        </div>
+        <div class="field">
+          <label>PIN</label>
+          <input type="password" id="f-pin" placeholder="••••" maxlength="6" inputmode="numeric" pattern="\d*" autocomplete="current-password" required />
+        </div>
+        <div class="row">
+          <label><input type="checkbox" checked /> Remember me</label>
+          <a href="mailto:hello@salesflow.co?subject=PIN%20reset">Forgot PIN?</a>
+        </div>
+        <button type="submit" class="login-btn" id="btn-login">Log in →</button>
+        <div class="form-err" id="form-err"></div>
+      </form>
+
+      <div class="bottom">Not a contractor yet? <a href="apply.html">Apply →</a></div>
+    </div>
+  </div>
+  <div class="side">
+    <div class="tag">/ Closer on the patch</div>
+    <div>
+      <blockquote>I used to do forty conversations to get one sale. Now the phone does half the conversation for me.</blockquote>
+      <div class="credit">— [Contractor name TBD], [City TBD]</div>
+    </div>
+    <div class="bot"><span>/ SalesFlow · [TBD]</span><span>UK</span></div>
+  </div>
+</div>
+<script src="shared/shell.js"></script>
+<script>renderShell({currentPath: ''});
+
+/* ============ Demo login ============ */
+const demoBtn = document.getElementById('btn-demo');
+demoBtn.addEventListener('click', async () => {
+  demoBtn.classList.add('loading');
+  demoBtn.textContent = 'Loading demo…';
+  try {
+    const res = await fetch('/api/auth/demo', { method: 'POST' });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      showErr(body.error || `Couldn't start demo (${res.status}).`);
+      demoBtn.classList.remove('loading');
+      demoBtn.textContent = 'Log in as demo →';
+      return;
+    }
+    window.location.href = '/dashboard';
+  } catch (e) {
+    showErr('Network problem. Check your connection and try again.');
+    demoBtn.classList.remove('loading');
+    demoBtn.textContent = 'Log in as demo →';
+  }
+});
+
+/* ============ Real login ============ */
+const form = document.getElementById('login-form');
+const loginBtn = document.getElementById('btn-login');
+const errEl = document.getElementById('form-err');
+const nameEl = document.getElementById('f-name');
+const pinEl = document.getElementById('f-pin');
+
+function showErr(msg) {
+  errEl.textContent = msg;
+  errEl.classList.add('on');
+}
+function clearErrs() {
+  errEl.classList.remove('on');
+  nameEl.closest('.field').classList.remove('has-err');
+  pinEl.closest('.field').classList.remove('has-err');
+}
+
+form.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  clearErrs();
+
+  const name = nameEl.value.trim();
+  const pin = pinEl.value.trim();
+  let bad = false;
+  if (name.length < 2) { nameEl.closest('.field').classList.add('has-err'); bad = true; }
+  if (!/^\d{4,6}$/.test(pin)) { pinEl.closest('.field').classList.add('has-err'); bad = true; }
+  if (bad) { showErr('Enter your name and 4–6 digit PIN.'); return; }
+
+  loginBtn.classList.add('loading');
+  loginBtn.textContent = 'Logging in…';
+  try {
+    const res = await fetch('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, pin }),
+    });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      showErr(body.error || `Couldn't log in (${res.status}).`);
+      loginBtn.classList.remove('loading');
+      loginBtn.textContent = 'Log in →';
+      return;
+    }
+    window.location.href = '/dashboard';
+  } catch (err) {
+    showErr('Network problem. Check your connection and try again.');
+    loginBtn.classList.remove('loading');
+    loginBtn.textContent = 'Log in →';
+  }
+});
+</script>
+</body></html>

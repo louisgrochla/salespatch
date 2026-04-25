@@ -1,266 +1,211 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { Copy, Check, Users, DollarSign, TrendingUp } from 'lucide-react';
+import { useState } from 'react';
+import {
+  Card,
+  Section,
+  PageHero,
+  Eyebrow,
+  StatCell,
+  PrimaryButton,
+  EmptyState,
+  CREAM,
+  CREAM_DIM,
+  CREAM_MUTED,
+  SIGNAL,
+  BG_CARD,
+  BG_STRONG,
+  LINE,
+  LINE2,
+  DISPLAY_FONT,
+  MONO_FONT,
+} from '@/lib/brand';
 
-interface ReferralData {
-  referral_code: string;
-  referral_link: string;
-  total_referrals: number;
-  active_referrals: number;
-  total_earned: number;
-  referrals: {
-    id: string;
-    name: string;
-    status: 'active' | 'inactive';
-    joined_date: string;
-    sales_count: number;
-    earned_from: number;
-  }[];
+interface Referral {
+  id: string;
+  name: string;
+  joined: string;
+  status: 'pending' | 'active' | 'churned';
+  closes: number;
+  earned: number;
 }
 
+const MOCK: Referral[] = [
+  { id: '1', name: 'Tomi A.', joined: '2 weeks ago', status: 'active', closes: 14, earned: 140 },
+  { id: '2', name: 'Kenji L.', joined: '3 weeks ago', status: 'active', closes: 9, earned: 90 },
+  { id: '3', name: 'Priya M.', joined: '1 week ago', status: 'pending', closes: 0, earned: 0 },
+  { id: '4', name: 'Alex R.', joined: '1 month ago', status: 'active', closes: 22, earned: 220 },
+];
+
 export default function ReferralsPage() {
-  const [data, setData] = useState<ReferralData | null>(null);
   const [copied, setCopied] = useState(false);
-  const [loading, setLoading] = useState(true);
+  const [data] = useState<Referral[]>(MOCK);
 
-  useEffect(() => {
-    fetchReferralData();
-  }, []);
+  const code = 'DEMO-HACKNEY-4X';
+  const link = `salesflow.co/r/${code}`;
 
-  const fetchReferralData = async () => {
+  const totalEarned = data.reduce((a, r) => a + r.earned, 0);
+  const activeCount = data.filter((r) => r.status === 'active').length;
+
+  const copy = async () => {
     try {
-      // Referral API not built yet — use placeholder data
-      const code = 'SF-' + Math.random().toString(36).substring(2, 7).toUpperCase();
-      setData({
-        referral_code: code,
-        referral_link: `https://app.salesflow.co.uk/signup?ref=${code}`,
-        total_referrals: 0,
-        active_referrals: 0,
-        total_earned: 0,
-        referrals: [],
-      });
-      setLoading(false);
-    } catch (err) {
-      console.error('Failed to fetch referral data', err);
-      setLoading(false);
-    }
-  };
-
-  const copyReferralLink = () => {
-    if (data?.referral_link) {
-      navigator.clipboard.writeText(data.referral_link);
+      await navigator.clipboard.writeText(`https://${link}`);
       setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    }
+      setTimeout(() => setCopied(false), 1800);
+    } catch {}
   };
-
-  const shareViaWhatsApp = () => {
-    const message = `Join SalesFlow and start earning! Use my referral link: ${data?.referral_link}`;
-    window.open(`https://wa.me/?text=${encodeURIComponent(message)}`, '_blank');
-  };
-
-  const shareViaEmail = () => {
-    const subject = 'Join SalesFlow - Earn money selling websites';
-    const body = `I've been earning money with SalesFlow by selling websites to local businesses. You should join too!\n\nUse my referral link to get started: ${data?.referral_link}`;
-    window.location.href = `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-  };
-
-  if (loading || !data) {
-    return (
-      <div className="pt-20 text-center text-[13px] text-[#666]">Loading...</div>
-    );
-  }
 
   return (
-    <div className="py-8 page-enter">
-      {/* Header */}
-      <div className="mb-8">
-        <h1 className="text-[24px] font-semibold text-white tracking-[-0.03em] mb-1">Referrals</h1>
-        <p className="text-[13px] text-[#666]">Invite friends and earn together</p>
+    <div className="py-10">
+      <PageHero
+        eyebrow="Referrals"
+        title="Bring a mate,"
+        accent="earn on every close."
+        sub="You get £10 for every deal your referrals close, for as long as they're on the platform. No cap."
+      />
+
+      <div
+        className="grid grid-cols-2 md:grid-cols-4 rounded-2xl overflow-hidden mb-10"
+        style={{ background: BG_STRONG, border: `1px solid ${LINE}` }}
+      >
+        <StatCell label="Referred" value={data.length} />
+        <StatCell label="Active" value={activeCount} />
+        <StatCell label="Total closes" value={data.reduce((a, r) => a + r.closes, 0)} />
+        <StatCell label="Earned from referrals" value={totalEarned.toLocaleString()} prefix="£" accent />
       </div>
 
-      {/* Invite Card */}
-      <div className="bg-[#0a0a0a] border border-[#333] rounded-xl p-8 mb-8 glow-border">
-        <div className="max-w-2xl">
-          <h2 className="text-[24px] font-semibold text-white mb-3">Earn £25 per referral</h2>
-          <p className="text-[15px] text-[#999] mb-6">
-            Share SalesFlow with friends who'd be great at sales. When they make their first sale, you both earn an extra £25.
-          </p>
+      <Card padding="lg" accent className="mb-10">
+        <Eyebrow accent>Your invite link</Eyebrow>
+        <p
+          className="text-[22px] m-0 mb-2"
+          style={{ fontFamily: DISPLAY_FONT, fontWeight: 500, color: CREAM, letterSpacing: '-0.02em' }}
+        >
+          Share this link. Everyone wins.
+        </p>
+        <p className="text-[14px] mb-6" style={{ color: CREAM_DIM, lineHeight: 1.6 }}>
+          Your friend gets fast-tracked through the application. You get £10 for every close they make — paid the
+          same day as their commission.
+        </p>
+        <div
+          className="flex items-center gap-3 p-1.5 pl-5 rounded-full mb-4 flex-wrap"
+          style={{ background: BG_CARD, border: `1px solid ${LINE}` }}
+        >
+          <span className="flex-1 min-w-0 truncate" style={{ fontFamily: MONO_FONT, color: CREAM, letterSpacing: '0.05em' }}>
+            {link}
+          </span>
+          <PrimaryButton size="sm" onClick={copy}>
+            {copied ? '✓ Copied' : 'Copy link'}
+          </PrimaryButton>
+        </div>
+        <div className="flex items-center gap-2 text-[12px]" style={{ color: CREAM_MUTED, fontFamily: MONO_FONT, letterSpacing: '0.12em' }}>
+          <span>CODE</span>
+          <span style={{ color: SIGNAL }}>{code}</span>
+        </div>
+      </Card>
 
-          {/* Referral Link */}
-          <div className="bg-[#111] rounded-lg p-4 mb-4 border border-[#333]">
-            <p className="text-[11px] uppercase tracking-wide text-[#666] mb-2">Your Referral Link</p>
-            <div className="flex items-center gap-3">
-              <input
-                type="text"
-                value={data.referral_link}
-                readOnly
-                className="flex-1 bg-transparent text-white text-[15px] outline-none font-mono"
-              />
-              <button
-                onClick={copyReferralLink}
-                className="flex items-center gap-2 px-4 py-2 bg-white text-black rounded-lg text-[13px] font-medium hover:bg-[#ededed] transition-colors"
+      <Section eyebrow="People you've referred" title="Your network">
+        {data.length > 0 ? (
+          <Card padding="none">
+            <div
+              className="grid grid-cols-[1fr_120px_100px_110px] gap-4 px-5 py-3 text-[10.5px] uppercase"
+              style={{
+                fontFamily: MONO_FONT,
+                letterSpacing: '0.14em',
+                color: CREAM_MUTED,
+                borderBottom: `1px solid ${LINE}`,
+              }}
+            >
+              <span>Name</span>
+              <span>Joined</span>
+              <span>Closes</span>
+              <span>Earned</span>
+            </div>
+            {data.map((r, i) => (
+              <div
+                key={r.id}
+                className="grid grid-cols-[1fr_120px_100px_110px] gap-4 px-5 py-4"
+                style={{ borderBottom: i === data.length - 1 ? 'none' : `1px solid ${LINE2}` }}
               >
-                {copied ? (
-                  <>
-                    <Check className="w-4 h-4" />
-                    Copied!
-                  </>
-                ) : (
-                  <>
-                    <Copy className="w-4 h-4" />
-                    Copy
-                  </>
-                )}
-              </button>
-            </div>
-          </div>
-
-          {/* Share Buttons */}
-          <div className="flex gap-3">
-            <button
-              onClick={shareViaWhatsApp}
-              className="flex-1 px-4 py-3 bg-[#333] hover:bg-[#444] rounded-lg text-[13px] font-medium text-white transition-colors"
-            >
-              Share via WhatsApp
-            </button>
-            <button
-              onClick={shareViaEmail}
-              className="flex-1 px-4 py-3 bg-[#333] hover:bg-[#444] rounded-lg text-[13px] font-medium text-white transition-colors"
-            >
-              Share via Email
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* Stats */}
-      <div className="grid md:grid-cols-3 gap-4 mb-8">
-        <div className="bg-[#0a0a0a] rounded-xl border border-[#333] p-6">
-          <div className="flex items-center gap-3 mb-3">
-            <div className="w-10 h-10 rounded-lg bg-blue-500/10 flex items-center justify-center">
-              <Users className="w-5 h-5 text-blue-400" />
-            </div>
-            <p className="text-[11px] uppercase tracking-wide text-[#666]">Total Referrals</p>
-          </div>
-          <p className="text-[32px] font-semibold text-white font-mono">{data.total_referrals}</p>
-        </div>
-
-        <div className="bg-[#0a0a0a] rounded-xl border border-[#333] p-6">
-          <div className="flex items-center gap-3 mb-3">
-            <div className="w-10 h-10 rounded-lg bg-green-500/10 flex items-center justify-center">
-              <TrendingUp className="w-5 h-5 text-green-400" />
-            </div>
-            <p className="text-[11px] uppercase tracking-wide text-[#666]">Active</p>
-          </div>
-          <p className="text-[32px] font-semibold text-green-400 font-mono">{data.active_referrals}</p>
-        </div>
-
-        <div className="bg-[#0a0a0a] rounded-xl border border-[#333] p-6">
-          <div className="flex items-center gap-3 mb-3">
-            <div className="w-10 h-10 rounded-lg bg-purple-500/10 flex items-center justify-center">
-              <DollarSign className="w-5 h-5 text-purple-400" />
-            </div>
-            <p className="text-[11px] uppercase tracking-wide text-[#666]">Earned</p>
-          </div>
-          <p className="text-[32px] font-semibold text-white font-mono">£{data.total_earned}</p>
-        </div>
-      </div>
-
-      {/* How It Works */}
-      <div className="bg-[#0a0a0a] rounded-xl border border-[#333] p-6 mb-8">
-        <h2 className="text-[15px] font-semibold text-white mb-4">How It Works</h2>
-        <div className="space-y-4">
-          <div className="flex gap-4">
-            <div className="flex-shrink-0 w-8 h-8 rounded-full bg-white text-black flex items-center justify-center text-[13px] font-semibold">
-              1
-            </div>
-            <div>
-              <p className="text-[13px] font-medium text-white mb-1">Share your link</p>
-              <p className="text-[13px] text-[#999]">
-                Send your unique referral link to friends interested in sales
-              </p>
-            </div>
-          </div>
-
-          <div className="flex gap-4">
-            <div className="flex-shrink-0 w-8 h-8 rounded-full bg-white text-black flex items-center justify-center text-[13px] font-semibold">
-              2
-            </div>
-            <div>
-              <p className="text-[13px] font-medium text-white mb-1">They sign up</p>
-              <p className="text-[13px] text-[#999]">
-                Your friend creates an account using your referral link
-              </p>
-            </div>
-          </div>
-
-          <div className="flex gap-4">
-            <div className="flex-shrink-0 w-8 h-8 rounded-full bg-white text-black flex items-center justify-center text-[13px] font-semibold">
-              3
-            </div>
-            <div>
-              <p className="text-[13px] font-medium text-white mb-1">You both earn</p>
-              <p className="text-[13px] text-[#999]">
-                When they make their first sale, you each get an extra £25
-              </p>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Referral List */}
-      {data.referrals.length > 0 && (
-        <div className="bg-[#0a0a0a] rounded-xl border border-[#333] overflow-hidden">
-          <div className="p-6 border-b border-[#222]">
-            <h2 className="text-[15px] font-semibold text-white">Your Referrals</h2>
-          </div>
-
-          <div className="divide-y divide-[#222]">
-            {data.referrals.map((referral) => (
-              <div key={referral.id} className="p-5 hover:bg-[#111] transition-colors">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-4">
-                    <div className="w-10 h-10 rounded-full bg-white text-black flex items-center justify-center text-[15px] font-semibold">
-                      {referral.name.charAt(0).toUpperCase()}
-                    </div>
-                    <div>
-                      <p className="text-[15px] font-medium text-white">{referral.name}</p>
-                      <p className="text-[13px] text-[#666]">
-                        Joined {new Date(referral.joined_date).toLocaleDateString('en-GB', {
-                          month: 'short',
-                          year: 'numeric',
-                        })}
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="text-right">
-                    <p className="text-[15px] font-semibold text-white font-mono">
-                      £{referral.earned_from}
-                    </p>
-                    <p className="text-[13px] text-[#666]">
-                      {referral.sales_count} {referral.sales_count === 1 ? 'sale' : 'sales'}
-                    </p>
-                  </div>
+                <div>
+                  <p
+                    className="m-0 text-[14.5px]"
+                    style={{ color: CREAM, fontFamily: DISPLAY_FONT, fontWeight: 500, letterSpacing: '-0.015em' }}
+                  >
+                    {r.name}
+                  </p>
+                  <StatusPill status={r.status} />
                 </div>
+                <span className="text-[13px] self-center" style={{ color: CREAM_DIM }}>
+                  {r.joined}
+                </span>
+                <span className="text-[13px] self-center" style={{ color: CREAM_DIM, fontFamily: MONO_FONT }}>
+                  {r.closes}
+                </span>
+                <span
+                  className="text-[14px] self-center"
+                  style={{ fontFamily: DISPLAY_FONT, color: r.earned > 0 ? SIGNAL : CREAM_DIM, fontWeight: 500 }}
+                >
+                  £{r.earned}
+                </span>
               </div>
             ))}
-          </div>
-        </div>
-      )}
+          </Card>
+        ) : (
+          <EmptyState
+            eyebrow="No referrals yet"
+            title="Your network lives here."
+            sub="Share the link above — when they close their first deal, you'll see them in this table."
+          />
+        )}
+      </Section>
 
-      {/* Empty State */}
-      {data.referrals.length === 0 && (
-        <div className="bg-[#0a0a0a] rounded-xl border border-[#333] p-12 text-center">
-          <Users className="w-12 h-12 text-[#333] mx-auto mb-4" />
-          <p className="text-[15px] text-[#999] mb-2">No referrals yet</p>
-          <p className="text-[13px] text-[#666]">
-            Share your link above to start earning referral bonuses
-          </p>
+      <Section eyebrow="How it works" title="The maths" className="mt-14">
+        <div className="grid gap-4 md:grid-cols-3">
+          <StepCard n="01" title="You share your link" sub="DMs, texts, a pinned post — however your mate sees it." />
+          <StepCard n="02" title="They apply & get approved" sub="Right-to-work in the UK is the gate. That's it." />
+          <StepCard n="03" title="You earn £10 per close" sub="Forever. No tier, no clawback, no sunset." />
         </div>
-      )}
+      </Section>
+    </div>
+  );
+}
+
+function StepCard({ n, title, sub }: { n: string; title: string; sub: string }) {
+  return (
+    <Card padding="lg">
+      <div
+        className="text-[10.5px] uppercase mb-4"
+        style={{ fontFamily: MONO_FONT, letterSpacing: '0.14em', color: SIGNAL }}
+      >
+        {n}
+      </div>
+      <p
+        className="text-[18px] m-0 mb-2"
+        style={{ fontFamily: DISPLAY_FONT, fontWeight: 500, color: CREAM, letterSpacing: '-0.02em' }}
+      >
+        {title}
+      </p>
+      <p className="text-[13.5px] m-0" style={{ color: CREAM_DIM, lineHeight: 1.55 }}>
+        {sub}
+      </p>
+    </Card>
+  );
+}
+
+function StatusPill({ status }: { status: Referral['status'] }) {
+  const tone =
+    status === 'active'
+      ? { c: SIGNAL, label: 'Active' }
+      : status === 'pending'
+      ? { c: 'rgb(220 150 80)', label: 'Pending' }
+      : { c: CREAM_MUTED, label: 'Churned' };
+  return (
+    <div
+      className="inline-flex items-center gap-1.5 mt-1 text-[10.5px] uppercase"
+      style={{ fontFamily: MONO_FONT, letterSpacing: '0.14em', color: tone.c }}
+    >
+      <span className="w-[6px] h-[6px] rounded-full" style={{ background: tone.c }} />
+      {tone.label}
     </div>
   );
 }

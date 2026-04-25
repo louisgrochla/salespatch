@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import Stripe from 'stripe';
 import { createClient } from '@supabase/supabase-js';
+import { getStripe } from '@/lib/stripe';
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
 const COMMISSION_GBP = 5000; // £50 in pence
 
 function getSupabase() {
@@ -22,6 +21,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Missing required field: salesperson_id' }, { status: 400 });
     }
 
+    const stripe = getStripe();
     const supabase = getSupabase();
 
     const { data: sp } = await supabase

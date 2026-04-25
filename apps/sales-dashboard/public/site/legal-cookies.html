@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Cookies — SalesFlow</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800;900&family=Inter+Tight:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="shared/brand.css" />
+<style>
+.layout { display: grid; grid-template-columns: 240px 1fr; gap: 56px; padding: 48px 0 100px; }
+@media (max-width: 900px) { .layout { grid-template-columns: 1fr; gap: 24px; } }
+.nav-side { position: sticky; top: 88px; align-self: start; }
+.nav-side .lab { font-family: 'JetBrains Mono', monospace; font-size: 10.5px; letter-spacing: 0.14em; color: var(--muted); text-transform: uppercase; margin-bottom: 16px; }
+.nav-side ul { list-style: none; padding: 0; margin: 0; display: grid; gap: 4px; }
+.nav-side a { display: block; padding: 10px 12px; font-size: 13.5px; color: var(--ink2); border-radius: 8px; }
+.nav-side a:hover { background: var(--bg2); }
+.nav-side a.on { background: var(--ink); color: var(--bg); font-weight: 500; }
+.legal-pills { display: flex; gap: 8px; flex-wrap: wrap; margin: 40px 0 24px; padding-bottom: 16px; border-bottom: 1px solid var(--line); }
+.legal-pills a { padding: 8px 14px; border: 1px solid var(--line); border-radius: 999px; font-size: 12.5px; color: var(--ink2); }
+.legal-pills a.on { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+.doc h1 { font-family: var(--display-font); font-size: clamp(36px, 5vw, 52px); letter-spacing: -0.035em; line-height: 1.05; font-weight: 600; margin: 0 0 14px; }
+.doc h1 .acc {  color: var(--signal); font-weight: 500; }
+.doc .meta { font-family: 'JetBrains Mono', monospace; font-size: 11px; letter-spacing: 0.12em; color: var(--muted); text-transform: uppercase; margin-bottom: 32px; padding-bottom: 24px; border-bottom: 1px solid var(--line); }
+.doc h2 { font-family: var(--display-font); font-size: 24px; letter-spacing: -0.02em; line-height: 1.2; font-weight: 600; margin: 40px 0 14px; }
+.doc h2 .acc {  color: var(--signal); font-weight: 500; }
+.doc h2 .num { color: var(--signal); font-family: 'JetBrains Mono', monospace; font-size: 14px; letter-spacing: 0.08em; margin-right: 10px; font-weight: 500; }
+.doc p { font-size: 15.5px; line-height: 1.65; color: var(--ink); margin: 0 0 16px; max-width: 640px; }
+.doc .callout { background: var(--bg2); border-left: 3px solid var(--signal); padding: 18px 22px; border-radius: 0 10px 10px 0; margin: 24px 0; font-size: 14.5px; max-width: 640px; }
+.doc .callout strong { color: var(--ink); }
+.doc table { width: 100%; max-width: 640px; border-collapse: collapse; margin: 20px 0; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; font-size: 14px; }
+.doc table th, .doc table td { padding: 12px 14px; text-align: left; border-top: 1px solid var(--line); }
+.doc table th { background: var(--bg2); font-family: 'JetBrains Mono', monospace; font-size: 10.5px; letter-spacing: 0.14em; color: var(--muted); text-transform: uppercase; font-weight: 500; }
+.doc table tr:first-child th { border-top: 0; }
+.pref { border: 1px solid var(--line); border-radius: 14px; padding: 24px 28px; margin: 32px 0; max-width: 640px; background: var(--bg2); }
+.pref h4 { font-family: var(--display-font); font-size: 19px; letter-spacing: -0.02em; font-weight: 600; margin: 0 0 14px; }
+.pref .opt { display: flex; justify-content: space-between; align-items: center; padding: 12px 0; border-top: 1px solid var(--line); }
+.pref .opt:first-child { border-top: 0; }
+.pref .opt .t { font-size: 14px; }
+.pref .opt .t strong { display: block; font-family: var(--display-font); font-size: 15px; letter-spacing: -0.015em; font-weight: 500; margin-bottom: 2px; }
+.pref .toggle { width: 40px; height: 22px; border-radius: 999px; background: var(--line); position: relative; cursor: pointer; }
+.pref .toggle::after { content:''; position:absolute; top: 2px; left: 2px; width: 18px; height: 18px; border-radius: 50%; background: white; transition: left 0.15s; }
+.pref .toggle.on { background: var(--signal); }
+.pref .toggle.on::after { left: 20px; }
+.pref .toggle.locked { background: var(--ink); cursor: not-allowed; }
+.pref .toggle.locked::after { left: 20px; }
+</style></head><body>
+<div id="shell-top"></div>
+<div class="container-xl legal-pills">
+  <a href="legal-terms.html">Terms of service</a>
+  <a href="legal-privacy.html">Privacy</a>
+  <a href="legal-contractor-agreement.html">Contractor agreement</a>
+  <a href="legal-cookies.html" class="on">Cookies</a>
+  <a href="legal-accessibility.html">Accessibility</a>
+</div>
+<div class="container-xl layout">
+  <aside class="nav-side">
+    <div class="lab">/ On this page</div>
+    <ul>
+      <li><a href="#s1" class="on">1. What cookies are</a></li>
+      <li><a href="#s2">2. What we use</a></li>
+      <li><a href="#s3">3. Your choices</a></li>
+      <li><a href="#s4">4. Full cookie list</a></li>
+    </ul>
+  </aside>
+  <article class="doc">
+    <h1>Cookie <span class="acc">policy.</span></h1>
+    <div class="meta">Last updated · [TBD]</div>
+    <div class="callout"><strong>Plain English:</strong> we use a small number of strictly-necessary cookies. We don't use advertising or tracking cookies. You can turn the optional ones off below.</div>
+    <h2 id="s1"><span class="num">01</span>What cookies <span class="acc">are.</span></h2>
+    <p>Cookies are small text files that websites place on your device. Some are necessary for the site to work; others are optional.</p>
+    <h2 id="s2"><span class="num">02</span>What we <span class="acc">use.</span></h2>
+    <p>We use three categories: strictly-necessary (login, CSRF), preferences (language, theme), and aggregate analytics (privacy-preserving; no cross-site tracking).</p>
+    <h2 id="s3"><span class="num">03</span>Your <span class="acc">choices.</span></h2>
+    <div class="pref">
+      <h4>Cookie preferences</h4>
+      <div class="opt"><div class="t"><strong>Strictly necessary</strong>Required for login, security, and core functionality.</div><div class="toggle locked"></div></div>
+      <div class="opt"><div class="t"><strong>Preferences</strong>Remember your settings between sessions.</div><div class="toggle on" onclick="this.classList.toggle('on')"></div></div>
+      <div class="opt"><div class="t"><strong>Aggregate analytics</strong>Anonymous page-view counts. No cross-site tracking.</div><div class="toggle on" onclick="this.classList.toggle('on')"></div></div>
+    </div>
+    <h2 id="s4"><span class="num">04</span>Full cookie <span class="acc">list.</span></h2>
+    <table><tr><th>Cookie</th><th>Purpose</th><th>Expiry</th></tr>
+      <tr><td>sf_session</td><td>Authenticated session</td><td>Session</td></tr>
+      <tr><td>sf_csrf</td><td>Cross-site request forgery protection</td><td>Session</td></tr>
+      <tr><td>sf_pref</td><td>Your UI preferences</td><td>[TBD] months</td></tr>
+      <tr><td>sf_anon</td><td>Anonymous analytics pseudo-ID</td><td>[TBD] days</td></tr>
+    </table>
+    <p>Questions? Email dpo@salesflow.[TBD].</p>
+  </article>
+</div>
+<div id="shell-footer"></div>
+<script src="shared/shell.js"></script>
+<script>renderShell({currentPath: ''});</script>
+</body></html>

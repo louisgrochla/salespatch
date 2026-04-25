@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Contractor stories — SalesFlow</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800;900&family=Inter+Tight:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="shared/brand.css" />
+<style>
+.cs { display: grid; grid-template-columns: 320px 1fr; gap: 48px; padding: 48px 0; border-top: 1px solid var(--line); align-items: start; }
+.cs:first-of-type { border-top: 0; }
+@media (max-width: 820px) { .cs { grid-template-columns: 1fr; gap: 24px; } }
+.cs .port { aspect-ratio: 4/5; border-radius: 14px; position: relative; overflow: hidden; }
+.cs .port::after { content:''; position:absolute; inset:0; background-image: radial-gradient(rgba(255 255 255 / 0.1) 1.5px, transparent 1.5px); background-size: 8px 8px; }
+.cs .port .meta { position: absolute; bottom: 16px; left: 16px; right: 16px; color: white; font-family: 'JetBrains Mono', monospace; font-size: 10.5px; letter-spacing: 0.14em; text-transform: uppercase; display: flex; justify-content: space-between; }
+.cs .port .initials { position: absolute; top: 16px; left: 16px; font-family: var(--display-font); font-size: 44px; color: white; letter-spacing: -0.03em; font-weight: 600; }
+.cs .body .tag { font-family: 'JetBrains Mono', monospace; font-size: 11px; letter-spacing: 0.14em; color: var(--signal); text-transform: uppercase; margin-bottom: 14px; }
+.cs .body h2 { font-family: var(--display-font); font-size: clamp(30px, 4vw, 44px); letter-spacing: -0.03em; line-height: 1.1; font-weight: 600; margin: 0 0 20px; max-width: 20ch; }
+.cs .body h2 .acc {  color: var(--signal); font-weight: 500; }
+.cs .body p { color: var(--ink2); font-size: 16px; line-height: 1.6; margin: 0 0 16px; max-width: 560px; }
+.cs .q { border-left: 3px solid var(--signal); padding: 8px 24px; font-family: var(--display-font); font-size: 22px; letter-spacing: -0.02em; line-height: 1.35;  font-weight: 500; color: var(--ink); margin: 20px 0 20px; max-width: 540px; }
+.cs .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-top: 24px; max-width: 540px; }
+.cs .stats .s { border: 1px solid var(--line); border-radius: 10px; padding: 16px; background: var(--bg2); }
+.cs .stats .s .n { font-family: var(--display-font); font-size: 28px; letter-spacing: -0.025em; font-weight: 600; color: var(--signal); }
+.cs .stats .s .l { font-family: 'JetBrains Mono', monospace; font-size: 10px; letter-spacing: 0.14em; color: var(--muted); text-transform: uppercase; margin-top: 6px; }
+</style></head><body>
+<div id="shell-top"></div>
+<section class="page-hero container-xl">
+  <div class="eyebrow">Contractor stories</div>
+  <h1>Told in their <span class="t-signal t-italic">own words.</span></h1>
+  <p class="lead">Profiles of contractors working the platform. [TBD] real people; bios and numbers left as placeholders until they've consented to publish.</p>
+</section>
+<section class="container-xl">
+  <div class="cs">
+    <div class="port" style="background: linear-gradient(135deg, rgb(184 134 11), rgb(40 30 25));">
+      <div class="initials">[X.X]</div>
+      <div class="meta"><span>[City TBD]</span><span>[Since TBD]</span></div>
+    </div>
+    <div class="body">
+      <div class="tag">Story 01 · Part-time closer</div>
+      <h2>"The <span class="acc">cafe pitch</span> paid for my week."</h2>
+      <p>[TBD — short profile paragraph]. Works two or three days a week, mostly Tuesday and Thursday mornings. Used to run a stall at the local market; switched over when a friend showed him the app.</p>
+      <div class="q">I don't miss the pipeline meetings. Nobody tells me what to do at 9am on a Tuesday, and the money is still there at lunchtime.</div>
+      <p>[TBD — how they got started, what patch they work, what they like about the rhythm].</p>
+      <div class="stats">
+        <div class="s"><div class="n">[TBD]</div><div class="l">Closes / week</div></div>
+        <div class="s"><div class="n">[TBD]</div><div class="l">Patch radius</div></div>
+        <div class="s"><div class="n">[TBD]</div><div class="l">Favourite vertical</div></div>
+      </div>
+    </div>
+  </div>
+  <div class="cs">
+    <div class="port" style="background: linear-gradient(135deg, rgb(40 40 40), rgb(80 60 50));">
+      <div class="initials">[Y.Y]</div>
+      <div class="meta"><span>[City TBD]</span><span>[Since TBD]</span></div>
+    </div>
+    <div class="body">
+      <div class="tag">Story 02 · Full-time closer</div>
+      <h2>"Five or six closes, <span class="acc">almost every day.</span>"</h2>
+      <p>[TBD — short profile paragraph]. Full-time on the patch since [TBD]. Background in door-to-door utilities; came across SalesFlow through [TBD]. The demo changed the game.</p>
+      <div class="q">I used to do forty conversations to get one sale. Now the phone does half the conversation for me.</div>
+      <p>[TBD — routines, rituals, what they'd tell a new contractor in their first week].</p>
+      <div class="stats">
+        <div class="s"><div class="n">[TBD]</div><div class="l">Closes / week</div></div>
+        <div class="s"><div class="n">[TBD]</div><div class="l">Close rate</div></div>
+        <div class="s"><div class="n">[TBD]</div><div class="l">Best month</div></div>
+      </div>
+    </div>
+  </div>
+  <div class="cs">
+    <div class="port" style="background: linear-gradient(135deg, rgb(180 120 60), rgb(60 40 20));">
+      <div class="initials">[Z.Z]</div>
+      <div class="meta"><span>[City TBD]</span><span>[Since TBD]</span></div>
+    </div>
+    <div class="body">
+      <div class="tag">Story 03 · Side hustle</div>
+      <h2>"Weekends only. <span class="acc">Still worth it.</span>"</h2>
+      <p>[TBD — short profile paragraph]. Has a day job in [TBD]; works Saturdays on the patch for pocket money and because she likes walking the high street she grew up on.</p>
+      <div class="q">I cover four streets. I know half the shopkeepers already. The pitch is almost too easy.</div>
+      <p>[TBD — why the rhythm suits her, what she'd change about the app].</p>
+      <div class="stats">
+        <div class="s"><div class="n">[TBD]</div><div class="l">Closes / month</div></div>
+        <div class="s"><div class="n">[TBD]</div><div class="l">Hours / week</div></div>
+        <div class="s"><div class="n">[TBD]</div><div class="l">Streak</div></div>
+      </div>
+    </div>
+  </div>
+</section>
+<section style="background:var(--ink);color:var(--bg);padding:100px 0;margin-top:80px;">
+  <div class="container-xl" style="text-align:center;">
+    <h2 class="h2" style="color:var(--bg);margin-bottom:20px;">Your story <span class="t-signal t-italic">might be next.</span></h2>
+    <p style="color:rgb(210 200 185);font-size:17px;max-width:500px;margin:0 auto 32px;">Apply to contract, close a few, and — if you'd like — we'll publish yours too.</p>
+    <a class="btn btn-signal btn-lg" href="apply.html">Apply to contract →</a>
+  </div>
+</section>
+<div id="shell-footer"></div>
+<script src="shared/shell.js"></script>
+<script>renderShell({currentPath: 'resources'});</script>
+</body></html>

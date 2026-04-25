@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Accessibility — SalesFlow</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800;900&family=Inter+Tight:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="shared/brand.css" />
+<style>
+.layout { display: grid; grid-template-columns: 240px 1fr; gap: 56px; padding: 48px 0 100px; }
+@media (max-width: 900px) { .layout { grid-template-columns: 1fr; gap: 24px; } }
+.nav-side { position: sticky; top: 88px; align-self: start; }
+.nav-side .lab { font-family: 'JetBrains Mono', monospace; font-size: 10.5px; letter-spacing: 0.14em; color: var(--muted); text-transform: uppercase; margin-bottom: 16px; }
+.nav-side ul { list-style: none; padding: 0; margin: 0; display: grid; gap: 4px; }
+.nav-side a { display: block; padding: 10px 12px; font-size: 13.5px; color: var(--ink2); border-radius: 8px; }
+.nav-side a:hover { background: var(--bg2); }
+.nav-side a.on { background: var(--ink); color: var(--bg); font-weight: 500; }
+.legal-pills { display: flex; gap: 8px; flex-wrap: wrap; margin: 40px 0 24px; padding-bottom: 16px; border-bottom: 1px solid var(--line); }
+.legal-pills a { padding: 8px 14px; border: 1px solid var(--line); border-radius: 999px; font-size: 12.5px; color: var(--ink2); }
+.legal-pills a.on { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+.doc h1 { font-family: var(--display-font); font-size: clamp(36px, 5vw, 52px); letter-spacing: -0.035em; line-height: 1.05; font-weight: 600; margin: 0 0 14px; }
+.doc h1 .acc {  color: var(--signal); font-weight: 500; }
+.doc .meta { font-family: 'JetBrains Mono', monospace; font-size: 11px; letter-spacing: 0.12em; color: var(--muted); text-transform: uppercase; margin-bottom: 32px; padding-bottom: 24px; border-bottom: 1px solid var(--line); }
+.doc h2 { font-family: var(--display-font); font-size: 24px; letter-spacing: -0.02em; line-height: 1.2; font-weight: 600; margin: 40px 0 14px; }
+.doc h2 .acc {  color: var(--signal); font-weight: 500; }
+.doc h2 .num { color: var(--signal); font-family: 'JetBrains Mono', monospace; font-size: 14px; letter-spacing: 0.08em; margin-right: 10px; font-weight: 500; }
+.doc p { font-size: 15.5px; line-height: 1.65; color: var(--ink); margin: 0 0 16px; max-width: 640px; }
+.doc ul { padding-left: 22px; max-width: 640px; margin: 0 0 16px; }
+.doc ul li { margin-bottom: 8px; font-size: 15px; line-height: 1.6; color: var(--ink2); }
+.doc .callout { background: var(--bg2); border-left: 3px solid var(--signal); padding: 18px 22px; border-radius: 0 10px 10px 0; margin: 24px 0; font-size: 14.5px; max-width: 640px; }
+.doc .callout strong { color: var(--ink); }
+</style></head><body>
+<div id="shell-top"></div>
+<div class="container-xl legal-pills">
+  <a href="legal-terms.html">Terms of service</a>
+  <a href="legal-privacy.html">Privacy</a>
+  <a href="legal-contractor-agreement.html">Contractor agreement</a>
+  <a href="legal-cookies.html">Cookies</a>
+  <a href="legal-accessibility.html" class="on">Accessibility</a>
+</div>
+<div class="container-xl layout">
+  <aside class="nav-side">
+    <div class="lab">/ On this page</div>
+    <ul>
+      <li><a href="#s1" class="on">1. Our commitment</a></li>
+      <li><a href="#s2">2. Standard we follow</a></li>
+      <li><a href="#s3">3. What works today</a></li>
+      <li><a href="#s4">4. Known issues</a></li>
+      <li><a href="#s5">5. Feedback</a></li>
+    </ul>
+  </aside>
+  <article class="doc">
+    <h1>Accessibility <span class="acc">statement.</span></h1>
+    <div class="meta">Last updated · [TBD] · Reviewed every [TBD] months</div>
+    <div class="callout"><strong>Plain English:</strong> we want every contractor, client, and visitor to be able to use SalesFlow regardless of device, ability, or context. We fall short in places. This page is honest about where.</div>
+    <h2 id="s1"><span class="num">01</span>Our <span class="acc">commitment.</span></h2>
+    <p>Accessibility is not a checkbox we hit once a year. We test with assistive technology, listen to feedback from contractors, and fix what's broken.</p>
+    <h2 id="s2"><span class="num">02</span>Standard we <span class="acc">follow.</span></h2>
+    <p>We aim for WCAG 2.2 AA across the web app and marketing site. The mobile contractor app follows platform accessibility guidelines (iOS / Android).</p>
+    <h2 id="s3"><span class="num">03</span>What <span class="acc">works today.</span></h2>
+    <ul><li>Full keyboard navigation on all primary flows.</li><li>Screen-reader labels on every interactive element in the contractor app.</li><li>Respects user's OS font-size and contrast preferences.</li><li>Dark and light modes with [TBD]:1 minimum text contrast.</li><li>Captions on all tutorial videos.</li></ul>
+    <h2 id="s4"><span class="num">04</span>Known <span class="acc">issues.</span></h2>
+    <ul><li>The map view on the contractor app is not fully screen-reader accessible. A list-view alternative is always available alongside.</li><li>Some demo sites we generate for clients inherit accessibility limitations from client-provided assets. We flag these for the orchestration desk.</li><li>[TBD]</li></ul>
+    <h2 id="s5"><span class="num">05</span>Feedback.</h2>
+    <p>If something's broken for you, tell us. Email accessibility@salesflow.[TBD] and we'll reply within [TBD] working days with a fix or a plan. Your feedback makes this better for everyone.</p>
+  </article>
+</div>
+<div id="shell-footer"></div>
+<script src="shared/shell.js"></script>
+<script>renderShell({currentPath: ''});</script>
+</body></html>

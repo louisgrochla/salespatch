@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Earnings — SalesFlow</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800;900&family=Inter+Tight:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="shared/brand.css" />
+<style>
+.big-nums { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: 14px; overflow: hidden; margin-top: 48px; }
+@media (max-width: 780px) { .big-nums { grid-template-columns: 1fr; } }
+.bn { background: var(--bg); padding: 40px 32px; }
+.bn .n { font-family: var(--display-font); font-size: clamp(52px,7vw,88px); letter-spacing: -0.04em; font-weight: 600; line-height: 0.96; color: var(--signal); }
+.bn .n .acc {  font-weight: 500; }
+.bn .l { font-family: 'JetBrains Mono', monospace; font-size: 11px; letter-spacing: 0.14em; color: var(--muted); text-transform: uppercase; margin-top: 18px; }
+.bn .d { font-size: 14px; color: var(--ink2); margin-top: 8px; line-height: 1.55; }
+
+.calc { background: var(--bg2); border: 1px solid var(--line); border-radius: 18px; padding: 48px; margin-top: 80px; }
+.calc-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 32px; flex-wrap: wrap; gap: 12px; }
+.calc-head h3 { font-family: var(--display-font); font-size: 28px; letter-spacing: -0.025em; font-weight: 600; margin: 0; }
+.calc-head h3 .acc {  color: var(--signal); font-weight: 500; }
+.slider-row { display: grid; gap: 20px; }
+.srow { display: grid; grid-template-columns: 200px 1fr 140px; gap: 24px; align-items: center; padding: 16px 0; border-top: 1px solid var(--line); }
+@media (max-width: 680px) { .srow { grid-template-columns: 1fr; gap: 8px; } }
+.srow .lbl { font-family: 'JetBrains Mono', monospace; font-size: 12px; letter-spacing: 0.1em; color: var(--ink); text-transform: uppercase; }
+.srow input[type=range] { width: 100%; accent-color: var(--signal); }
+.srow .val { font-family: var(--display-font); font-size: 22px; letter-spacing: -0.02em; font-weight: 600; text-align: right; }
+.result { margin-top: 36px; padding-top: 32px; border-top: 2px solid var(--ink); display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: var(--line); border-radius: 12px; overflow: hidden; border: 1px solid var(--line); }
+@media (max-width: 680px) { .result { grid-template-columns: 1fr; } }
+.result .r { background: var(--bg); padding: 28px; }
+.result .r .l { font-family: 'JetBrains Mono', monospace; font-size: 11px; letter-spacing: 0.14em; color: var(--muted); text-transform: uppercase; margin-bottom: 8px; }
+.result .r .v { font-family: var(--display-font); font-size: 44px; letter-spacing: -0.035em; font-weight: 600; color: var(--signal); line-height: 1; }
+
+.breakdown { padding: 100px 0; border-top: 1px solid var(--line); margin-top: 80px; }
+.bd-table { border: 1px solid var(--line); border-radius: 14px; overflow: hidden; margin-top: 36px; }
+.bd-row { display: grid; grid-template-columns: 1fr 160px 220px; gap: 20px; padding: 20px 28px; border-top: 1px solid var(--line); align-items: center; }
+.bd-row:first-child { border-top: 0; background: var(--bg2); }
+@media (max-width: 680px) { .bd-row { grid-template-columns: 1fr 100px; } .bd-row .c3 { display: none; } }
+.bd-row .c1 { font-family: var(--display-font); font-size: 17px; font-weight: 500; letter-spacing: -0.015em; }
+.bd-row:first-child .c1, .bd-row:first-child .c2, .bd-row:first-child .c3 { font-family: 'JetBrains Mono', monospace; font-size: 11px; letter-spacing: 0.14em; color: var(--muted); text-transform: uppercase; font-weight: 400; }
+.bd-row .c2 { font-family: var(--display-font); font-size: 22px; letter-spacing: -0.02em; font-weight: 600; color: var(--signal); text-align: right; }
+.bd-row:first-child .c2 { color: var(--muted); text-align: right; }
+.bd-row .c3 { font-size: 13px; color: var(--ink2); line-height: 1.5; }
+</style></head><body>
+<div id="shell-top"></div>
+<section class="page-hero container-xl">
+  <div class="eyebrow">Earnings</div>
+  <h1>One price. Paid <span class="t-signal t-italic">on signature.</span></h1>
+  <p class="lead">No tiers. No bonuses. No quarterly bonus structure to decode. £50 per close, into your wallet, the moment the owner signs. Withdraw with one tap.</p>
+</section>
+
+<section class="container-xl" style="padding-top:40px;">
+  <div class="big-nums">
+    <div class="bn"><div class="n">£50</div><div class="l">Per close</div><div class="d">Flat. No sliding scale. No "earn-back". The owner signs, you get £50.</div></div>
+    <div class="bn"><div class="n"><span class="acc">0</span></div><div class="l">Clawback</div><div class="d">Client cancels next month? You keep the £50. Churn is not your problem.</div></div>
+    <div class="bn"><div class="n">1×</div><div class="l">Tap to withdraw</div><div class="d">Wallet → bank, any time. Usually arrives within [TBD] hours.</div></div>
+  </div>
+</section>
+
+<section class="container-xl" style="padding:40px 0;">
+  <div class="calc">
+    <div class="calc-head"><h3>Rough <span class="acc">sketch</span> of a week.</h3><span class="eyebrow">Move the sliders.</span></div>
+    <div class="slider-row">
+      <div class="srow"><div class="lbl">Days worked / week</div><input type="range" id="days" min="1" max="7" value="4" /><div class="val" id="days-v">4 days</div></div>
+      <div class="srow"><div class="lbl">Claims / day</div><input type="range" id="claims" min="2" max="15" value="6" /><div class="val" id="claims-v">6 claims</div></div>
+      <div class="srow"><div class="lbl">Close rate</div><input type="range" id="rate" min="10" max="60" value="30" /><div class="val" id="rate-v">30%</div></div>
+    </div>
+    <div class="result">
+      <div class="r"><div class="l">Closes / week</div><div class="v" id="closes">7</div></div>
+      <div class="r"><div class="l">Wallet / week</div><div class="v" id="earn">£360</div></div>
+    </div>
+    <p style="font-size:12px;color:var(--muted);margin-top:20px;max-width:560px;font-family:'JetBrains Mono',monospace;letter-spacing:0.06em;">/ Illustrative. Your numbers depend on patch, pitch, and how much you feel like walking today.</p>
+  </div>
+</section>
+
+<section class="breakdown container-xl">
+  <div style="max-width:640px;"><div class="eyebrow" style="margin-bottom:16px;">The breakdown</div><h2 class="h2">Where every <span class="t-signal t-italic">pound</span> goes.</h2></div>
+  <div class="bd-table">
+    <div class="bd-row"><div class="c1">Line</div><div class="c2">Amount</div><div class="c3">Note</div></div>
+    <div class="bd-row"><div class="c1">Client upfront fee</div><div class="c2">£350</div><div class="c3">Paid by the small business at signature. Covers build + first month.</div></div>
+    <div class="bd-row"><div class="c1">Monthly subscription</div><div class="c2">~£27.50</div><div class="c3">Hosting, domain, orchestration, change requests. Billed monthly, cancellable [TBD].</div></div>
+    <div class="bd-row"><div class="c1">You (contractor)</div><div class="c2">£50</div><div class="c3">Flat commission on signature. Credited to wallet instantly.</div></div>
+    <div class="bd-row"><div class="c1">Platform (net)</div><div class="c2">£[TBD]</div><div class="c3">Build costs, orchestration desk, infra, team.</div></div>
+  </div>
+</section>
+
+<section style="background:var(--ink);color:var(--bg);padding:100px 0;">
+  <div class="container-xl" style="max-width:760px;">
+    <div class="eyebrow" style="color:var(--signal);margin-bottom:16px;">FAQ</div>
+    <h2 class="h2" style="color:var(--bg);margin-bottom:40px;">Questions, <span class="t-signal t-italic">honestly answered.</span></h2>
+    <div style="display:grid;gap:1px;background:rgb(255 255 255 / 0.1);border-radius:12px;overflow:hidden;">
+      ${''}
+    </div>
+    <div id="faq" style="display:grid;gap:1px;background:rgb(255 255 255 / 0.1);border-radius:12px;overflow:hidden;"></div>
+  </div>
+</section>
+
+<div id="shell-footer"></div>
+<script src="shared/shell.js"></script>
+<script>renderShell({currentPath: 'pricing'});
+const faqs = [
+  ['When exactly does the £50 hit my wallet?', 'On signature. The app confirms and the wallet balance updates within seconds. No install-wait, no activation delay.'],
+  ['Can the £50 be clawed back?', 'No. Once credited, it’s yours. Refund disputes between client and platform are our problem, not yours.'],
+  ['Is there a cap on how much I can earn?', 'No cap. Some contractors close one a week, some close five a day. The economics work either way.'],
+  ['Do I need to pay anything up-front?', 'No seat fee. No subscription. You bring the phone and your time.'],
+  ['What about tax?', 'You’re a self-employed contractor. We don’t deduct tax. We provide a [TBD] annual earnings statement for your self-assessment.'],
+  ['How fast does a withdrawal arrive?', 'Usually within [TBD] hours to a UK bank account. Faster on weekdays, occasionally longer on weekends.'],
+];
+document.getElementById('faq').innerHTML = faqs.map(([q,a]) => `<details style="background:rgb(255 255 255 / 0.03);padding:24px 28px;"><summary style="cursor:pointer;list-style:none;font-family:var(--display-font);font-size:19px;letter-spacing:-0.02em;font-weight:500;color:var(--bg);">${q}</summary><p style="color:rgb(210 200 185);font-size:15px;line-height:1.6;margin:14px 0 0;">${a}</p></details>`).join('');
+const d=document.getElementById('days'),c=document.getElementById('claims'),r=document.getElementById('rate');
+function upd(){const D=+d.value,C=+c.value,R=+r.value;document.getElementById('days-v').textContent=D+' day'+(D>1?'s':'');document.getElementById('claims-v').textContent=C+' claims';document.getElementById('rate-v').textContent=R+'%';const closes=Math.round(D*C*R/100);document.getElementById('closes').textContent=closes;document.getElementById('earn').textContent='£'+(closes*50).toLocaleString();}
+[d,c,r].forEach(x=>x.addEventListener('input',upd));upd();
+</script>
+</body></html>

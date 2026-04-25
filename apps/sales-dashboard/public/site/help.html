@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Help centre — SalesFlow</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800;900&family=Inter+Tight:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="shared/brand.css" />
+<style>
+.search { border: 1px solid var(--line); border-radius: 12px; padding: 18px 22px; background: var(--bg2); max-width: 640px; display: flex; gap: 14px; align-items: center; margin-top: 32px; }
+.search input { flex: 1; background: transparent; border: 0; outline: 0; font-family: inherit; font-size: 16px; color: var(--ink); }
+.search .k { font-family: 'JetBrains Mono', monospace; font-size: 10.5px; color: var(--muted); border: 1px solid var(--line); padding: 4px 8px; border-radius: 4px; letter-spacing: 0.08em; }
+.topics { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: 14px; overflow: hidden; margin-top: 56px; }
+@media (max-width: 860px) { .topics { grid-template-columns: repeat(2, 1fr); } }
+.topic { background: var(--bg); padding: 28px 26px; transition: background 0.15s; }
+.topic:hover { background: var(--bg2); }
+.topic .n { font-family: 'JetBrains Mono', monospace; font-size: 10.5px; letter-spacing: 0.14em; color: var(--signal); text-transform: uppercase; }
+.topic h3 { font-family: var(--display-font); font-size: 20px; letter-spacing: -0.02em; font-weight: 600; margin: 12px 0 8px; line-height: 1.25; }
+.topic p { color: var(--ink2); font-size: 13px; line-height: 1.55; margin: 0 0 12px; }
+.topic .ct { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--muted); letter-spacing: 0.1em; }
+.faq-sec { padding: 80px 0; border-top: 1px solid var(--line); margin-top: 80px; }
+.faq-cat { margin-bottom: 48px; }
+.faq-cat h3 { font-family: 'JetBrains Mono', monospace; font-size: 12px; letter-spacing: 0.16em; color: var(--signal); text-transform: uppercase; margin: 0 0 20px; font-weight: 500; }
+.faq-cat details { border-top: 1px solid var(--line); padding: 20px 0; }
+.faq-cat details:last-child { border-bottom: 1px solid var(--line); }
+.faq-cat summary { cursor: pointer; list-style: none; font-family: var(--display-font); font-size: 19px; letter-spacing: -0.02em; font-weight: 500; display: flex; justify-content: space-between; align-items: center; }
+.faq-cat summary::after { content: '+'; font-family: var(--display-font); font-size: 22px; color: var(--signal); font-weight: 500; }
+.faq-cat details[open] summary::after { content: '–'; }
+.faq-cat details p { font-size: 15px; color: var(--ink2); line-height: 1.65; margin: 14px 0 0; max-width: 640px; }
+</style></head><body>
+<div id="shell-top"></div>
+<section class="page-hero container-xl">
+  <div class="eyebrow">Help centre</div>
+  <h1>Questions, <span class="t-signal t-italic">answered plainly.</span></h1>
+  <p class="lead">Most of what you'll want to know is here. If it isn't, <a href="contact.html" style="color:var(--signal);border-bottom:1px solid;">contact us</a>.</p>
+  <div class="search"><span style="color:var(--muted);">/</span><input placeholder="Search help articles…" /><span class="k">⌘ K</span></div>
+</section>
+<section class="container-xl">
+  <div class="topics">
+    <div class="topic"><div class="n">01</div><h3>Getting started</h3><p>Applying, approval, your first day on the patch.</p><div class="ct">[TBD] articles</div></div>
+    <div class="topic"><div class="n">02</div><h3>The app</h3><p>Claiming, demos, pitch logging, status updates.</p><div class="ct">[TBD] articles</div></div>
+    <div class="topic"><div class="n">03</div><h3>Wallet & pay</h3><p>Wallet balance, withdrawals, tax, statements.</p><div class="ct">[TBD] articles</div></div>
+    <div class="topic"><div class="n">04</div><h3>Account</h3><p>Profile, settings, closing your account.</p><div class="ct">[TBD] articles</div></div>
+  </div>
+</section>
+<section class="faq-sec container-xl">
+  <div style="max-width:640px;margin-bottom:48px;">
+    <div class="eyebrow" style="margin-bottom:16px;">Frequently asked</div>
+    <h2 class="h2">The <span class="t-signal t-italic">common</span> ones.</h2>
+  </div>
+  <div class="faq-cat">
+    <h3>/ Getting started</h3>
+    <details><summary>How long does approval take?</summary><p>Usually [TBD] working days. We do a short interview over video and a quick ID check. Once approved, the app unlocks and you can claim immediately.</p></details>
+    <details><summary>Do I need sales experience?</summary><p>Helpful, not required. The demo carries a lot of the conversation. We've approved people from retail, hospitality, teaching, and trades — anyone comfortable walking up to strangers tends to do fine.</p></details>
+    <details><summary>Can I work in any city?</summary><p>Currently [TBD] UK cities. We add patches as we grow. If your area isn't covered, you can join the waiting list in the app.</p></details>
+  </div>
+  <div class="faq-cat">
+    <h3>/ The app</h3>
+    <details><summary>How does the claim window work?</summary><p>You claim a lead, it's locked to you for [TBD] minutes. Close or release it before the window ends — after that it's returned to the queue.</p></details>
+    <details><summary>What if the demo fails to generate?</summary><p>The app ships with a static fallback template that uses the business name and a vertical-appropriate stock layout. You never show a blank screen.</p></details>
+    <details><summary>Can I revisit a "soft no" lead?</summary><p>Yes, up to [TBD] times. After that the lead is cooled down and passed to another contractor or archived.</p></details>
+  </div>
+  <div class="faq-cat">
+    <h3>/ Wallet & pay</h3>
+    <details><summary>When does the £50 hit my wallet?</summary><p>On signature. The app confirms and the wallet balance updates within seconds. No install-wait, no activation delay.</p></details>
+    <details><summary>How fast do withdrawals arrive?</summary><p>Usually within [TBD] hours to a UK bank account. Faster on weekdays, occasionally longer on weekends.</p></details>
+    <details><summary>Can the £50 be clawed back?</summary><p>No. Once credited, it's yours. Refund disputes between client and platform are our problem, not yours.</p></details>
+    <details><summary>What about tax?</summary><p>You are a self-employed contractor. We don't deduct tax. A [TBD] annual earnings statement is available for your self-assessment.</p></details>
+  </div>
+  <div class="faq-cat">
+    <h3>/ Account</h3>
+    <details><summary>Can I pause my account?</summary><p>Yes. Toggle "on patch" off in the app and you won't be offered leads. Turn it back on when you're ready. No penalty, no conversation.</p></details>
+    <details><summary>How do I close my account?</summary><p>Settings → Account → Close. Withdraw any wallet balance first. Account deletion follows our privacy policy.</p></details>
+  </div>
+</section>
+<section style="background:var(--ink);color:var(--bg);padding:80px 0;">
+  <div class="container-xl" style="display:flex;justify-content:space-between;align-items:center;gap:24px;flex-wrap:wrap;">
+    <div><h2 class="h2" style="color:var(--bg);margin:0 0 8px;max-width:14ch;">Didn't find it?</h2><p style="color:rgb(210 200 185);margin:0;font-size:15px;">Send us a note. We answer everything.</p></div>
+    <a class="btn btn-signal btn-lg" href="contact.html">Contact support →</a>
+  </div>
+</section>
+<div id="shell-footer"></div>
+<script src="shared/shell.js"></script>
+<script>renderShell({currentPath: 'resources'});</script>
+</body></html>
