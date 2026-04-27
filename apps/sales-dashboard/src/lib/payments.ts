@@ -63,7 +63,12 @@ export function formatPenceAsPounds(pence: number): string {
 export const SETUP_FEE_PENCE = DEFAULT_SETUP_FEE_PENCE;
 export const MONTHLY_PENCE = DEFAULT_MONTHLY_PENCE;
 
-const SESSION_EXPIRES_DAYS = 7;           // Stripe max
+// Stripe's max for mode='payment' Checkout Sessions is 24 hours.
+// (mode='subscription' allows 7 days, but our flow is one-time + post-pay
+// subscription create, so we're stuck on payment mode.) Pick 23h to leave
+// a buffer; expired sessions get auto-refreshed by getOrCreateActiveSession
+// the next time the preview page renders, so the customer never sees the seam.
+const SESSION_EXPIRES_HOURS = 23;
 const PUBLIC_BASE_URL = 'https://salespatch.co.uk';
 
 export interface PaymentSessionRow {
@@ -149,7 +154,7 @@ export async function createCheckoutSessionForAssignment(
 
   const businessName = businessNameFromNotes(assignment.notes);
   const stripe = getStripe();
-  const expiresAtUnix = Math.floor(Date.now() / 1000) + SESSION_EXPIRES_DAYS * 24 * 60 * 60;
+  const expiresAtUnix = Math.floor(Date.now() / 1000) + SESSION_EXPIRES_HOURS * 60 * 60;
 
   // Resolve dynamic prices once per session create. Snapshot is stored on
   // the lead_payment_sessions row so historical price is recoverable even
