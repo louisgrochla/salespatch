@@ -66,16 +66,32 @@ function parseNotes(raw: string | null): ParsedNotes {
       typeof n.business_name === 'string' && n.business_name.trim()
         ? n.business_name
         : 'your business';
-    let demoUrl =
+    const rawDomain =
       typeof n.demo_site_domain === 'string' && n.demo_site_domain.trim()
-        ? n.demo_site_domain
+        ? n.demo_site_domain.trim()
         : null;
-    // Defensive: trim leading double-protocol that's bitten the iOS QR before.
-    if (demoUrl) demoUrl = demoUrl.replace(/^https?:\/\/(?=https?:\/\/)/, '');
-    return { business_name: businessName, demo_site_domain: demoUrl };
+    return { business_name: businessName, demo_site_domain: resolveDemoUrl(rawDomain) };
   } catch {
     return { business_name: 'your business', demo_site_domain: null };
   }
+}
+
+/**
+ * Resolve `notes.demo_site_domain` to an iframe-able URL. The field can be:
+ *   - a slug like "third-circle-coffee" → routed through /api/demo-site/<slug>
+ *     (server-side proxy that fetches from Supabase Storage; serves under our
+ *     own origin so the iframe doesn't hit X-Frame-Options issues)
+ *   - a full URL like "https://example.com/site.html" → used as-is
+ *   - the doubled-protocol bug "https://https://..." → strip leading dup
+ *   - null/empty → null (preview page falls back to a friendly message)
+ */
+function resolveDemoUrl(raw: string | null): string | null {
+  if (!raw) return null;
+  // Strip leading doubled protocol (historic iOS bug).
+  let v = raw.replace(/^https?:\/\/(?=https?:\/\/)/, '');
+  if (/^https?:\/\//i.test(v)) return v;
+  // Slug — route through our proxy.
+  return `/api/demo-site/${encodeURIComponent(v)}`;
 }
 
 export async function generateMetadata(
