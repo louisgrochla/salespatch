@@ -14,7 +14,12 @@
  */
 import { createClient } from '@supabase/supabase-js';
 import { notFound } from 'next/navigation';
-import { getOrCreateActiveSession } from '@/lib/payments';
+import {
+  getOrCreateActiveSession,
+  getSetupFeePence,
+  getMonthlyPence,
+  formatPenceAsPounds,
+} from '@/lib/payments';
 import type { Metadata } from 'next';
 
 export const dynamic = 'force-dynamic';
@@ -113,7 +118,18 @@ export default async function PreviewPage({
     // Render the demo anyway — better to show something than 500.
   }
 
-  return <PreviewWithCTA businessName={business_name} demoUrl={demo_site_domain} checkoutUrl={checkoutUrl} />;
+  const setupLabel = formatPenceAsPounds(getSetupFeePence());
+  const monthlyLabel = formatPenceAsPounds(getMonthlyPence());
+
+  return (
+    <PreviewWithCTA
+      businessName={business_name}
+      demoUrl={demo_site_domain}
+      checkoutUrl={checkoutUrl}
+      setupLabel={setupLabel}
+      monthlyLabel={monthlyLabel}
+    />
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -129,10 +145,14 @@ function PreviewWithCTA({
   businessName,
   demoUrl,
   checkoutUrl,
+  setupLabel,
+  monthlyLabel,
 }: {
   businessName: string;
   demoUrl: string | null;
   checkoutUrl: string | null;
+  setupLabel: string;
+  monthlyLabel: string;
 }) {
   return (
     <div
@@ -200,7 +220,10 @@ function PreviewWithCTA({
           }}
         >
           <span>
-            Go live now · <span style={{ color: SIGNAL }}>£350 setup, then £25/mo</span>
+            Go live now ·{' '}
+            <span style={{ color: SIGNAL }}>
+              {setupLabel} setup, then {monthlyLabel}/mo
+            </span>
           </span>
           <span style={{ color: SIGNAL, fontSize: 18, lineHeight: 1 }}>→</span>
         </a>

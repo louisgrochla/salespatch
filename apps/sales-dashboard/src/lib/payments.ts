@@ -17,8 +17,52 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { getStripe } from './stripe';
 
-export const SETUP_FEE_PENCE = 35000;     // £350
-export const MONTHLY_PENCE = 2500;        // £25 / month, starts day 30
+// Setup fee — read from env so beta pricing experiments don't need a code
+// deploy. Set SETUP_FEE_PENCE on Vercel (e.g. 35000 = £350, 29900 = £299).
+// Defaults to 35000 if unset.
+const DEFAULT_SETUP_FEE_PENCE = 35000;
+export function getSetupFeePence(): number {
+  const raw = process.env.SETUP_FEE_PENCE;
+  if (!raw) return DEFAULT_SETUP_FEE_PENCE;
+  const n = parseInt(raw, 10);
+  if (!Number.isFinite(n) || n < 100 || n > 1_000_000) {
+    // 100p (£1) min, 10000.00 max — refuse anything wild.
+    console.warn(`[payments] Invalid SETUP_FEE_PENCE=${raw}, falling back to ${DEFAULT_SETUP_FEE_PENCE}`);
+    return DEFAULT_SETUP_FEE_PENCE;
+  }
+  return n;
+}
+
+// Monthly recurring fee — also env-driven for beta tweaking. The recurring
+// charge itself is governed by the Stripe Price ID (STRIPE_HOSTING_PRICE_ID)
+// which is immutable in Stripe; this constant only controls the price
+// displayed in the Checkout session line description and on the preview CTA.
+// To actually change the amount Stripe charges, create a new Price in Stripe
+// Dashboard and swap STRIPE_HOSTING_PRICE_ID.
+const DEFAULT_MONTHLY_PENCE = 2500;
+export function getMonthlyPence(): number {
+  const raw = process.env.MONTHLY_PENCE;
+  if (!raw) return DEFAULT_MONTHLY_PENCE;
+  const n = parseInt(raw, 10);
+  if (!Number.isFinite(n) || n < 100 || n > 100_000) {
+    console.warn(`[payments] Invalid MONTHLY_PENCE=${raw}, falling back to ${DEFAULT_MONTHLY_PENCE}`);
+    return DEFAULT_MONTHLY_PENCE;
+  }
+  return n;
+}
+
+// Format pence as a "£X" / "£X.YY" string for UI use.
+export function formatPenceAsPounds(pence: number): string {
+  const pounds = pence / 100;
+  return pounds === Math.floor(pounds) ? `£${pounds}` : `£${pounds.toFixed(2)}`;
+}
+
+// Legacy aliases for code that still references the constants directly.
+// Prefer getSetupFeePence() / getMonthlyPence() at call sites — these only
+// exist for backwards-compat with the webhook constant import.
+export const SETUP_FEE_PENCE = DEFAULT_SETUP_FEE_PENCE;
+export const MONTHLY_PENCE = DEFAULT_MONTHLY_PENCE;
+
 const SESSION_EXPIRES_DAYS = 7;           // Stripe max
 const PUBLIC_BASE_URL = 'https://salespatch.co.uk';
 
@@ -107,6 +151,13 @@ export async function createCheckoutSessionForAssignment(
   const stripe = getStripe();
   const expiresAtUnix = Math.floor(Date.now() / 1000) + SESSION_EXPIRES_DAYS * 24 * 60 * 60;
 
+  // Resolve dynamic prices once per session create. Snapshot is stored on
+  // the lead_payment_sessions row so historical price is recoverable even
+  // if env vars change later.
+  const setupPence = getSetupFeePence();
+  const monthlyPence = getMonthlyPence();
+  const monthlyDisplay = formatPenceAsPounds(monthlyPence);
+
   const session = await stripe.checkout.sessions.create({
     mode: 'payment',
     payment_method_types: ['card'],
@@ -116,18 +167,17 @@ export async function createCheckoutSessionForAssignment(
       {
         price_data: {
           currency: 'gbp',
-          unit_amount: SETUP_FEE_PENCE,
+          unit_amount: setupPence,
           product_data: {
             name: `Website setup — ${businessName}`,
-            description:
-              'One-time setup fee. Includes first month of hosting & support. £25/month thereafter, starting in 30 days.',
+            description: `One-time setup fee. Includes first month of hosting & support. ${monthlyDisplay}/month thereafter, starting in 30 days.`,
           },
         },
         quantity: 1,
       },
     ],
     payment_intent_data: {
-      // Save the card so the webhook can create a £25/mo subscription on it,
+      // Save the card so the webhook can create a recurring subscription on it,
       // off-session, with a 30-day trial so the first recurring charge lands
       // exactly 30 days after the setup fee.
       setup_future_usage: 'off_session',
@@ -141,7 +191,8 @@ export async function createCheckoutSessionForAssignment(
       lead_assignment_id: assignment.id,
       salesperson_id: assignment.user_id,
       lead_id: assignment.lead_id,
-      monthly_pence: String(MONTHLY_PENCE),
+      monthly_pence: String(monthlyPence),
+      setup_pence: String(setupPence),
     },
     success_url: onboardingUrlFor(assignment.id),
     cancel_url: previewUrlFor(assignment.id),
@@ -164,8 +215,8 @@ export async function createCheckoutSessionForAssignment(
       stripe_session_url: session.url,
       expires_at: new Date(session.expires_at * 1000).toISOString(),
       status: 'active',
-      amount_setup_pence: SETUP_FEE_PENCE,
-      amount_monthly_pence: MONTHLY_PENCE,
+      amount_setup_pence: setupPence,
+      amount_monthly_pence: monthlyPence,
     })
     .select('*')
     .single();
