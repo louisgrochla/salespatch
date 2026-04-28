@@ -25,6 +25,18 @@ final class Lead {
     var bestReviews: String?      // JSON-encoded [Review]
     var trustBadges: String?      // JSON-encoded [String]
     var avoidTopics: String?      // JSON-encoded [String]
+
+    // Sales brief — populated by the Claude Desktop research + admin upload.
+    // Drives the Prepare + Pitch tabs.
+    var hook: String?              // One-liner: the #1 reason this business needs a site
+    var painPoints: String?        // JSON-encoded [String] — concrete problems a site fixes
+    var opener: String?            // One-liner: exact opening line to say
+    var demoMoments: String?       // JSON-encoded [String] — what to highlight when showing the demo
+    var specificObjections: String? // JSON-encoded [ObjectionPair] — tailored objection/response
+    var closeScript: String?       // One-paragraph ask
+    var nextVisitReason: String?   // One-liner: reason to come back if they pass today
+    var painPointsExtended: String? // Optional longer pain-context prose (rarely used)
+
     var lastSyncedAt: Date
 
     // Cached geocoded coordinates
@@ -58,6 +70,14 @@ final class Lead {
         bestReviews: String? = nil,
         trustBadges: String? = nil,
         avoidTopics: String? = nil,
+        hook: String? = nil,
+        painPoints: String? = nil,
+        opener: String? = nil,
+        demoMoments: String? = nil,
+        specificObjections: String? = nil,
+        closeScript: String? = nil,
+        nextVisitReason: String? = nil,
+        painPointsExtended: String? = nil,
         lastSyncedAt: Date = .now
     ) {
         self.assignmentId = assignmentId
@@ -81,8 +101,31 @@ final class Lead {
         self.bestReviews = bestReviews
         self.trustBadges = trustBadges
         self.avoidTopics = avoidTopics
+        self.hook = hook
+        self.painPoints = painPoints
+        self.opener = opener
+        self.demoMoments = demoMoments
+        self.specificObjections = specificObjections
+        self.closeScript = closeScript
+        self.nextVisitReason = nextVisitReason
+        self.painPointsExtended = painPointsExtended
         self.lastSyncedAt = lastSyncedAt
     }
+
+    /// A PASS brief — Claude flagged this business as "already has a modern site,
+    /// no sale to make here". The `hook` string begins with "PASS —" and the other
+    /// tactical fields are null. UI renders a skip-this-lead card instead of the
+    /// regular playbook.
+    var isPassBrief: Bool {
+        guard let hook else { return false }
+        return hook.uppercased().hasPrefix("PASS")
+    }
+}
+
+// MARK: — Sales brief types
+struct ObjectionPair: Codable, Hashable {
+    let objection: String
+    let response: String
 }
 
 // MARK: — Helpers
@@ -119,6 +162,15 @@ extension Lead {
     var avoidTopicsArray: [String] {
         decode([String].self, from: avoidTopics) ?? []
     }
+    var painPointsArray: [String] {
+        decode([String].self, from: painPoints) ?? []
+    }
+    var demoMomentsArray: [String] {
+        decode([String].self, from: demoMoments) ?? []
+    }
+    var specificObjectionsArray: [ObjectionPair] {
+        decode([ObjectionPair].self, from: specificObjections) ?? []
+    }
     var openingHoursArray: [String] {
         decode([String].self, from: openingHours) ?? []
     }
@@ -134,6 +186,8 @@ extension Lead {
 
 // MARK: — API response DTOs
 
+/// Legacy shape (OpenClaw runtime). Kept for any callers still using it.
+/// New code decodes `[LeadDTO]` directly from the envelope — see APIClient.
 struct LeadsResponse: Decodable {
     let leads: [LeadDTO]
 }
@@ -142,9 +196,9 @@ struct LeadDTO: Decodable {
     let id: String
     let leadId: String
     let status: String
-    let businessName: String
-    let businessType: String
-    let postcode: String
+    let businessName: String?   // `business_name` falls back to "Unknown" server-side but is still nullable in practice
+    let businessType: String?   // nullable on web
+    let postcode: String?       // nullable on web
     let address: String?
     let phone: String?
     let googleRating: Double?
@@ -161,10 +215,25 @@ struct LeadDTO: Decodable {
     let avoidTopics: [String]?
     let bestReviews: [Review]?
 
+    // Sales brief (optional — populated by admin upload / Claude Desktop prompt)
+    let hook: String?
+    let painPoints: [String]?
+    let opener: String?
+    let demoMoments: [String]?
+    let specificObjections: [ObjectionPair]?
+    let closeScript: String?
+    let nextVisitReason: String?
+    let painPointsExtended: String?
+    /// Raw HTML blob for the demo site. Populated only by the detail endpoint
+    /// (not the list). Stored on-device so the demo renders offline.
+    let demoSiteHtml: String?
+
     enum CodingKeys: String, CodingKey {
-        case id
+        // Web list endpoint returns `assignment_id` + `assignment_status`;
+        // detail endpoint uses the same keys plus the rich-content fields.
+        case id              = "assignment_id"
         case leadId          = "lead_id"
-        case status
+        case status          = "assignment_status"
         case businessName    = "business_name"
         case businessType    = "business_type"
         case postcode, address, phone
@@ -174,13 +243,22 @@ struct LeadDTO: Decodable {
         case demoSiteDomain  = "demo_site_domain"
         case hasWebsite      = "has_website"
         case followUpAt      = "follow_up_at"
-        case contactPerson   = "contact_person"
+        case contactPerson   = "contact_name"
         case contactRole     = "contact_role"
         case openingHours    = "opening_hours"
         case services
         case trustBadges     = "trust_badges"
         case avoidTopics     = "avoid_topics"
         case bestReviews     = "best_reviews"
+        case hook
+        case painPoints      = "pain_points"
+        case opener
+        case demoMoments     = "demo_moments"
+        case specificObjections = "specific_objections"
+        case closeScript     = "close_script"
+        case nextVisitReason = "next_visit_reason"
+        case painPointsExtended = "pain_points_extended"
+        case demoSiteHtml    = "demo_site_html"
     }
 
     func toModel() -> Lead {
@@ -197,10 +275,10 @@ struct LeadDTO: Decodable {
         return Lead(
             assignmentId: id,
             leadId: leadId,
-            businessName: businessName,
-            businessType: businessType,
+            businessName: businessName ?? "Unknown business",
+            businessType: businessType ?? "Unclassified",
             address: address ?? "",
-            postcode: postcode,
+            postcode: postcode ?? "",
             phone: phone,
             googleRating: googleRating,
             googleReviewCount: googleReviewCount,
@@ -215,7 +293,15 @@ struct LeadDTO: Decodable {
             services: encode(services),
             bestReviews: encode(bestReviews),
             trustBadges: encode(trustBadges),
-            avoidTopics: encode(avoidTopics)
+            avoidTopics: encode(avoidTopics),
+            hook: hook,
+            painPoints: encode(painPoints),
+            opener: opener,
+            demoMoments: encode(demoMoments),
+            specificObjections: encode(specificObjections),
+            closeScript: closeScript,
+            nextVisitReason: nextVisitReason,
+            painPointsExtended: painPointsExtended
         )
     }
 }
@@ -242,12 +328,20 @@ struct Stats: Codable {
     let totalCommission: Double?
 
     enum CodingKeys: String, CodingKey {
-        case queue, visited, pitched, sold, rejected, earned
+        // Matches web `SalesStats` shape returned by /api/stats.
+        case queue           = "new_count"
+        case visited         = "visited_count"
+        case pitched         = "pitched_count"
+        case sold            = "sold_count"
+        case rejected        = "rejected_count"
+        case earned          = "total_commission"
         case visitsToday     = "visits_today"
         case salesToday      = "sales_today"
-        case visitsThisWeek  = "visits_this_week"
-        case salesThisWeek   = "sales_this_week"
-        case totalCommission = "total_commission"
+        // Fields not returned by the Vercel API — kept optional for
+        // back-compat with seed + preview data.
+        case visitsThisWeek
+        case salesThisWeek
+        case totalCommission
     }
 
     static let empty = Stats(queue: 0, visited: 0, pitched: 0, sold: 0, rejected: nil,
@@ -299,10 +393,7 @@ struct LeaderboardResponse: Codable {
     let rankings: [LeaderboardEntry]
 }
 
-struct LoginResponse: Codable {
-    let token: String
-    let user: User?
-}
+// Login response shape is now `APIClient.LoginPayload` — removed.
 
 // MARK: — Request bodies
 struct StatusUpdateRequest: Encodable {

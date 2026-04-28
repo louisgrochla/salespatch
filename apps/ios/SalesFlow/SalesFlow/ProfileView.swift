@@ -1,117 +1,41 @@
 import SwiftUI
 
+// MARK: — ProfileView
+//
+// User card → performance ribbon → grouped rows for permissions, support,
+// legal, sign out. Re-skinned in the brand system. No appearance toggle —
+// the app is dark-only by design (see MainTabView).
+
 struct ProfileView: View {
     @EnvironmentObject private var authStore: AuthStore
-    @EnvironmentObject private var appearanceStore: AppearanceStore
     @State private var showSignOutAlert = false
     @State private var showHelp = false
 
     var body: some View {
         NavigationStack {
-            ZStack {
-                Theme.background.ignoresSafeArea()
-
-                List {
-                    // ── User card ─────────────────────────────────────────────
-                    Section {
-                        userCard
-                    }
-                    .listRowBackground(Color.clear)
-                    .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
-                    .listRowSeparator(.hidden)
-
-                    // ── Performance ───────────────────────────────────────────
-                    Section {
-                        performanceCard
-                    }
-                    .listRowBackground(Color.clear)
-                    .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 16, trailing: 16))
-                    .listRowSeparator(.hidden)
-
-                    // ── Appearance ────────────────────────────────────────────
-                    Section(header: sectionHeader("Appearance")) {
-                        HStack(spacing: 10) {
-                            Image(systemName: "circle.lefthalf.filled")
-                                .font(.system(size: 14))
-                                .foregroundStyle(Theme.textSecondary)
-                                .frame(width: 22)
-                            Text("Theme")
-                                .font(.system(size: 15))
-                                .foregroundStyle(Theme.textPrimary)
-                            Spacer()
-                            Picker("", selection: $appearanceStore.preference) {
-                                ForEach(AppearanceStore.Preference.allCases, id: \.self) { pref in
-                                    Text(pref.label).tag(pref)
-                                }
-                            }
-                            .pickerStyle(.segmented)
-                            .frame(width: 180)
-                        }
-                        .listRowBackground(Theme.surface)
-                    }
-
-                    // ── App settings ──────────────────────────────────────────
-                    Section(header: sectionHeader("Permissions")) {
-                        ProfileRow(icon: "bell", label: "Notifications") {}
-                        ProfileRow(icon: "location", label: "Location Access") { openSettings() }
-                        ProfileRow(icon: "camera", label: "Camera Access") { openSettings() }
-                    }
-
-                    // ── Support ───────────────────────────────────────────────
-                    Section(header: sectionHeader("Support")) {
-                        ProfileRow(icon: "questionmark.circle", label: "How to Use This App") {
-                            showHelp = true
-                        }
-                        ProfileRow(icon: "doc.text", label: "Contractor Agreement") {}
-                        ProfileRow(icon: "envelope", label: "Contact Support") {
-                            if let url = URL(string: "mailto:support@salesflow.app") {
-                                UIApplication.shared.open(url)
-                            }
-                        }
-                    }
-
-                    // ── Legal ─────────────────────────────────────────────────
-                    Section(header: sectionHeader("Legal")) {
-                        ProfileRow(icon: "hand.raised", label: "Privacy Policy") {}
-                        ProfileRow(icon: "doc.plaintext", label: "Terms of Service") {}
-                    }
-
-                    // ── Sign out ──────────────────────────────────────────────
-                    Section {
-                        Button(action: { showSignOutAlert = true }) {
-                            HStack(spacing: 10) {
-                                Image(systemName: "rectangle.portrait.and.arrow.right")
-                                    .font(.system(size: 14))
-                                    .foregroundStyle(Theme.statusRejected)
-                                    .frame(width: 22)
-                                Text("Sign Out")
-                                    .font(.system(size: 15))
-                                    .foregroundStyle(Theme.statusRejected)
-                                Spacer()
-                            }
-                        }
-                        .listRowBackground(Theme.surface)
-                    }
-
-                    // ── Version ───────────────────────────────────────────────
-                    Section {
-                        Text("SalesFlow v1.0  ·  Build 1  ·  Independent contractor platform")
-                            .font(.system(size: 11))
-                            .foregroundStyle(Theme.textMuted)
-                            .frame(maxWidth: .infinity, alignment: .center)
-                            .listRowBackground(Color.clear)
-                            .listRowSeparator(.hidden)
-                    }
+            ScrollView {
+                VStack(alignment: .leading, spacing: 28) {
+                    hero
+                    userCard
+                    performanceRibbon
+                    permissionsSection
+                    supportSection
+                    legalSection
+                    signOutRow
+                    versionLine
                 }
-                .listStyle(.insetGrouped)
-                .scrollContentBackground(.hidden)
-                .background(Theme.background)
+                .padding(.horizontal, 20)
+                .padding(.top, 8)
+                .padding(.bottom, 48)
             }
-            .navigationTitle("Profile")
+            .scrollContentBackground(.hidden)
+            .background(Color.clear)
             .navigationBarTitleDisplayMode(.inline)
+            .toolbarBackground(Brand.ink, for: .navigationBar)
+            .toolbarBackground(.visible, for: .navigationBar)
             .sheet(isPresented: $showHelp) { HelpView() }
-            .alert("Sign Out", isPresented: $showSignOutAlert) {
-                Button("Sign Out", role: .destructive) { authStore.signOut() }
+            .alert("Sign out", isPresented: $showSignOutAlert) {
+                Button("Sign out", role: .destructive) { authStore.signOut() }
                 Button("Cancel", role: .cancel) {}
             } message: {
                 Text("You'll need your PIN to sign back in.")
@@ -119,100 +43,171 @@ struct ProfileView: View {
         }
     }
 
-    // MARK: — User card
+    // ───────────── Hero ─────────────
+
+    private var hero: some View {
+        PageHero(
+            eyebrow: "Profile",
+            title: "Your",
+            accent: "patch.",
+            sub: "Contractor profile, permissions, and support.",
+            size: Brand.Font.displayLG
+        )
+    }
+
+    // ───────────── User card ─────────────
 
     private var userCard: some View {
         let user = authStore.currentUser
-        return HStack(spacing: 14) {
-            // Avatar
+        return HStack(alignment: .center, spacing: 16) {
             ZStack {
                 Circle()
-                    .fill(Theme.surfaceElevated)
-                    .frame(width: 52, height: 52)
-                    .overlay(Circle().stroke(Theme.border, lineWidth: Theme.borderWidth))
+                    .fill(Brand.bgCard)
+                    .frame(width: 56, height: 56)
+                    .overlay(Circle().strokeBorder(Brand.line, lineWidth: 1))
                 Text((user?.name.prefix(1) ?? "?").uppercased())
-                    .font(.system(size: 20, weight: .bold))
-                    .foregroundStyle(Theme.textPrimary)
+                    .font(Brand.Font.display(22, weight: .semibold))
+                    .foregroundStyle(Brand.cream)
             }
 
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: 6) {
                 Text((user?.name ?? "Contractor").capitalized)
-                    .font(.system(size: 17, weight: .bold))
-                    .foregroundStyle(Theme.textPrimary)
+                    .font(Brand.Font.display(20, weight: .medium))
+                    .tracking(Brand.Tracking.subhead)
+                    .foregroundStyle(Brand.cream)
+
                 if let contractorNum = user?.contractorNumber {
-                    Button(action: { copyContractorNumber(contractorNum) }) {
-                        HStack(spacing: 4) {
+                    Button {
+                        BrandHaptics.success()
+                        UIPasteboard.general.string = contractorNum
+                    } label: {
+                        HStack(spacing: 5) {
                             Text(contractorNum)
-                                .font(.system(size: 13, weight: .semibold, design: .monospaced))
-                                .foregroundStyle(Theme.accent)
+                                .font(Brand.Font.mono(12))
+                                .foregroundStyle(Brand.signal)
                             Image(systemName: "doc.on.doc")
-                                .font(.system(size: 10))
-                                .foregroundStyle(Theme.accent.opacity(0.6))
+                                .font(.system(size: 9))
+                                .foregroundStyle(Brand.signal.opacity(0.7))
                         }
                     }
                     .buttonStyle(.plain)
                 }
+
                 HStack(spacing: 6) {
-                    Text(user?.role?.capitalized ?? "Field Contractor")
-                        .font(.system(size: 13))
-                        .foregroundStyle(Theme.textSecondary)
-                    Circle()
-                        .fill(Theme.statusSold)
-                        .frame(width: 5, height: 5)
-                    Text("Active")
-                        .font(.system(size: 12))
-                        .foregroundStyle(Theme.statusSold)
+                    Text((user?.role?.uppercased() ?? "FIELD CONTRACTOR"))
+                        .font(Brand.Font.mono(10))
+                        .tracking(Brand.Tracking.eyebrow)
+                        .foregroundStyle(Brand.creamMuted)
+                    Circle().fill(Brand.signal).frame(width: 4, height: 4)
+                    Text("ACTIVE")
+                        .font(Brand.Font.mono(10))
+                        .tracking(Brand.Tracking.eyebrow)
+                        .foregroundStyle(Brand.signal)
                 }
             }
-            Spacer()
+            Spacer(minLength: 0)
         }
-        .padding(16)
-        .background(Theme.surface)
-        .clipShape(RoundedRectangle(cornerRadius: Theme.radiusCard))
-        .overlay(
-            RoundedRectangle(cornerRadius: Theme.radiusCard)
-                .stroke(Theme.border, lineWidth: Theme.borderWidth)
-        )
+        .brandCard()
     }
 
-    // MARK: — Performance card
+    // ───────────── Performance ribbon ─────────────
 
-    private var performanceCard: some View {
-        HStack(spacing: 0) {
-            PerfCell(value: "—", label: "This week")
-            perfDivider
-            PerfCell(value: "£50", label: "Per sale", mono: true)
-            perfDivider
-            PerfCell(value: "Fri", label: "Payout")
+    private var performanceRibbon: some View {
+        BrandSection(eyebrow: "Performance") {
+            MetricRibbon {
+                StatCell(label: "This week", value: "—")
+                StatDivider()
+                StatCell(label: "Per sale",  value: "£50")
+                StatDivider()
+                StatCell(label: "Payout",    value: "Fri")
+            }
         }
-        .padding(.vertical, 14)
-        .background(Theme.surface)
-        .clipShape(RoundedRectangle(cornerRadius: Theme.radiusCard))
-        .overlay(
-            RoundedRectangle(cornerRadius: Theme.radiusCard)
-                .stroke(Theme.border, lineWidth: Theme.borderWidth)
-        )
     }
 
-    private var perfDivider: some View {
-        Rectangle().fill(Theme.border).frame(width: Theme.borderWidth, height: 30)
+    // ───────────── Grouped sections ─────────────
+
+    private var permissionsSection: some View {
+        groupedSection(eyebrow: "Permissions", rows: [
+            GroupedRow(icon: "bell",     label: "Notifications",   action: openSettings),
+            GroupedRow(icon: "location", label: "Location access", action: openSettings),
+            GroupedRow(icon: "camera",   label: "Camera access",   action: openSettings),
+        ])
     }
 
-    // MARK: — Helpers
-
-    private func sectionHeader(_ title: String) -> some View {
-        Text(title)
-            .font(.system(size: 11, weight: .semibold))
-            .foregroundStyle(Theme.textMuted)
-            .tracking(0.5)
-            .textCase(.uppercase)
+    private var supportSection: some View {
+        groupedSection(eyebrow: "Support", rows: [
+            GroupedRow(icon: "questionmark.circle", label: "How to use this app", action: { showHelp = true }),
+            GroupedRow(icon: "doc.text",            label: "Contractor agreement", action: {}),
+            GroupedRow(icon: "envelope",            label: "Contact support", action: {
+                if let url = URL(string: "mailto:support@salesflow.app") { UIApplication.shared.open(url) }
+            }),
+        ])
     }
 
-    private func copyContractorNumber(_ number: String) {
-        UIPasteboard.general.string = number
-        let generator = UINotificationFeedbackGenerator()
-        generator.notificationOccurred(.success)
+    private var legalSection: some View {
+        groupedSection(eyebrow: "Legal", rows: [
+            GroupedRow(icon: "hand.raised",    label: "Privacy policy",  action: {}),
+            GroupedRow(icon: "doc.plaintext",  label: "Terms of service", action: {}),
+        ])
     }
+
+    private func groupedSection(eyebrow: String, rows: [GroupedRow]) -> some View {
+        BrandSection(eyebrow: eyebrow) {
+            VStack(spacing: 0) {
+                ForEach(rows.indices, id: \.self) { i in
+                    rows[i]
+                    if i < rows.count - 1 {
+                        Rectangle().fill(Brand.line2).frame(height: 1)
+                            .padding(.leading, 52)
+                    }
+                }
+            }
+            .brandCard(padding: 0)
+        }
+    }
+
+    // ───────────── Sign out ─────────────
+
+    private var signOutRow: some View {
+        Button {
+            BrandHaptics.tap()
+            showSignOutAlert = true
+        } label: {
+            HStack(spacing: 12) {
+                Image(systemName: "rectangle.portrait.and.arrow.right")
+                    .font(.system(size: 14))
+                    .foregroundStyle(Brand.err)
+                    .frame(width: 22)
+                Text("Sign out")
+                    .font(Brand.Font.body(Brand.Font.body))
+                    .foregroundStyle(Brand.err)
+                Spacer()
+            }
+            .padding(.horizontal, 20)
+            .padding(.vertical, 16)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: Brand.Radius.card, style: .continuous)
+                    .fill(Brand.bgStrong)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: Brand.Radius.card, style: .continuous)
+                    .strokeBorder(Brand.err.opacity(0.25), lineWidth: 1)
+            )
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var versionLine: some View {
+        Text("SALESFLOW V1.0 · BUILD 1 · INDEPENDENT CONTRACTOR PLATFORM")
+            .font(Brand.Font.mono(10))
+            .tracking(Brand.Tracking.eyebrow)
+            .foregroundStyle(Brand.creamMuted)
+            .frame(maxWidth: .infinity, alignment: .center)
+            .padding(.top, 12)
+    }
+
+    // ───────────── Helpers ─────────────
 
     private func openSettings() {
         if let url = URL(string: UIApplication.openSettingsURLString) {
@@ -221,60 +216,49 @@ struct ProfileView: View {
     }
 }
 
-// MARK: — Perf cell
-private struct PerfCell: View {
-    let value: String
-    let label: String
-    var mono: Bool = false
+// MARK: — Grouped row
 
-    var body: some View {
-        VStack(spacing: 3) {
-            Text(value)
-                .font(.system(size: 16, weight: .bold, design: mono ? .monospaced : .default))
-                .foregroundStyle(Theme.textPrimary)
-            Text(label)
-                .font(.system(size: 10, weight: .medium))
-                .foregroundStyle(Theme.textMuted)
-        }
-        .frame(maxWidth: .infinity)
-    }
-}
-
-// MARK: — Profile row
-private struct ProfileRow: View {
+private struct GroupedRow: View {
     let icon: String
     let label: String
     let action: () -> Void
 
     var body: some View {
-        Button(action: action) {
-            HStack(spacing: 10) {
+        Button(action: {
+            BrandHaptics.tap()
+            action()
+        }) {
+            HStack(spacing: 12) {
                 Image(systemName: icon)
                     .font(.system(size: 14))
-                    .foregroundStyle(Theme.textSecondary)
+                    .foregroundStyle(Brand.creamDim)
                     .frame(width: 22)
                 Text(label)
-                    .font(.system(size: 15))
-                    .foregroundStyle(Theme.textPrimary)
+                    .font(Brand.Font.body(Brand.Font.body))
+                    .foregroundStyle(Brand.cream)
                 Spacer()
                 Image(systemName: "chevron.right")
                     .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(Theme.textMuted)
+                    .foregroundStyle(Brand.creamMuted)
             }
+            .padding(.horizontal, 18)
+            .padding(.vertical, 14)
+            .contentShape(Rectangle())
         }
-        .listRowBackground(Theme.surface)
+        .buttonStyle(.plain)
     }
 }
 
 // MARK: — Help view
+
 struct HelpView: View {
     @Environment(\.dismiss) private var dismiss
 
     private let steps: [(String, String, String)] = [
-        ("01", "Get your leads", "Your assigned businesses appear in the Leads tab. Each card shows the status, rating, and whether a demo site is ready."),
+        ("01", "Get your leads", "Your assigned businesses appear in the Leads tab. Each card shows the status, rating, and whether a demo is ready."),
         ("02", "Prepare before you visit", "Tap any lead and go to the Prepare tab for talking points, customer reviews, trust signals, and topics to avoid."),
-        ("03", "Tap 'I'm Here' on arrival", "This starts visit tracking and logs your GPS position for payout verification."),
-        ("04", "Show the demo site", "In the Pitch tab, tap 'Show Demo to Client' to walk them through the website on your phone."),
+        ("03", "Tap 'I'm here' on arrival", "This starts visit tracking and logs your GPS position for payout verification."),
+        ("04", "Show the demo site", "In the Pitch tab, tap 'Show client demo' to walk them through the website on your phone."),
         ("05", "Update the status", "After each interaction, update the status: Visited, Pitched, Sold, or Rejected."),
         ("06", "Collect your commission", "£50 lands every Friday for each confirmed sale. No targets. No minimums."),
     ]
@@ -282,61 +266,73 @@ struct HelpView: View {
     var body: some View {
         NavigationStack {
             ZStack {
-                Theme.background.ignoresSafeArea()
+                BrandBackground()
                 ScrollView {
-                    VStack(spacing: 10) {
-                        ForEach(steps, id: \.0) { step in
-                            HStack(alignment: .top, spacing: 14) {
-                                Text(step.0)
-                                    .font(.system(size: 12, weight: .bold, design: .monospaced))
-                                    .foregroundStyle(Theme.accent)
-                                    .frame(width: 28, height: 28)
-                                    .background(Theme.accent.opacity(0.10))
-                                    .clipShape(RoundedRectangle(cornerRadius: 7))
-                                    .overlay(
-                                        RoundedRectangle(cornerRadius: 7)
-                                            .stroke(Theme.accent.opacity(0.25), lineWidth: Theme.borderWidth)
-                                    )
+                    VStack(alignment: .leading, spacing: 24) {
+                        PageHero(
+                            eyebrow: "How it works",
+                            title: "Six steps,",
+                            accent: "every lead.",
+                            size: Brand.Font.displayLG
+                        )
 
-                                VStack(alignment: .leading, spacing: 4) {
-                                    Text(step.1)
-                                        .font(.system(size: 14, weight: .semibold))
-                                        .foregroundStyle(Theme.textPrimary)
-                                    Text(step.2)
-                                        .font(.system(size: 13))
-                                        .foregroundStyle(Theme.textSecondary)
-                                        .fixedSize(horizontal: false, vertical: true)
+                        VStack(spacing: 10) {
+                            ForEach(steps, id: \.0) { step in
+                                HStack(alignment: .top, spacing: 14) {
+                                    Text(step.0)
+                                        .font(Brand.Font.mono(12, weight: .semibold))
+                                        .foregroundStyle(Brand.signal)
+                                        .frame(width: 32, height: 32)
+                                        .background(Brand.signalSoft)
+                                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                                        .overlay(
+                                            RoundedRectangle(cornerRadius: 8)
+                                                .strokeBorder(Brand.signalBorder, lineWidth: 1)
+                                        )
+
+                                    VStack(alignment: .leading, spacing: 6) {
+                                        Text(step.1)
+                                            .font(Brand.Font.display(16, weight: .medium))
+                                            .foregroundStyle(Brand.cream)
+                                        Text(step.2)
+                                            .font(Brand.Font.body(Brand.Font.bodySmall))
+                                            .foregroundStyle(Brand.creamDim)
+                                            .fixedSize(horizontal: false, vertical: true)
+                                    }
+                                    Spacer(minLength: 0)
                                 }
-                                Spacer()
+                                .brandCard()
                             }
-                            .padding(14)
-                            .background(Theme.surface)
-                            .clipShape(RoundedRectangle(cornerRadius: Theme.radiusCard))
-                            .overlay(
-                                RoundedRectangle(cornerRadius: Theme.radiusCard)
-                                    .stroke(Theme.border, lineWidth: Theme.borderWidth)
-                            )
                         }
                     }
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 20)
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 24)
                 }
+                .scrollContentBackground(.hidden)
+                .background(Color.clear)
             }
-            .navigationTitle("How to Use")
+            .navigationTitle("")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("Done") { dismiss() }
-                        .foregroundStyle(Theme.accent)
-                        .font(.system(size: 15, weight: .medium))
+                        .foregroundStyle(Brand.signal)
+                        .font(Brand.Font.body(Brand.Font.body, weight: .medium))
                 }
             }
+            .toolbarBackground(Brand.ink, for: .navigationBar)
+            .toolbarBackground(.visible, for: .navigationBar)
         }
+        .preferredColorScheme(.dark)
     }
 }
 
 #Preview {
-    ProfileView()
-        .environmentObject(AuthStore.shared)
-        .environmentObject(AppearanceStore.shared)
+    ZStack {
+        BrandBackground()
+        ProfileView()
+            .environmentObject(AuthStore.shared)
+            .environmentObject(AppearanceStore.shared)
+    }
+    .preferredColorScheme(.dark)
 }

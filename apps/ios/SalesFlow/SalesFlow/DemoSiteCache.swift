@@ -58,6 +58,24 @@ actor DemoSiteCache {
         await downloadSite(domain: domain)
     }
 
+    /// Save a pre-built HTML blob (uploaded via admin) directly to the cache.
+    /// This is the primary offline path — admin-uploaded HTML bypasses the
+    /// live-domain scrape entirely, so the demo works the moment the lead
+    /// detail is fetched even on the worst signal.
+    ///
+    /// Safe to call repeatedly — each call overwrites the file with the
+    /// latest blob from the server, so admin edits propagate on next
+    /// detail fetch.
+    nonisolated func saveHTML(_ html: String, for domain: String) {
+        let caches = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
+        let dir = caches
+            .appendingPathComponent("demosites", isDirectory: true)
+            .appendingPathComponent(Self.cacheKey(for: domain), isDirectory: true)
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let indexPath = dir.appendingPathComponent("index.html")
+        try? html.write(to: indexPath, atomically: true, encoding: .utf8)
+    }
+
     /// True if a local cache exists for this domain.
     func isCached(domain: String) -> Bool {
         localURL(for: domain) != nil
@@ -67,12 +85,36 @@ actor DemoSiteCache {
     /// Safe to call from UIKit/makeUIView context.
     nonisolated func localURLSync(for domain: String) -> URL? {
         let caches = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
-        let safe = domain.replacingOccurrences(of: ".", with: "_")
         let index = caches
             .appendingPathComponent("demosites")
-            .appendingPathComponent(safe)
+            .appendingPathComponent(Self.cacheKey(for: domain))
             .appendingPathComponent("index.html")
         return FileManager.default.fileExists(atPath: index.path) ? index : nil
+    }
+
+    /// Filesystem-safe key derived from a domain or URL. Replaces every
+    /// non-alphanumeric character with `_` so URLs like
+    /// `https://project.supabase.co/storage/v1/object/public/demo-sites/11fable.html`
+    /// still map to a single deterministic directory name.
+    nonisolated static func cacheKey(for domain: String) -> String {
+        let allowed = CharacterSet.alphanumerics
+        let raw = domain.unicodeScalars.map { allowed.contains($0) ? Character($0) : "_" }
+        return String(raw).prefix(200).description
+    }
+
+    /// Fetches HTML from a URL (typically a Supabase Storage public URL
+    /// stashed in `demo_site_domain`) and saves it to the local cache.
+    /// Idempotent — safe to call every time the lead detail opens.
+    nonisolated func cacheFromURL(_ urlString: String) async {
+        guard let url = URL(string: urlString) else { return }
+        var req = URLRequest(url: url)
+        req.timeoutInterval = 10
+        guard let (data, response) = try? await URLSession.shared.data(for: req) else { return }
+        if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) { return }
+        guard let html = String(data: data, encoding: .utf8)
+                       ?? String(data: data, encoding: .isoLatin1)
+        else { return }
+        saveHTML(html, for: urlString)
     }
 
     /// Removes cached files for a domain.
@@ -188,8 +230,7 @@ actor DemoSiteCache {
     }
 
     private func siteDir(for domain: String) -> URL {
-        let safe = domain.replacingOccurrences(of: ".", with: "_")
-        return cacheRoot.appendingPathComponent(safe, isDirectory: true)
+        cacheRoot.appendingPathComponent(Self.cacheKey(for: domain), isDirectory: true)
     }
 }
 

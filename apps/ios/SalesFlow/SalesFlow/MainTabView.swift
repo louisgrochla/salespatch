@@ -6,35 +6,39 @@ struct MainTabView: View {
     @State private var selectedTab = 0
 
     var body: some View {
-        TabView(selection: $selectedTab) {
-            LeadsView()
-                .tabItem {
-                    Label("Leads", systemImage: "list.bullet.rectangle")
-                }
-                .tag(0)
+        ZStack {
+            BrandBackground()
 
-            LeadsMapView()
-                .tabItem {
-                    Label("Map", systemImage: "map")
-                }
-                .tag(1)
+            TabView(selection: $selectedTab) {
+                LeadsView()
+                    .tabItem {
+                        Label("Leads", systemImage: "list.bullet.rectangle")
+                    }
+                    .tag(0)
 
-            PayoutsView()
-                .tabItem {
-                    Label("Payouts", systemImage: "sterlingsign.circle")
-                }
-                .tag(2)
+                LeadsMapView()
+                    .tabItem {
+                        Label("Map", systemImage: "map")
+                    }
+                    .tag(1)
 
-            ProfileView()
-                .tabItem {
-                    Label("Profile", systemImage: "person.circle")
-                }
-                .tag(3)
+                PayoutsView()
+                    .tabItem {
+                        Label("Payouts", systemImage: "sterlingsign.circle")
+                    }
+                    .tag(2)
+
+                ProfileView()
+                    .tabItem {
+                        Label("Profile", systemImage: "person.circle")
+                    }
+                    .tag(3)
+            }
+            .tint(Brand.signal)
+            .toolbarBackground(Brand.ink, for: .tabBar)
+            .toolbarBackground(.visible, for: .tabBar)
         }
-        .tint(Theme.accent)
-        .toolbarBackground(Theme.surface, for: .tabBar)
-        .toolbarBackground(.visible, for: .tabBar)
-        .preferredColorScheme(appearanceStore.preference.colorScheme)
+        .preferredColorScheme(.dark)
     }
 }
 
