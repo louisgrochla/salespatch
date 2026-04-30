@@ -20,9 +20,17 @@ struct ClientPresentationView: View {
     @State private var isCached = false
     @State private var isCaching = false
 
-    // Preview URL fetched lazily on first share-sheet open. Falls back to the
-    // raw demo URL if createCheckout fails (offline / auth / backend error).
-    @State private var previewURL: String?
+    // Public host for the customer-facing preview page. Always salespatch.co.uk
+    // regardless of build target — customers scan from their own phone, never
+    // from localhost.
+    private static let publicShareHost = "https://salespatch.co.uk"
+
+    // The URL we share / encode in the QR. Routes the customer through
+    // /preview/<assignment-id>, which lazily creates the Stripe Checkout
+    // session on first load (no eager iOS roundtrip needed).
+    private var shareURL: String {
+        "\(Self.publicShareHost)/preview/\(leadAssignmentId)"
+    }
 
     // Sold-detection: poll lead status every 3s while share sheet is up.
     // When status flips to 'sold', show the celebratory paid state.
@@ -122,18 +130,14 @@ struct ClientPresentationView: View {
                 HStack {
                     Spacer()
                     Button(action: {
-                        Task {
-                            // Fetch the preview URL first if we don't have one cached.
-                            // Sets eager-attribution metadata into Stripe (salesperson_id)
-                            // BEFORE the customer scans, so commission attribution is
-                            // unambiguous when payment lands.
-                            if previewURL == nil {
-                                if let r = try? await APIClient.shared.createCheckout(leadId: leadAssignmentId) {
-                                    previewURL = r.preview_url
-                                }
-                            }
-                            showShareSheet = true
+                        // Fire-and-forget: warm the Stripe session so the customer
+                        // doesn't wait on first scan + lock attribution metadata.
+                        // The QR URL itself is deterministic — we don't depend on
+                        // this call succeeding to share.
+                        Task.detached {
+                            _ = try? await APIClient.shared.createCheckout(leadId: leadAssignmentId)
                         }
+                        showShareSheet = true
                     }) {
                         Image(systemName: "square.and.arrow.up")
                             .font(.system(size: 16, weight: .semibold))
@@ -177,14 +181,12 @@ struct ClientPresentationView: View {
             GetWebsiteSheet(businessName: businessName)
         }
 
-        // Share sheet — use the preview URL if we have one (preferred —
-        // routes the customer through salespatch.co.uk/preview which has the
-        // sticky payment CTA). Fall back to the raw demo URL with a defensive
-        // hasPrefix("http") check that fixes the historic doubled-https bug.
+        // Share sheet — always shares the salespatch.co.uk/preview URL so the
+        // customer lands on our payment page (not the raw Supabase demo URL).
         .sheet(isPresented: $showShareSheet, onDismiss: { stopPolling() }) {
             DemoShareSheet(
                 businessName: businessName,
-                demoURL: previewURL ?? normalisedDomainURL(domain)
+                demoURL: shareURL
             )
             .onAppear { startPolling() }
         }
@@ -202,10 +204,6 @@ struct ClientPresentationView: View {
                 }
             )
         }
-    }
-
-    private func normalisedDomainURL(_ raw: String) -> String {
-        raw.hasPrefix("http") ? raw : "https://\(raw)"
     }
 
     // MARK: — Polling

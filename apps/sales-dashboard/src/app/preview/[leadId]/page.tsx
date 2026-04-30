@@ -81,14 +81,28 @@ function parseNotes(raw: string | null): ParsedNotes {
  *   - a slug like "third-circle-coffee" → routed through /api/demo-site/<slug>
  *     (server-side proxy that fetches from Supabase Storage; serves under our
  *     own origin so the iframe doesn't hit X-Frame-Options issues)
- *   - a full URL like "https://example.com/site.html" → used as-is
+ *   - a Supabase Storage URL like
+ *     "https://<proj>.supabase.co/storage/v1/object/public/demo-sites/<slug>.html"
+ *     → extract the slug and route through the proxy. Supabase serves these
+ *     with `content-type: text/plain`, which makes the browser display the
+ *     raw HTML as text instead of rendering it. The proxy rewrites the
+ *     content-type to `text/html`.
+ *   - any other full URL like "https://example.com/site.html" → used as-is
  *   - the doubled-protocol bug "https://https://..." → strip leading dup
  *   - null/empty → null (preview page falls back to a friendly message)
  */
 function resolveDemoUrl(raw: string | null): string | null {
   if (!raw) return null;
   // Strip leading doubled protocol (historic iOS bug).
-  let v = raw.replace(/^https?:\/\/(?=https?:\/\/)/, '');
+  const v = raw.replace(/^https?:\/\/(?=https?:\/\/)/, '');
+  // Supabase Storage URL — pull the slug and route through our proxy so the
+  // content-type comes back as text/html.
+  const supabaseMatch = v.match(
+    /^https?:\/\/[^/]+\.supabase\.co\/storage\/v1\/object\/public\/demo-sites\/([^/?#]+?)(?:\.html)?(?:[?#].*)?$/i,
+  );
+  if (supabaseMatch) {
+    return `/api/demo-site/${encodeURIComponent(supabaseMatch[1])}`;
+  }
   if (/^https?:\/\//i.test(v)) return v;
   // Slug — route through our proxy.
   return `/api/demo-site/${encodeURIComponent(v)}`;
