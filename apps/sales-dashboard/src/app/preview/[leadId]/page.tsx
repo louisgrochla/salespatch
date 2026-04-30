@@ -308,12 +308,14 @@ function FloatingCTAButton({
       style={{
         position: 'fixed',
         right: 16,
-        bottom: 'calc(env(safe-area-inset-bottom) + 16px)',
+        bottom: 'calc(env(safe-area-inset-bottom) + 36px)',
         display: 'inline-flex',
         alignItems: 'center',
         gap: 12,
         padding: '12px 18px 12px 20px',
-        background: INK,
+        background: 'rgba(15, 14, 12, 0.58)',
+        backdropFilter: 'blur(14px) saturate(140%)',
+        WebkitBackdropFilter: 'blur(14px) saturate(140%)',
         color: CREAM,
         textDecoration: 'none',
         borderRadius: 16,
@@ -321,8 +323,8 @@ function FloatingCTAButton({
           "'Inter Tight', -apple-system, BlinkMacSystemFont, sans-serif",
         letterSpacing: '-0.01em',
         boxShadow:
-          '0 8px 22px rgba(15, 14, 12, 0.34), 0 1px 2px rgba(15, 14, 12, 0.18)',
-        border: '1px solid rgba(250, 248, 245, 0.08)',
+          '0 10px 28px rgba(15, 14, 12, 0.32), 0 1px 2px rgba(15, 14, 12, 0.18)',
+        border: '1px solid rgba(250, 248, 245, 0.10)',
         zIndex: 10,
       }}
     >
@@ -361,15 +363,17 @@ function PreparingCheckoutPill() {
       style={{
         position: 'fixed',
         right: 16,
-        bottom: 'calc(env(safe-area-inset-bottom) + 16px)',
+        bottom: 'calc(env(safe-area-inset-bottom) + 36px)',
         padding: '12px 18px',
-        background: INK,
+        background: 'rgba(15, 14, 12, 0.58)',
+        backdropFilter: 'blur(14px) saturate(140%)',
+        WebkitBackdropFilter: 'blur(14px) saturate(140%)',
         color: CREAM_DIM,
         borderRadius: 9999,
         fontFamily: "'JetBrains Mono', ui-monospace, monospace",
         fontSize: 11,
         letterSpacing: '0.06em',
-        border: '1px solid rgba(250, 248, 245, 0.08)',
+        border: '1px solid rgba(250, 248, 245, 0.10)',
         zIndex: 10,
       }}
     >
@@ -412,9 +416,11 @@ function PaidState({ businessName, demoUrl }: { businessName: string; demoUrl: s
         style={{
           position: 'fixed',
           right: 16,
-          bottom: 'calc(env(safe-area-inset-bottom) + 16px)',
+          bottom: 'calc(env(safe-area-inset-bottom) + 36px)',
           padding: '12px 18px',
-          background: INK,
+          background: 'rgba(15, 14, 12, 0.58)',
+          backdropFilter: 'blur(14px) saturate(140%)',
+          WebkitBackdropFilter: 'blur(14px) saturate(140%)',
           color: CREAM,
           borderRadius: 9999,
           fontFamily:
@@ -422,9 +428,9 @@ function PaidState({ businessName, demoUrl }: { businessName: string; demoUrl: s
           fontSize: 13,
           fontWeight: 500,
           letterSpacing: '-0.01em',
-          border: '1px solid rgba(250, 248, 245, 0.08)',
+          border: '1px solid rgba(250, 248, 245, 0.10)',
           boxShadow:
-            '0 6px 16px rgba(15, 14, 12, 0.28), 0 1px 2px rgba(15, 14, 12, 0.18)',
+            '0 10px 28px rgba(15, 14, 12, 0.32), 0 1px 2px rgba(15, 14, 12, 0.18)',
           zIndex: 10,
           maxWidth: 'calc(100vw - 32px)',
         }}
