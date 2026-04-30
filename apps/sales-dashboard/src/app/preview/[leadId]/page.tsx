@@ -170,6 +170,7 @@ const INK = '#0F0E0C';
 const CREAM = '#FAF8F5';
 const CREAM_DIM = '#D4CFC4';
 const SIGNAL = '#B8860B';
+const LIVE_GREEN = '#3D9E5F';
 
 function PreviewWithCTA({
   businessName,
@@ -191,93 +192,188 @@ function PreviewWithCTA({
         padding: 0,
         background: CREAM,
         minHeight: '100dvh',
-        display: 'flex',
-        flexDirection: 'column',
+        position: 'relative',
+        overflow: 'hidden',
       }}
     >
-      <main
-        style={{
-          flex: 1,
-          // Reserve room for the sticky CTA + iOS home indicator.
-          paddingBottom: 'calc(72px + env(safe-area-inset-bottom))',
-          background: CREAM,
-        }}
-      >
-        {demoUrl ? (
-          <iframe
-            src={demoUrl}
-            title={`${businessName} — preview`}
-            sandbox="allow-scripts allow-same-origin allow-popups allow-forms"
-            style={{
-              border: 0,
-              width: '100%',
-              height: 'calc(100dvh - 72px - env(safe-area-inset-bottom))',
-              display: 'block',
-            }}
-          />
-        ) : (
-          <DemoMissingFallback businessName={businessName} />
-        )}
-      </main>
+      {demoUrl ? (
+        <iframe
+          src={demoUrl}
+          title={`${businessName} — preview`}
+          sandbox="allow-scripts allow-same-origin allow-popups allow-forms"
+          style={{
+            border: 0,
+            width: '100%',
+            height: '100dvh',
+            display: 'block',
+          }}
+        />
+      ) : (
+        <DemoMissingFallback businessName={businessName} />
+      )}
+
+      <BusinessLivePill businessName={businessName} />
 
       {checkoutUrl ? (
-        <a
+        <FloatingCTAButton
           href={checkoutUrl}
-          style={{
-            position: 'fixed',
-            left: 0,
-            right: 0,
-            bottom: 0,
-            paddingTop: 16,
-            paddingBottom: 'calc(16px + env(safe-area-inset-bottom))',
-            paddingLeft: 20,
-            paddingRight: 20,
-            background: INK,
-            color: CREAM,
-            fontFamily:
-              "'Inter Tight', -apple-system, BlinkMacSystemFont, sans-serif",
-            fontSize: 16,
-            fontWeight: 500,
-            textAlign: 'center',
-            textDecoration: 'none',
-            letterSpacing: '-0.01em',
-            borderTop: `1px solid rgba(250, 248, 245, 0.08)`,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: 12,
-            transition: 'background 0.18s ease',
-          }}
-        >
-          <span>
-            Go live now ·{' '}
-            <span style={{ color: SIGNAL }}>
-              {setupLabel} setup, then {monthlyLabel}/mo
-            </span>
-          </span>
-          <span style={{ color: SIGNAL, fontSize: 18, lineHeight: 1 }}>→</span>
-        </a>
+          setupLabel={setupLabel}
+          monthlyLabel={monthlyLabel}
+        />
       ) : (
-        <div
+        <PreparingCheckoutPill />
+      )}
+    </div>
+  );
+}
+
+function BusinessLivePill({ businessName }: { businessName: string }) {
+  return (
+    <div
+      style={{
+        position: 'fixed',
+        top: 'calc(env(safe-area-inset-top) + 12px)',
+        left: '50%',
+        transform: 'translateX(-50%)',
+        display: 'inline-flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        gap: 2,
+        padding: '8px 14px',
+        background: 'rgba(15, 14, 12, 0.62)',
+        backdropFilter: 'blur(12px)',
+        WebkitBackdropFilter: 'blur(12px)',
+        borderRadius: 9999,
+        border: '1px solid rgba(250, 248, 245, 0.08)',
+        zIndex: 10,
+        fontFamily:
+          "'Inter Tight', -apple-system, BlinkMacSystemFont, sans-serif",
+        pointerEvents: 'none',
+        maxWidth: 'calc(100vw - 32px)',
+      }}
+    >
+      <span
+        style={{
+          color: CREAM,
+          fontSize: 13,
+          fontWeight: 600,
+          letterSpacing: '-0.01em',
+          lineHeight: 1.1,
+          whiteSpace: 'nowrap',
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          maxWidth: '60vw',
+        }}
+      >
+        {businessName}
+      </span>
+      <span
+        style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: 5,
+          fontSize: 10,
+          color: 'rgba(250, 248, 245, 0.55)',
+          lineHeight: 1,
+        }}
+      >
+        <span
           style={{
-            position: 'fixed',
-            left: 0,
-            right: 0,
-            bottom: 0,
-            padding: 'calc(16px + env(safe-area-inset-bottom)) 20px 16px',
-            background: INK,
-            color: CREAM_DIM,
-            fontFamily:
-              "'JetBrains Mono', ui-monospace, monospace",
-            fontSize: 12,
-            textAlign: 'center',
-            letterSpacing: '0.06em',
-            borderTop: `1px solid rgba(250, 248, 245, 0.08)`,
+            width: 5,
+            height: 5,
+            borderRadius: '50%',
+            background: LIVE_GREEN,
+            display: 'inline-block',
+            boxShadow: `0 0 6px ${LIVE_GREEN}`,
+          }}
+        />
+        Live
+      </span>
+    </div>
+  );
+}
+
+function FloatingCTAButton({
+  href,
+  setupLabel,
+  monthlyLabel,
+}: {
+  href: string;
+  setupLabel: string;
+  monthlyLabel: string;
+}) {
+  return (
+    <a
+      href={href}
+      style={{
+        position: 'fixed',
+        right: 16,
+        bottom: 'calc(env(safe-area-inset-bottom) + 16px)',
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 12,
+        padding: '12px 18px 12px 20px',
+        background: INK,
+        color: CREAM,
+        textDecoration: 'none',
+        borderRadius: 16,
+        fontFamily:
+          "'Inter Tight', -apple-system, BlinkMacSystemFont, sans-serif",
+        letterSpacing: '-0.01em',
+        boxShadow:
+          '0 8px 22px rgba(15, 14, 12, 0.34), 0 1px 2px rgba(15, 14, 12, 0.18)',
+        border: '1px solid rgba(250, 248, 245, 0.08)',
+        zIndex: 10,
+      }}
+    >
+      <span style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+        <span style={{ fontSize: 15, fontWeight: 600, lineHeight: 1.1 }}>
+          Go live now
+        </span>
+        <span
+          style={{
+            fontSize: 11,
+            color: SIGNAL,
+            letterSpacing: '0.02em',
+            lineHeight: 1.1,
           }}
         >
-          Checkout is being prepared — refresh in a moment.
-        </div>
-      )}
+          {setupLabel} setup · then {monthlyLabel}/mo
+        </span>
+      </span>
+      <span
+        style={{
+          color: SIGNAL,
+          fontSize: 18,
+          lineHeight: 1,
+          fontWeight: 500,
+        }}
+      >
+        →
+      </span>
+    </a>
+  );
+}
+
+function PreparingCheckoutPill() {
+  return (
+    <div
+      style={{
+        position: 'fixed',
+        right: 16,
+        bottom: 'calc(env(safe-area-inset-bottom) + 16px)',
+        padding: '12px 18px',
+        background: INK,
+        color: CREAM_DIM,
+        borderRadius: 9999,
+        fontFamily: "'JetBrains Mono', ui-monospace, monospace",
+        fontSize: 11,
+        letterSpacing: '0.06em',
+        border: '1px solid rgba(250, 248, 245, 0.08)',
+        zIndex: 10,
+      }}
+    >
+      Preparing checkout…
     </div>
   );
 }
@@ -290,54 +386,50 @@ function PaidState({ businessName, demoUrl }: { businessName: string; demoUrl: s
         padding: 0,
         background: CREAM,
         minHeight: '100dvh',
-        display: 'flex',
-        flexDirection: 'column',
+        position: 'relative',
+        overflow: 'hidden',
       }}
     >
-      <main
-        style={{
-          flex: 1,
-          paddingBottom: 'calc(72px + env(safe-area-inset-bottom))',
-        }}
-      >
-        {demoUrl ? (
-          <iframe
-            src={demoUrl}
-            title={`${businessName} — preview`}
-            sandbox="allow-scripts allow-same-origin allow-popups allow-forms"
-            style={{
-              border: 0,
-              width: '100%',
-              height: 'calc(100dvh - 72px - env(safe-area-inset-bottom))',
-              display: 'block',
-            }}
-          />
-        ) : (
-          <DemoMissingFallback businessName={businessName} />
-        )}
-      </main>
+      {demoUrl ? (
+        <iframe
+          src={demoUrl}
+          title={`${businessName} — preview`}
+          sandbox="allow-scripts allow-same-origin allow-popups allow-forms"
+          style={{
+            border: 0,
+            width: '100%',
+            height: '100dvh',
+            display: 'block',
+          }}
+        />
+      ) : (
+        <DemoMissingFallback businessName={businessName} />
+      )}
+
+      <BusinessLivePill businessName={businessName} />
+
       <div
         style={{
           position: 'fixed',
-          left: 0,
-          right: 0,
-          bottom: 0,
-          paddingTop: 16,
-          paddingBottom: 'calc(16px + env(safe-area-inset-bottom))',
-          paddingLeft: 20,
-          paddingRight: 20,
+          right: 16,
+          bottom: 'calc(env(safe-area-inset-bottom) + 16px)',
+          padding: '12px 18px',
           background: INK,
           color: CREAM,
+          borderRadius: 9999,
           fontFamily:
             "'Inter Tight', -apple-system, BlinkMacSystemFont, sans-serif",
-          fontSize: 15,
+          fontSize: 13,
           fontWeight: 500,
-          textAlign: 'center',
           letterSpacing: '-0.01em',
-          borderTop: `1px solid rgba(250, 248, 245, 0.08)`,
+          border: '1px solid rgba(250, 248, 245, 0.08)',
+          boxShadow:
+            '0 6px 16px rgba(15, 14, 12, 0.28), 0 1px 2px rgba(15, 14, 12, 0.18)',
+          zIndex: 10,
+          maxWidth: 'calc(100vw - 32px)',
         }}
       >
-        <span style={{ color: SIGNAL }}>✓ Paid</span> — your real site is being built. We'll text you within 24h.
+        <span style={{ color: SIGNAL }}>✓ Paid</span> — building your site. We'll text you within 24h.
       </div>
     </div>
   );
