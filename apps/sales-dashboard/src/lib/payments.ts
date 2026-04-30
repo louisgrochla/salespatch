@@ -88,8 +88,8 @@ export function previewUrlFor(leadAssignmentId: string): string {
   return `${PUBLIC_BASE_URL}/preview/${leadAssignmentId}`;
 }
 
-function onboardingUrlFor(leadAssignmentId: string): string {
-  return `${PUBLIC_BASE_URL}/onboarding/${leadAssignmentId}?session_id={CHECKOUT_SESSION_ID}`;
+function paidUrlFor(leadAssignmentId: string): string {
+  return `${PUBLIC_BASE_URL}/paid/${leadAssignmentId}?session_id={CHECKOUT_SESSION_ID}`;
 }
 
 export async function getActiveSessionForAssignment(
@@ -199,7 +199,9 @@ export async function createCheckoutSessionForAssignment(
       monthly_pence: String(monthlyPence),
       setup_pence: String(setupPence),
     },
-    success_url: onboardingUrlFor(assignment.id),
+    // Onboarding now happens PRE-payment, so success_url goes straight to
+    // /paid (a thank-you confirmation), not back through the form.
+    success_url: paidUrlFor(assignment.id),
     cancel_url: previewUrlFor(assignment.id),
   });
 

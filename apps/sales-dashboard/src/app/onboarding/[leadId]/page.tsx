@@ -1,9 +1,14 @@
 /**
- * /onboarding/[leadId]  —  customer post-payment 5-question form.
+ * /onboarding/[leadId]  —  customer PRE-payment 5-question form.
  *
- * Public, no auth. Stripe redirects here with ?session_id=… on success.
- * Each field auto-saves via POST /api/onboarding/[leadId] (debounced 500ms).
- * No "Submit at end" button — bail-mid-form recovery is intentional.
+ * Public, no auth. Customer arrives here from the "Go live now" button on
+ * /preview/[leadId]. Each field auto-saves via POST /api/onboarding/[leadId]
+ * (debounced 500ms) so a customer who bails mid-form leaves us their answers
+ * even before they pay. The final step → Continue to payment redirects to
+ * Stripe Checkout. Stripe success_url then lands on /paid/[leadId].
+ *
+ * If a customer revisits this URL after paying, we redirect to /paid (no
+ * point editing the form post-purchase — the build kicks off in the webhook).
  *
  * Questions (locked 2026-04-25):
  *   1. Confirm contact (mobile to text on)
@@ -15,7 +20,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 
 const INK = '#0F0E0C';
 const INK_SOFT = '#1A1814';
@@ -25,8 +30,8 @@ const CREAM_MUTED = '#9A9489';
 const SIGNAL = '#B8860B';
 const LINE = 'rgba(15,14,12,0.10)';
 
-type StepKey = 'contact' | 'changes' | 'photos' | 'domain' | 'else' | 'done';
-const STEPS: StepKey[] = ['contact', 'changes', 'photos', 'domain', 'else', 'done'];
+type StepKey = 'contact' | 'changes' | 'photos' | 'domain' | 'else';
+const STEPS: StepKey[] = ['contact', 'changes', 'photos', 'domain', 'else'];
 
 interface PhotoEntry {
   url: string;
@@ -54,7 +59,7 @@ const EMPTY: Answers = {
   photos: [],
 };
 
-const LABELS: Record<Exclude<StepKey, 'done'>, { eyebrow: string; question: string; sub?: string }> = {
+const LABELS: Record<StepKey, { eyebrow: string; question: string; sub?: string }> = {
   contact: {
     eyebrow: '01 / 05',
     question: 'What\u2019s the best mobile to text you on?',
@@ -84,14 +89,17 @@ const LABELS: Record<Exclude<StepKey, 'done'>, { eyebrow: string; question: stri
 
 export default function OnboardingPage() {
   const params = useParams();
+  const router = useRouter();
   const leadId = params?.leadId as string;
   const [step, setStep] = useState<StepKey>('contact');
   const [answers, setAnswers] = useState<Answers>(EMPTY);
   const [savingState, setSavingState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [error, setError] = useState<string | null>(null);
+  const [checkoutUrl, setCheckoutUrl] = useState<string | null>(null);
+  const [checkoutLoading, setCheckoutLoading] = useState(false);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Hydrate from server on mount so refresh + return-later works.
+  // Hydrate answers from server on mount so refresh + return-later works.
   useEffect(() => {
     if (!leadId) return;
     fetch(`/api/onboarding/${leadId}`)
@@ -111,12 +119,33 @@ export default function OnboardingPage() {
           anything_else: d.anything_else ?? '',
           photos: Array.isArray(d.photos) ? d.photos : [],
         });
-        if (d.completed_at) setStep('done');
       })
       .catch(() => {
         // Silent — first-time customer has no row yet.
       });
   }, [leadId]);
+
+  // Pre-warm the Stripe Checkout URL so the "Continue to payment" tap is
+  // instant. If the customer has already paid, bounce to /paid.
+  useEffect(() => {
+    if (!leadId) return;
+    fetch('/api/payments/customer-checkout-url', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ lead_id: leadId }),
+    })
+      .then((r) => r.json())
+      .then((j) => {
+        if (j.already_paid) {
+          router.replace(`/paid/${leadId}`);
+          return;
+        }
+        if (typeof j.checkout_url === 'string') setCheckoutUrl(j.checkout_url);
+      })
+      .catch((err) => {
+        console.error('checkout url fetch failed', err);
+      });
+  }, [leadId, router]);
 
   // Auto-save on any answer change. Debounced 500ms.
   const queueSave = (patch: Partial<Answers>) => {
@@ -160,15 +189,47 @@ export default function OnboardingPage() {
   const advance = () => {
     const i = STEPS.indexOf(step);
     if (i < 0 || i >= STEPS.length - 1) return;
-    if (STEPS[i + 1] === 'done') {
-      // Final advance — mark completed.
-      fetch(`/api/onboarding/${leadId}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mark_completed: true }),
-      }).catch(() => undefined);
-    }
     setStep(STEPS[i + 1]);
+  };
+
+  const continueToPayment = async () => {
+    setCheckoutLoading(true);
+    setError(null);
+    // Mark the form complete so we have a clean signal in the DB regardless
+    // of whether the customer actually pays. Fire-and-forget — don't block
+    // the redirect on it.
+    fetch(`/api/onboarding/${leadId}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mark_completed: true }),
+    }).catch(() => undefined);
+
+    let url = checkoutUrl;
+    if (!url) {
+      try {
+        const res = await fetch('/api/payments/customer-checkout-url', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ lead_id: leadId }),
+        });
+        const j = await res.json();
+        if (j.already_paid) {
+          router.replace(`/paid/${leadId}`);
+          return;
+        }
+        url = typeof j.checkout_url === 'string' ? j.checkout_url : null;
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Could not start checkout');
+        setCheckoutLoading(false);
+        return;
+      }
+    }
+    if (!url) {
+      setError('Checkout is not ready yet — please try again in a moment.');
+      setCheckoutLoading(false);
+      return;
+    }
+    window.location.href = url;
   };
 
   const back = () => {
@@ -211,7 +272,7 @@ export default function OnboardingPage() {
             color: SIGNAL,
           }}
         >
-          ✓ Paid · Setting up
+          Setting up · {STEPS.indexOf(step) + 1}/{STEPS.length}
         </span>
         <SaveIndicator state={savingState} />
       </header>
@@ -229,48 +290,44 @@ export default function OnboardingPage() {
           flexDirection: 'column',
         }}
       >
-        {step !== 'done' && (
-          <>
-            <p
-              style={{
-                margin: 0,
-                fontFamily: "'JetBrains Mono', ui-monospace, monospace",
-                fontSize: 11,
-                letterSpacing: '0.16em',
-                textTransform: 'uppercase',
-                color: CREAM_MUTED,
-                marginBottom: 12,
-              }}
-            >
-              {LABELS[step].eyebrow}
-            </p>
-            <h1
-              style={{
-                margin: 0,
-                fontSize: 28,
-                fontWeight: 500,
-                letterSpacing: '-0.025em',
-                lineHeight: 1.18,
-                color: INK,
-                marginBottom: 8,
-              }}
-            >
-              {LABELS[step].question}
-            </h1>
-            {LABELS[step].sub && (
-              <p
-                style={{
-                  margin: 0,
-                  fontSize: 14.5,
-                  lineHeight: 1.55,
-                  color: 'rgba(15,14,12,0.6)',
-                  marginBottom: 28,
-                }}
-              >
-                {LABELS[step].sub}
-              </p>
-            )}
-          </>
+        <p
+          style={{
+            margin: 0,
+            fontFamily: "'JetBrains Mono', ui-monospace, monospace",
+            fontSize: 11,
+            letterSpacing: '0.16em',
+            textTransform: 'uppercase',
+            color: CREAM_MUTED,
+            marginBottom: 12,
+          }}
+        >
+          {LABELS[step].eyebrow}
+        </p>
+        <h1
+          style={{
+            margin: 0,
+            fontSize: 28,
+            fontWeight: 500,
+            letterSpacing: '-0.025em',
+            lineHeight: 1.18,
+            color: INK,
+            marginBottom: 8,
+          }}
+        >
+          {LABELS[step].question}
+        </h1>
+        {LABELS[step].sub && (
+          <p
+            style={{
+              margin: 0,
+              fontSize: 14.5,
+              lineHeight: 1.55,
+              color: 'rgba(15,14,12,0.6)',
+              marginBottom: 28,
+            }}
+          >
+            {LABELS[step].sub}
+          </p>
         )}
 
         {step === 'contact' && (
@@ -318,35 +375,45 @@ export default function OnboardingPage() {
           />
         )}
 
-        {step === 'done' && <DoneState />}
-
         {/* Action row */}
-        {step !== 'done' && (
-          <div
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            marginTop: 32,
+            gap: 12,
+          }}
+        >
+          <button
+            onClick={back}
+            disabled={STEPS.indexOf(step) === 0}
             style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              marginTop: 32,
-              gap: 12,
+              ...ghostButtonStyle,
+              opacity: STEPS.indexOf(step) === 0 ? 0.3 : 1,
+              pointerEvents: STEPS.indexOf(step) === 0 ? 'none' : 'auto',
             }}
           >
+            Back
+          </button>
+          {STEPS.indexOf(step) === STEPS.length - 1 ? (
             <button
-              onClick={back}
-              disabled={STEPS.indexOf(step) === 0}
+              onClick={continueToPayment}
+              disabled={checkoutLoading}
               style={{
-                ...ghostButtonStyle,
-                opacity: STEPS.indexOf(step) === 0 ? 0.3 : 1,
-                pointerEvents: STEPS.indexOf(step) === 0 ? 'none' : 'auto',
+                ...primaryButtonStyle,
+                opacity: checkoutLoading ? 0.6 : 1,
+                cursor: checkoutLoading ? 'wait' : 'pointer',
               }}
             >
-              Back
+              {checkoutLoading ? 'Opening checkout…' : 'Continue to payment →'}
             </button>
+          ) : (
             <button onClick={advance} style={primaryButtonStyle}>
-              {STEPS[STEPS.indexOf(step) + 1] === 'done' ? 'Finish' : 'Next →'}
+              Next →
             </button>
-          </div>
-        )}
+          )}
+        </div>
 
         {error && (
           <p style={{ marginTop: 16, color: '#A8332B', fontSize: 13 }}>{error}</p>
@@ -423,7 +490,7 @@ function DomainPicker({
               marginBottom: 10,
             }}
           >
-            Top 3 names you\u2019d like, in order. We\u2019ll buy the first available.
+            Top 3 names you’d like, in order. We’ll buy the first available.
           </p>
           {[0, 1, 2].map((i) => (
             <input
@@ -580,41 +647,6 @@ function PhotoUploader({
   );
 }
 
-function DoneState() {
-  return (
-    <div
-      style={{
-        textAlign: 'center',
-        padding: '48px 0',
-      }}
-    >
-      <p
-        style={{
-          margin: 0,
-          fontSize: 38,
-          fontWeight: 500,
-          letterSpacing: '-0.03em',
-          marginBottom: 12,
-        }}
-      >
-        You\u2019re in.
-      </p>
-      <p
-        style={{
-          margin: 0,
-          fontSize: 16,
-          color: 'rgba(15,14,12,0.6)',
-          lineHeight: 1.55,
-          maxWidth: 360,
-          marginLeft: 'auto',
-          marginRight: 'auto',
-        }}
-      >
-        We\u2019ll text you within 24 hours with your build timeline.
-      </p>
-    </div>
-  );
-}
 
 const inputStyle: React.CSSProperties = {
   width: '100%',

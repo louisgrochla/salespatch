@@ -15,7 +15,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { notFound } from 'next/navigation';
 import {
-  getOrCreateActiveSession,
   getSetupFeePence,
   getMonthlyPence,
   formatPenceAsPounds,
@@ -135,19 +134,9 @@ export default async function PreviewPage({
     return <PaidState businessName={business_name} demoUrl={demo_site_domain} />;
   }
 
-  // Get or create the active checkout session for this assignment.
-  // This is the same session the salesperson's QR-gen call cached, refreshed
-  // lazily if the cached one expired. Customer never sees the seam.
-  let checkoutUrl: string | null = null;
-  try {
-    const sb = getSupabase();
-    const session = await getOrCreateActiveSession(sb, assignment.id);
-    checkoutUrl = session.stripe_session_url;
-  } catch (err) {
-    console.error('[preview] session create/fetch failed:', err);
-    // Render the demo anyway — better to show something than 500.
-  }
-
+  // No Stripe round-trip on this page — the CTA links to /onboarding/<id>
+  // first (5-question form), which then redirects to Stripe Checkout when
+  // the customer hits "Continue to payment".
   const setupLabel = formatPenceAsPounds(getSetupFeePence());
   const monthlyLabel = formatPenceAsPounds(getMonthlyPence());
 
@@ -155,7 +144,7 @@ export default async function PreviewPage({
     <PreviewWithCTA
       businessName={business_name}
       demoUrl={demo_site_domain}
-      checkoutUrl={checkoutUrl}
+      onboardingHref={`/onboarding/${assignment.id}`}
       setupLabel={setupLabel}
       monthlyLabel={monthlyLabel}
     />
@@ -168,20 +157,19 @@ export default async function PreviewPage({
 
 const INK = '#0F0E0C';
 const CREAM = '#FAF8F5';
-const CREAM_DIM = '#D4CFC4';
 const SIGNAL = '#B8860B';
 const LIVE_GREEN = '#3D9E5F';
 
 function PreviewWithCTA({
   businessName,
   demoUrl,
-  checkoutUrl,
+  onboardingHref,
   setupLabel,
   monthlyLabel,
 }: {
   businessName: string;
   demoUrl: string | null;
-  checkoutUrl: string | null;
+  onboardingHref: string;
   setupLabel: string;
   monthlyLabel: string;
 }) {
@@ -214,15 +202,11 @@ function PreviewWithCTA({
 
       <BusinessLivePill businessName={businessName} />
 
-      {checkoutUrl ? (
-        <FloatingCTAButton
-          href={checkoutUrl}
-          setupLabel={setupLabel}
-          monthlyLabel={monthlyLabel}
-        />
-      ) : (
-        <PreparingCheckoutPill />
-      )}
+      <FloatingCTAButton
+        href={onboardingHref}
+        setupLabel={setupLabel}
+        monthlyLabel={monthlyLabel}
+      />
     </div>
   );
 }
@@ -357,30 +341,6 @@ function FloatingCTAButton({
   );
 }
 
-function PreparingCheckoutPill() {
-  return (
-    <div
-      style={{
-        position: 'fixed',
-        right: 16,
-        bottom: 'calc(env(safe-area-inset-bottom) + 36px)',
-        padding: '12px 18px',
-        background: 'rgba(15, 14, 12, 0.58)',
-        backdropFilter: 'blur(14px) saturate(140%)',
-        WebkitBackdropFilter: 'blur(14px) saturate(140%)',
-        color: CREAM_DIM,
-        borderRadius: 9999,
-        fontFamily: "'JetBrains Mono', ui-monospace, monospace",
-        fontSize: 11,
-        letterSpacing: '0.06em',
-        border: '1px solid rgba(250, 248, 245, 0.10)',
-        zIndex: 10,
-      }}
-    >
-      Preparing checkout…
-    </div>
-  );
-}
 
 function PaidState({ businessName, demoUrl }: { businessName: string; demoUrl: string | null }) {
   return (

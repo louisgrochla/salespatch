@@ -9,8 +9,6 @@
  * Always shows a "✓ Paid" reassurance + a CTA to finish the onboarding
  * form (which is the actually-useful thing).
  */
-import Link from 'next/link';
-
 export const dynamic = 'force-dynamic';
 
 const INK = '#0F0E0C';
@@ -60,7 +58,7 @@ export default function PaidPage({ params }: { params: { leadId: string } }) {
           marginBottom: 12,
         }}
       >
-        You\u2019re paid.
+        You’re paid.
       </h1>
 
       <p
@@ -73,26 +71,8 @@ export default function PaidPage({ params }: { params: { leadId: string } }) {
           marginBottom: 32,
         }}
       >
-        Thanks for going live. We\u2019ll text you within 24 hours — but if
-        you have a minute now, finish the setup form so we can start
-        building.
+        Thanks for going live. We have everything we need from the setup form — we’ll text you within 24 hours with your build timeline.
       </p>
-
-      <Link
-        href={`/onboarding/${params.leadId}`}
-        style={{
-          padding: '14px 28px',
-          background: INK,
-          color: CREAM,
-          borderRadius: 12,
-          textDecoration: 'none',
-          fontSize: 15,
-          fontWeight: 500,
-          letterSpacing: '-0.01em',
-        }}
-      >
-        Finish setup →
-      </Link>
 
       <p
         style={{

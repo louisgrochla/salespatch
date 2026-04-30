@@ -18,6 +18,7 @@ const PUBLIC_PATHS = [
   '/onboarding',
   '/paid',
   '/api/payments/webhook',
+  '/api/payments/customer-checkout-url',
   '/api/onboarding',
 ];
 
