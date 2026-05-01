@@ -20,6 +20,8 @@ const CREAM_WARM = '#F3EDE3';
 const CREAM_MUTED = '#9A9489';
 const SIGNAL = '#B8860B';
 const SIGNAL_DEEP = '#8E6608';
+const LIVE_GREEN = '#3D9E5F';
+const TAKEN_RED = '#A8332B';
 const LINE = 'rgba(15,14,12,0.08)';
 
 type StepKey = 'contact' | 'changes' | 'photos' | 'domain' | 'else';
@@ -806,6 +808,53 @@ function joinChanges(selected: string[], freeText: string): string {
   return parts.join('\n');
 }
 
+type AvailabilityStatus =
+  | { state: 'idle' }
+  | { state: 'checking' }
+  | { state: 'available' }
+  | { state: 'taken' }
+  | { state: 'unknown'; reason?: string };
+
+function useDomainAvailability(domain: string | null, debounceMs = 0): AvailabilityStatus {
+  const [status, setStatus] = useState<AvailabilityStatus>({ state: 'idle' });
+
+  useEffect(() => {
+    if (!domain) {
+      setStatus({ state: 'idle' });
+      return;
+    }
+    let cancelled = false;
+    setStatus({ state: 'checking' });
+    const timer = setTimeout(() => {
+      fetch(`/api/domain-availability?domain=${encodeURIComponent(domain)}`)
+        .then((r) => r.json())
+        .then((j: { available: boolean | null; checked: boolean; reason?: string }) => {
+          if (cancelled) return;
+          if (!j.checked || j.available === null) {
+            setStatus({ state: 'unknown', reason: j.reason });
+          } else if (j.available) {
+            setStatus({ state: 'available' });
+          } else {
+            setStatus({ state: 'taken' });
+          }
+        })
+        .catch(() => {
+          if (!cancelled) setStatus({ state: 'unknown' });
+        });
+    }, debounceMs);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [domain, debounceMs]);
+
+  return status;
+}
+
+function looksLikeDomain(s: string): boolean {
+  return /^[a-z0-9-]+(\.[a-z0-9-]+)+$/i.test(s.trim());
+}
+
 function DomainPicker({
   answers,
   update,
@@ -895,17 +944,15 @@ function DomainPicker({
             Or write your top three — we’ll buy the first available.
           </p>
           {[0, 1, 2].map((i) => (
-            <input
+            <ManualDomainInput
               key={i}
-              type="text"
-              placeholder={`#${i + 1} ${['most-wanted', '', 'fallback'][i]}`.trim()}
+              index={i}
               value={answers.domain_preferences[i] ?? ''}
-              onChange={(e) => {
+              onChange={(v) => {
                 const next = [...answers.domain_preferences];
-                next[i] = e.target.value;
+                next[i] = v;
                 update('domain_preferences', next);
               }}
-              style={{ ...inputStyle, marginBottom: 8 }}
             />
           ))}
         </div>
@@ -923,10 +970,18 @@ function DomainSuggestion({
   active: boolean;
   onToggle: () => void;
 }) {
+  const status = useDomainAvailability(domain);
+  const isTaken = status.state === 'taken';
+  const isAvailable = status.state === 'available';
+  const isChecking = status.state === 'checking';
+
+  const disabled = isTaken;
+
   return (
     <button
       type="button"
-      onClick={onToggle}
+      onClick={disabled ? undefined : onToggle}
+      disabled={disabled}
       className="oc-press"
       style={{
         display: 'flex',
@@ -936,11 +991,12 @@ function DomainSuggestion({
         padding: '12px 16px',
         background: active ? INK : CREAM,
         color: active ? CREAM : INK,
-        border: `1px solid ${active ? INK : 'rgba(15,14,12,0.14)'}`,
+        border: `1px solid ${active ? INK : isTaken ? 'rgba(168,51,43,0.25)' : 'rgba(15,14,12,0.14)'}`,
         borderRadius: 14,
         fontFamily: 'inherit',
         fontSize: 15,
-        cursor: 'pointer',
+        cursor: disabled ? 'not-allowed' : 'pointer',
+        opacity: disabled ? 0.55 : 1,
         boxShadow: active
           ? '0 6px 16px rgba(15,14,12,0.18)'
           : '0 1px 0 rgba(255,255,255,0.6) inset',
@@ -952,27 +1008,168 @@ function DomainSuggestion({
           fontFamily: "'JetBrains Mono', ui-monospace, monospace",
           letterSpacing: '0.01em',
           fontSize: 14,
+          textDecoration: isTaken ? 'line-through' : 'none',
+          textDecorationColor: TAKEN_RED,
+          flexShrink: 1,
+          minWidth: 0,
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
         }}
       >
         {domain}
       </span>
-      <span
-        style={{
-          width: 24,
-          height: 24,
-          borderRadius: '50%',
-          background: active ? SIGNAL : 'rgba(15,14,12,0.06)',
-          color: active ? INK : 'rgba(15,14,12,0.5)',
-          display: 'inline-flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          fontSize: 13,
-          fontWeight: 700,
-        }}
-      >
-        {active ? '✓' : '+'}
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+        <AvailabilityBadge status={status} compact onDark={active} />
+        {!disabled && (
+          <span
+            style={{
+              width: 24,
+              height: 24,
+              borderRadius: '50%',
+              background: active ? SIGNAL : isAvailable ? 'rgba(61,158,95,0.14)' : 'rgba(15,14,12,0.06)',
+              color: active ? INK : isAvailable ? LIVE_GREEN : 'rgba(15,14,12,0.5)',
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: 13,
+              fontWeight: 700,
+              opacity: isChecking ? 0.5 : 1,
+            }}
+          >
+            {active ? '✓' : '+'}
+          </span>
+        )}
       </span>
     </button>
+  );
+}
+
+function ManualDomainInput({
+  index,
+  value,
+  onChange,
+}: {
+  index: number;
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  const trimmed = value.trim().toLowerCase();
+  const targetDomain = looksLikeDomain(trimmed) ? trimmed : null;
+  const status = useDomainAvailability(targetDomain, 600);
+
+  return (
+    <div style={{ position: 'relative', marginBottom: 8 }}>
+      <input
+        type="text"
+        inputMode="url"
+        autoCapitalize="none"
+        autoCorrect="off"
+        placeholder={`#${index + 1} ${['most-wanted', '', 'fallback'][index]}`.trim()}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        style={{
+          ...inputStyle,
+          paddingRight: 110,
+          fontFamily: targetDomain
+            ? "'JetBrains Mono', ui-monospace, monospace"
+            : (inputStyle.fontFamily as string | undefined),
+        }}
+      />
+      {targetDomain && (
+        <span
+          style={{
+            position: 'absolute',
+            right: 12,
+            top: '50%',
+            transform: 'translateY(-50%)',
+            pointerEvents: 'none',
+          }}
+        >
+          <AvailabilityBadge status={status} />
+        </span>
+      )}
+    </div>
+  );
+}
+
+function AvailabilityBadge({
+  status,
+  compact = false,
+  onDark = false,
+}: {
+  status: AvailabilityStatus;
+  compact?: boolean;
+  onDark?: boolean;
+}) {
+  if (status.state === 'idle') return null;
+  let bg = 'rgba(15,14,12,0.06)';
+  let fg = 'rgba(15,14,12,0.55)';
+  let label = '';
+  let dot: string | null = null;
+  if (status.state === 'checking') {
+    label = compact ? '' : 'Checking…';
+    fg = onDark ? 'rgba(250,248,245,0.55)' : 'rgba(15,14,12,0.5)';
+    bg = onDark ? 'rgba(250,248,245,0.10)' : 'rgba(15,14,12,0.06)';
+  } else if (status.state === 'available') {
+    label = 'Available';
+    fg = LIVE_GREEN;
+    bg = 'rgba(61,158,95,0.12)';
+    dot = LIVE_GREEN;
+  } else if (status.state === 'taken') {
+    label = 'Taken';
+    fg = TAKEN_RED;
+    bg = 'rgba(168,51,43,0.10)';
+    dot = TAKEN_RED;
+  } else {
+    label = compact ? '' : '—';
+    fg = 'rgba(15,14,12,0.4)';
+  }
+
+  if (compact && status.state === 'checking') {
+    return (
+      <span
+        style={{
+          width: 8,
+          height: 8,
+          borderRadius: '50%',
+          background: onDark ? 'rgba(250,248,245,0.4)' : 'rgba(15,14,12,0.25)',
+          display: 'inline-block',
+          animation: 'pulse 1.0s ease-in-out infinite',
+        }}
+      />
+    );
+  }
+
+  return (
+    <span
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 5,
+        padding: '4px 9px',
+        borderRadius: 9999,
+        background: bg,
+        color: fg,
+        fontSize: 11,
+        fontWeight: 600,
+        letterSpacing: '0.04em',
+        fontFamily: 'inherit',
+        whiteSpace: 'nowrap',
+      }}
+    >
+      {dot && (
+        <span
+          style={{
+            width: 6,
+            height: 6,
+            borderRadius: '50%',
+            background: dot,
+            display: 'inline-block',
+          }}
+        />
+      )}
+      {label}
+    </span>
   );
 }
 
