@@ -4,6 +4,13 @@ import MapKit
 import SwiftData
 
 // MARK: — LeadsMapView
+// Map of every geocoded lead. Filter chips at the top, pin tap surfaces a
+// brand-styled lead card at the bottom; long-press toolbar enters multi-stop
+// route planning. Single + multi + route-all paths all calculate via MKDirections.
+//
+// Brand-port pass: pins use `Brand.statusColor`, polylines use `Brand.signal`,
+// every overlay card uses `.brandCard()`, all chips/buttons consume the
+// shared brand styles. Layout untouched; behaviour untouched.
 struct LeadsMapView: View {
     @Query private var leads: [Lead]
     @Environment(\.modelContext) private var modelContext
@@ -59,14 +66,14 @@ struct LeadsMapView: View {
                         }
                     }
 
-                    // Route overlays
+                    // Route overlays — gold to match the brand accent
                     if let route = activeRoute {
                         MapPolyline(route.polyline)
-                            .stroke(Theme.accent, lineWidth: 5)
+                            .stroke(Brand.signal, lineWidth: 5)
                     }
                     ForEach(Array(multiStopRoutes.enumerated()), id: \.offset) { _, route in
                         MapPolyline(route.polyline)
-                            .stroke(Theme.accent, lineWidth: 5)
+                            .stroke(Brand.signal, lineWidth: 5)
                     }
                 }
                 .mapStyle(.standard(elevation: .realistic, emphasis: .muted, pointsOfInterest: .excludingAll))
@@ -123,24 +130,19 @@ struct LeadsMapView: View {
                     // Floating "Plan Route" button when card is dismissed
                     if !showRouteAllCard && selectedLead == nil && !isRoutePlanning && activeRoute == nil {
                         Button {
+                            BrandHaptics.tap()
                             allRoutes = []
                             multiStopRoutes = []
                             showRouteAllCard = true
                         } label: {
                             HStack(spacing: 6) {
                                 Image(systemName: "point.topleft.down.to.point.bottomright.curvepath.fill")
-                                    .font(.system(size: 14))
-                                Text("Plan Route")
-                                    .font(.system(size: 14, weight: .semibold))
+                                    .font(.system(size: 13))
+                                Text("Plan route")
                             }
-                            .foregroundStyle(.white)
-                            .padding(.horizontal, 18)
-                            .padding(.vertical, 10)
-                            .background(Theme.accent)
-                            .clipShape(Capsule())
-                            .shadow(color: .black.opacity(0.3), radius: 6, y: 3)
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(PrimaryButtonStyle(size: .sm))
+                        .shadow(color: .black.opacity(0.35), radius: 6, y: 3)
                         .padding(.bottom, 16)
                         .transition(.scale.combined(with: .opacity))
                     }
@@ -148,9 +150,12 @@ struct LeadsMapView: View {
             }
             .navigationTitle("Map")
             .navigationBarTitleDisplayMode(.inline)
+            .toolbarBackground(Brand.ink, for: .navigationBar)
+            .toolbarBackground(.visible, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     Button {
+                        BrandHaptics.tap()
                         if isRoutePlanning {
                             toggleRoutePlanning()
                         } else if !showRouteAllCard {
@@ -164,19 +169,22 @@ struct LeadsMapView: View {
                     } label: {
                         HStack(spacing: 4) {
                             Image(systemName: isRoutePlanning ? "xmark" : "point.topleft.down.to.point.bottomright.curvepath.fill")
-                                .font(.system(size: 14))
+                                .font(.system(size: 13))
                             if isRoutePlanning {
                                 Text("Cancel")
-                                    .font(.system(size: 13, weight: .medium))
+                                    .font(Brand.Font.body(13, weight: .medium))
                             }
                         }
-                        .foregroundStyle(isRoutePlanning ? Theme.statusRejected : Theme.accent)
+                        .foregroundStyle(isRoutePlanning ? Brand.err : Brand.signal)
                     }
                 }
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button(action: centreOnUser) {
+                    Button {
+                        BrandHaptics.tap()
+                        centreOnUser()
+                    } label: {
                         Image(systemName: "location.fill")
-                            .foregroundStyle(Theme.accent)
+                            .foregroundStyle(Brand.signal)
                     }
                 }
             }
@@ -198,31 +206,17 @@ struct LeadsMapView: View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
                 ForEach(filters, id: \.self) { filter in
-                    Button {
-                        selectedFilter = filter
-                    } label: {
-                        Text(filter == "all" ? "All" : Theme.statusLabel(for: filter))
-                            .font(.system(size: 12, weight: selectedFilter == filter ? .semibold : .medium))
-                            .foregroundStyle(selectedFilter == filter ? .white : Theme.textSecondary)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 6)
-                            .background(
-                                selectedFilter == filter
-                                    ? (filter == "all" ? Theme.accent : Theme.statusColor(for: filter))
-                                    : Theme.surface.opacity(0.9)
-                            )
-                            .clipShape(Capsule())
-                            .overlay(
-                                Capsule()
-                                    .stroke(
-                                        selectedFilter == filter
-                                            ? Color.clear
-                                            : Theme.border,
-                                        lineWidth: Theme.borderWidth
-                                    )
-                            )
+                    let count = filter == "all"
+                        ? filteredLeads.count
+                        : leads.filter { $0.status.lowercased() == filter && $0.cachedLat != nil }.count
+                    BrandChip(
+                        label: filter == "all" ? "All" : Brand.statusLabel(for: filter),
+                        count: count,
+                        active: selectedFilter == filter
+                    ) {
+                        BrandHaptics.tap()
+                        withAnimation(.easeInOut(duration: 0.18)) { selectedFilter = filter }
                     }
-                    .buttonStyle(.plain)
                 }
             }
             .padding(.horizontal, 16)
@@ -236,73 +230,78 @@ struct LeadsMapView: View {
     // MARK: — Route All Card (default state)
 
     private var routeAllCard: some View {
-        VStack(spacing: 10) {
+        VStack(alignment: .leading, spacing: 12) {
             // Header
-            HStack {
+            HStack(spacing: 10) {
                 Image(systemName: "map.fill")
-                    .font(.system(size: 14))
-                    .foregroundStyle(Theme.accent)
-                VStack(alignment: .leading, spacing: 1) {
-                    Text("Plan Your Route")
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(Theme.textPrimary)
+                    .font(.system(size: 13))
+                    .foregroundStyle(Brand.signal)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("/ PLAN YOUR ROUTE")
+                        .font(Brand.Font.mono(9.5))
+                        .tracking(Brand.Tracking.eyebrow)
+                        .foregroundStyle(Brand.signal)
                     Text("\(filteredLeads.count) leads on map")
-                        .font(.system(size: 12))
-                        .foregroundStyle(Theme.textSecondary)
+                        .font(Brand.Font.body(Brand.Font.bodySmall, weight: .medium))
+                        .foregroundStyle(Brand.cream)
                 }
                 Spacer()
 
                 if isCalculatingAllRoute {
                     ProgressView()
                         .scaleEffect(0.7)
+                        .tint(Brand.signal)
                 }
 
                 Button {
+                    BrandHaptics.tap()
                     showRouteAllCard = false
                 } label: {
                     Image(systemName: "xmark")
                         .font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(Theme.textMuted)
+                        .foregroundStyle(Brand.creamMuted)
                         .padding(6)
-                        .background(Theme.surfaceElevated)
-                        .clipShape(Circle())
+                        .background(Circle().fill(Brand.bgCard))
+                        .overlay(Circle().strokeBorder(Brand.line, lineWidth: 1))
                 }
                 .buttonStyle(.plain)
             }
 
             // Lead list preview
             let visibleLeads = Array(filteredLeads.prefix(6))
-            ForEach(Array(visibleLeads.enumerated()), id: \.element.assignmentId) { index, lead in
-                HStack(spacing: 10) {
-                    Text("\(index + 1)")
-                        .font(.system(size: 10, weight: .bold))
-                        .foregroundStyle(.white)
-                        .frame(width: 20, height: 20)
-                        .background(Theme.statusColor(for: lead.status))
-                        .clipShape(Circle())
+            VStack(spacing: 6) {
+                ForEach(Array(visibleLeads.enumerated()), id: \.element.assignmentId) { index, lead in
+                    HStack(spacing: 10) {
+                        Text("\(index + 1)")
+                            .font(Brand.Font.mono(10, weight: .semibold))
+                            .foregroundStyle(.white)
+                            .frame(width: 20, height: 20)
+                            .background(Circle().fill(Brand.statusColor(for: lead.status)))
 
-                    Image(systemName: lead.businessIcon)
-                        .font(.system(size: 11))
-                        .foregroundStyle(Theme.textMuted)
-                        .frame(width: 16)
+                        Image(systemName: lead.businessIcon)
+                            .font(.system(size: 11))
+                            .foregroundStyle(Brand.creamMuted)
+                            .frame(width: 16)
 
-                    Text(lead.businessName)
-                        .font(.system(size: 13, weight: .medium))
-                        .foregroundStyle(Theme.textPrimary)
-                        .lineLimit(1)
+                        Text(lead.businessName)
+                            .font(Brand.Font.body(13, weight: .medium))
+                            .foregroundStyle(Brand.cream)
+                            .lineLimit(1)
 
-                    Spacer()
+                        Spacer()
 
-                    Text(lead.postcode)
-                        .font(.system(size: 11))
-                        .foregroundStyle(Theme.textMuted)
+                        Text(lead.postcode)
+                            .font(Brand.Font.mono(10.5))
+                            .foregroundStyle(Brand.creamMuted)
+                    }
                 }
             }
 
             if filteredLeads.count > 6 {
-                Text("+\(filteredLeads.count - 6) more")
-                    .font(.system(size: 12))
-                    .foregroundStyle(Theme.textMuted)
+                Text("+ \(filteredLeads.count - 6) more")
+                    .font(Brand.Font.mono(10))
+                    .tracking(Brand.Tracking.eyebrow)
+                    .foregroundStyle(Brand.creamMuted)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.leading, 30)
             }
@@ -312,108 +311,88 @@ struct LeadsMapView: View {
                 let totalTime = allRoutes.reduce(0) { $0 + $1.expectedTravelTime }
                 let totalDist = allRoutes.reduce(0) { $0 + $1.distance }
 
-                Divider().overlay(Theme.border)
+                Rectangle().fill(Brand.line2).frame(height: 1)
 
-                HStack(spacing: 6) {
+                HStack(spacing: 8) {
                     Image(systemName: "car.fill")
                         .font(.system(size: 11))
-                        .foregroundStyle(Theme.accent)
+                        .foregroundStyle(Brand.signal)
                     Text(formatTime(totalTime))
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(Theme.textPrimary)
-                    Text("·")
-                        .foregroundStyle(Theme.textMuted)
+                        .font(Brand.Font.mono(13, weight: .semibold))
+                        .foregroundStyle(Brand.cream)
+                    Text("·").foregroundStyle(Brand.creamMuted)
                     Text(formatDistance(totalDist))
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(Theme.textPrimary)
-                    Text("· \(filteredLeads.count) stops")
-                        .font(.system(size: 12))
-                        .foregroundStyle(Theme.textSecondary)
+                        .font(Brand.Font.mono(13, weight: .semibold))
+                        .foregroundStyle(Brand.cream)
+                    Text("· \(filteredLeads.count) STOPS")
+                        .font(Brand.Font.mono(10))
+                        .tracking(Brand.Tracking.eyebrow)
+                        .foregroundStyle(Brand.creamMuted)
                     Spacer()
                 }
             }
 
-            Divider().overlay(Theme.border)
+            Rectangle().fill(Brand.line2).frame(height: 1)
 
             // Action buttons
             if allRoutes.isEmpty {
-                // Calculate route button
                 Button {
+                    BrandHaptics.tap()
                     Task { await calculateRouteToAll() }
                 } label: {
                     HStack(spacing: 6) {
                         Image(systemName: "point.topleft.down.to.point.bottomright.curvepath.fill")
-                            .font(.system(size: 13))
-                        Text("Calculate Fastest Route")
-                            .font(.system(size: 13, weight: .semibold))
+                            .font(.system(size: 12))
+                        Text("Calculate fastest route")
                     }
-                    .foregroundStyle(.white)
                     .frame(maxWidth: .infinity)
-                    .padding(.vertical, 10)
-                    .background(Theme.accent)
-                    .clipShape(RoundedRectangle(cornerRadius: Theme.radiusButton))
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(PrimaryButtonStyle(size: .sm))
                 .disabled(filteredLeads.isEmpty || isCalculatingAllRoute)
-                .opacity(filteredLeads.isEmpty ? 0.5 : 1)
+                .opacity(filteredLeads.isEmpty ? 0.4 : 1)
             } else {
-                // Open in maps buttons
                 HStack(spacing: 8) {
                     Button {
+                        BrandHaptics.tap()
                         openAllInAppleMaps()
                     } label: {
                         HStack(spacing: 5) {
-                            Image(systemName: "map.fill")
-                                .font(.system(size: 12))
+                            Image(systemName: "map.fill").font(.system(size: 12))
                             Text("Apple Maps")
-                                .font(.system(size: 13, weight: .semibold))
                         }
-                        .foregroundStyle(.white)
                         .frame(maxWidth: .infinity)
-                        .padding(.vertical, 10)
-                        .background(Theme.accent)
-                        .clipShape(RoundedRectangle(cornerRadius: Theme.radiusButton))
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(PrimaryButtonStyle(size: .sm))
 
                     Button {
+                        BrandHaptics.tap()
                         openAllInGoogleMaps()
                     } label: {
                         HStack(spacing: 5) {
-                            Image(systemName: "globe")
-                                .font(.system(size: 12))
+                            Image(systemName: "globe").font(.system(size: 12))
                             Text("Google Maps")
-                                .font(.system(size: 13, weight: .semibold))
                         }
-                        .foregroundStyle(.white)
                         .frame(maxWidth: .infinity)
-                        .padding(.vertical, 10)
-                        .background(Color(hex: "#34A853"))
-                        .clipShape(RoundedRectangle(cornerRadius: Theme.radiusButton))
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(GhostButtonStyle(size: .sm))
                 }
 
-                // Recalculate / clear
                 Button {
+                    BrandHaptics.tap()
                     allRoutes = []
-                    // Remove route overlays from map
                     multiStopRoutes = []
                 } label: {
-                    Text("Clear Route")
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(Theme.textMuted)
+                    Text("/ CLEAR ROUTE")
+                        .font(Brand.Font.mono(10))
+                        .tracking(Brand.Tracking.eyebrow)
+                        .foregroundStyle(Brand.creamMuted)
+                        .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.plain)
             }
         }
-        .padding(14)
-        .background(Theme.surface)
-        .clipShape(RoundedRectangle(cornerRadius: Theme.radiusCard))
-        .overlay(
-            RoundedRectangle(cornerRadius: Theme.radiusCard)
-                .stroke(Theme.border, lineWidth: Theme.borderWidth)
-        )
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .brandCard(padding: 14)
     }
 
     // MARK: — Route Info Bar
@@ -422,104 +401,100 @@ struct LeadsMapView: View {
         HStack(spacing: 12) {
             Image(systemName: "car.fill")
                 .font(.system(size: 14))
-                .foregroundStyle(Theme.accent)
+                .foregroundStyle(Brand.signal)
 
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: 4) {
                 Text(lead.businessName)
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(Theme.textPrimary)
+                    .font(Brand.Font.display(14, weight: .medium))
+                    .foregroundStyle(Brand.cream)
+                    .lineLimit(1)
                 Text(formatRouteInfo(route))
-                    .font(.system(size: 12))
-                    .foregroundStyle(Theme.textSecondary)
+                    .font(Brand.Font.mono(11))
+                    .foregroundStyle(Brand.creamDim)
             }
 
             Spacer()
 
             Button {
+                BrandHaptics.tap(.medium)
                 openAppleMapsNavigation(to: lead)
             } label: {
-                Text("Navigate")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 6)
-                    .background(Theme.statusSold)
-                    .clipShape(RoundedRectangle(cornerRadius: Theme.radiusButton))
+                HStack(spacing: 4) {
+                    Image(systemName: "arrow.triangle.turn.up.right.diamond.fill")
+                        .font(.system(size: 11))
+                    Text("Navigate")
+                }
             }
-            .buttonStyle(.plain)
+            .buttonStyle(PrimaryButtonStyle(size: .sm))
 
             Button {
+                BrandHaptics.tap()
                 activeRoute = nil
                 routeLead = nil
             } label: {
                 Image(systemName: "xmark")
                     .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(Theme.textMuted)
+                    .foregroundStyle(Brand.creamMuted)
                     .padding(6)
-                    .background(Theme.surfaceElevated)
-                    .clipShape(Circle())
+                    .background(Circle().fill(Brand.bgCard))
+                    .overlay(Circle().strokeBorder(Brand.line, lineWidth: 1))
             }
             .buttonStyle(.plain)
         }
-        .padding(12)
-        .background(Theme.surface)
-        .clipShape(RoundedRectangle(cornerRadius: Theme.radiusCard))
-        .overlay(
-            RoundedRectangle(cornerRadius: Theme.radiusCard)
-                .stroke(Theme.border, lineWidth: Theme.borderWidth)
-        )
+        .frame(maxWidth: .infinity)
+        .brandCard(padding: 12)
     }
 
     // MARK: — Multi-stop Panel
 
     private var multiStopPanel: some View {
-        VStack(spacing: 10) {
-            // Header
-            HStack {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 8) {
                 Image(systemName: "point.topleft.down.to.point.bottomright.curvepath.fill")
-                    .font(.system(size: 14))
-                    .foregroundStyle(Theme.accent)
-                Text("Route Plan")
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(Theme.textPrimary)
-                Text("(\(routeStops.count) stops)")
                     .font(.system(size: 12))
-                    .foregroundStyle(Theme.textSecondary)
+                    .foregroundStyle(Brand.signal)
+                Text("/ ROUTE PLAN")
+                    .font(Brand.Font.mono(9.5))
+                    .tracking(Brand.Tracking.eyebrow)
+                    .foregroundStyle(Brand.signal)
+                Text("\(routeStops.count) STOPS")
+                    .font(Brand.Font.mono(9.5))
+                    .tracking(Brand.Tracking.eyebrow)
+                    .foregroundStyle(Brand.creamMuted)
                 Spacer()
 
                 if isCalculatingRoute {
-                    ProgressView()
-                        .scaleEffect(0.7)
+                    ProgressView().scaleEffect(0.7).tint(Brand.signal)
                 }
             }
 
             // Stop list
-            ForEach(Array(routeStops.enumerated()), id: \.element.assignmentId) { index, stop in
-                HStack(spacing: 10) {
-                    // Stop number
-                    Text("\(index + 1)")
-                        .font(.system(size: 11, weight: .bold))
-                        .foregroundStyle(.white)
-                        .frame(width: 22, height: 22)
-                        .background(Theme.accent)
-                        .clipShape(Circle())
+            VStack(spacing: 6) {
+                ForEach(Array(routeStops.enumerated()), id: \.element.assignmentId) { index, stop in
+                    HStack(spacing: 10) {
+                        Text("\(index + 1)")
+                            .font(Brand.Font.mono(11, weight: .semibold))
+                            .foregroundStyle(.white)
+                            .frame(width: 22, height: 22)
+                            .background(Circle().fill(Brand.signal))
 
-                    Text(stop.businessName)
-                        .font(.system(size: 13, weight: .medium))
-                        .foregroundStyle(Theme.textPrimary)
-                        .lineLimit(1)
+                        Text(stop.businessName)
+                            .font(Brand.Font.body(13, weight: .medium))
+                            .foregroundStyle(Brand.cream)
+                            .lineLimit(1)
 
-                    Spacer()
+                        Spacer()
 
-                    // Remove stop
-                    Button {
-                        removeStop(at: index)
-                    } label: {
-                        Image(systemName: "minus.circle.fill")
-                            .font(.system(size: 16))
-                            .foregroundStyle(Theme.statusRejected.opacity(0.7))
+                        Button {
+                            BrandHaptics.tap()
+                            removeStop(at: index)
+                        } label: {
+                            Image(systemName: "minus.circle.fill")
+                                .font(.system(size: 16))
+                                .foregroundStyle(Brand.err.opacity(0.7))
+                        }
+                        .buttonStyle(.plain)
                     }
-                    .buttonStyle(.plain)
                 }
             }
 
@@ -528,72 +503,55 @@ struct LeadsMapView: View {
                 let totalTime = multiStopRoutes.reduce(0) { $0 + $1.expectedTravelTime }
                 let totalDist = multiStopRoutes.reduce(0) { $0 + $1.distance }
 
-                Divider().overlay(Theme.border)
+                Rectangle().fill(Brand.line2).frame(height: 1)
 
-                HStack {
+                HStack(spacing: 6) {
                     Text(formatTime(totalTime))
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(Theme.textSecondary)
-                    Text("·")
-                        .foregroundStyle(Theme.textMuted)
+                        .font(Brand.Font.mono(12, weight: .medium))
+                        .foregroundStyle(Brand.cream)
+                    Text("·").foregroundStyle(Brand.creamMuted)
                     Text(formatDistance(totalDist))
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(Theme.textSecondary)
+                        .font(Brand.Font.mono(12, weight: .medium))
+                        .foregroundStyle(Brand.cream)
                     Spacer()
                 }
             }
 
             // Action buttons
-            HStack(spacing: 10) {
+            HStack(spacing: 8) {
                 Button {
+                    BrandHaptics.tap()
                     Task { await calculateMultiStopRoute() }
                 } label: {
                     HStack(spacing: 4) {
                         Image(systemName: "arrow.triangle.turn.up.right.circle")
-                            .font(.system(size: 13))
+                            .font(.system(size: 12))
                         Text("Calculate")
-                            .font(.system(size: 13, weight: .medium))
                     }
-                    .foregroundStyle(routeStops.count >= 2 ? Theme.accent : Theme.textMuted)
                     .frame(maxWidth: .infinity)
-                    .padding(.vertical, 8)
-                    .background(Theme.accent.opacity(routeStops.count >= 2 ? 0.1 : 0.05))
-                    .clipShape(RoundedRectangle(cornerRadius: Theme.radiusButton))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: Theme.radiusButton)
-                            .stroke(Theme.accent.opacity(0.3), lineWidth: Theme.borderWidth)
-                    )
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(GhostButtonStyle(size: .sm))
                 .disabled(routeStops.count < 2)
+                .opacity(routeStops.count < 2 ? 0.4 : 1)
 
                 if !multiStopRoutes.isEmpty {
                     Button {
+                        BrandHaptics.tap(.medium)
                         openMultiStopNavigation()
                     } label: {
                         HStack(spacing: 4) {
                             Image(systemName: "arrow.triangle.turn.up.right.diamond.fill")
-                                .font(.system(size: 13))
+                                .font(.system(size: 12))
                             Text("Navigate")
-                                .font(.system(size: 13, weight: .semibold))
                         }
-                        .foregroundStyle(.white)
                         .frame(maxWidth: .infinity)
-                        .padding(.vertical, 8)
-                        .background(Theme.statusSold)
-                        .clipShape(RoundedRectangle(cornerRadius: Theme.radiusButton))
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(PrimaryButtonStyle(size: .sm))
                 }
             }
         }
-        .padding(14)
-        .background(Theme.surface)
-        .clipShape(RoundedRectangle(cornerRadius: Theme.radiusCard))
-        .overlay(
-            RoundedRectangle(cornerRadius: Theme.radiusCard)
-                .stroke(Theme.border, lineWidth: Theme.borderWidth)
-        )
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .brandCard(padding: 14)
     }
 
     // MARK: — Actions
@@ -604,6 +562,7 @@ struct LeadsMapView: View {
     }
 
     private func pinTapped(_ lead: Lead) {
+        BrandHaptics.tap()
         if isRoutePlanning {
             if let idx = routeStops.firstIndex(where: { $0.assignmentId == lead.assignmentId }) {
                 removeStop(at: idx)
@@ -631,12 +590,10 @@ struct LeadsMapView: View {
 
     private func toggleRoutePlanning() {
         if isRoutePlanning {
-            // Exit route planning
             isRoutePlanning = false
             routeStops = []
             multiStopRoutes = []
         } else {
-            // Enter route planning
             dismissCard()
             activeRoute = nil
             routeLead = nil
@@ -680,7 +637,6 @@ struct LeadsMapView: View {
                 activeRoute = route
                 routeLead = lead
 
-                // Zoom to show the route
                 let rect = route.polyline.boundingMapRect
                 cameraPosition = .rect(rect.insetBy(dx: -rect.size.width * 0.2, dy: -rect.size.height * 0.2))
             }
@@ -706,7 +662,6 @@ struct LeadsMapView: View {
 
         var routes: [MKRoute] = []
 
-        // Build waypoints: user location → stop1 → stop2 → ...
         var waypoints: [CLLocationCoordinate2D] = []
         if let userLoc = locationManager.location?.coordinate {
             waypoints.append(userLoc)
@@ -717,7 +672,6 @@ struct LeadsMapView: View {
             }
         }
 
-        // Calculate route between each pair
         for i in 0..<(waypoints.count - 1) {
             let request = MKDirections.Request()
             request.source = MKMapItem(placemark: MKPlacemark(coordinate: waypoints[i]))
@@ -732,34 +686,10 @@ struct LeadsMapView: View {
         }
 
         multiStopRoutes = routes
-
-        // Zoom to show all stops
-        if !waypoints.isEmpty {
-            var minLat = waypoints[0].latitude
-            var maxLat = waypoints[0].latitude
-            var minLng = waypoints[0].longitude
-            var maxLng = waypoints[0].longitude
-            for wp in waypoints {
-                minLat = min(minLat, wp.latitude)
-                maxLat = max(maxLat, wp.latitude)
-                minLng = min(minLng, wp.longitude)
-                maxLng = max(maxLng, wp.longitude)
-            }
-            let center = CLLocationCoordinate2D(
-                latitude: (minLat + maxLat) / 2,
-                longitude: (minLng + maxLng) / 2
-            )
-            let span = MKCoordinateSpan(
-                latitudeDelta: (maxLat - minLat) * 1.4 + 0.005,
-                longitudeDelta: (maxLng - minLng) * 1.4 + 0.005
-            )
-            cameraPosition = .region(MKCoordinateRegion(center: center, span: span))
-        }
+        zoomToFit(waypoints)
     }
 
     private func openMultiStopNavigation() {
-        // Open Apple Maps with first stop as destination
-        // Apple Maps URL scheme supports sequential navigation
         guard let first = routeStops.first, coordinate(for: first) != nil else { return }
 
         if routeStops.count == 1 {
@@ -767,14 +697,12 @@ struct LeadsMapView: View {
             return
         }
 
-        // Build waypoints for Apple Maps
         let destinations = routeStops.compactMap { lead -> String? in
             guard let coord = coordinate(for: lead) else { return nil }
             return "\(coord.latitude),\(coord.longitude)"
         }
         guard !destinations.isEmpty else { return }
 
-        // Apple Maps supports daddr with +to: for multiple stops
         let daddr = destinations.joined(separator: "+to:")
         if let url = URL(string: "maps://?daddr=\(daddr)&dirflg=d") {
             UIApplication.shared.open(url)
@@ -788,7 +716,6 @@ struct LeadsMapView: View {
         isCalculatingAllRoute = true
         defer { isCalculatingAllRoute = false }
 
-        // Sort leads by nearest-neighbor from user location for fastest route
         let sorted = sortByNearest(filteredLeads)
 
         var waypoints: [CLLocationCoordinate2D] = []
@@ -817,28 +744,25 @@ struct LeadsMapView: View {
         }
 
         allRoutes = routes
-        multiStopRoutes = routes // show on map
+        multiStopRoutes = routes
+        zoomToFit(waypoints)
+    }
 
-        // Zoom to fit all
-        if !waypoints.isEmpty {
-            var minLat = waypoints[0].latitude, maxLat = waypoints[0].latitude
-            var minLng = waypoints[0].longitude, maxLng = waypoints[0].longitude
-            for wp in waypoints {
-                minLat = min(minLat, wp.latitude)
-                maxLat = max(maxLat, wp.latitude)
-                minLng = min(minLng, wp.longitude)
-                maxLng = max(maxLng, wp.longitude)
-            }
-            let center = CLLocationCoordinate2D(
-                latitude: (minLat + maxLat) / 2,
-                longitude: (minLng + maxLng) / 2
-            )
-            let span = MKCoordinateSpan(
-                latitudeDelta: (maxLat - minLat) * 1.4 + 0.005,
-                longitudeDelta: (maxLng - minLng) * 1.4 + 0.005
-            )
-            cameraPosition = .region(MKCoordinateRegion(center: center, span: span))
+    /// Pan + zoom the camera to fit a set of waypoints.
+    private func zoomToFit(_ waypoints: [CLLocationCoordinate2D]) {
+        guard !waypoints.isEmpty else { return }
+        var minLat = waypoints[0].latitude, maxLat = waypoints[0].latitude
+        var minLng = waypoints[0].longitude, maxLng = waypoints[0].longitude
+        for wp in waypoints {
+            minLat = min(minLat, wp.latitude); maxLat = max(maxLat, wp.latitude)
+            minLng = min(minLng, wp.longitude); maxLng = max(maxLng, wp.longitude)
         }
+        let center = CLLocationCoordinate2D(latitude: (minLat + maxLat) / 2, longitude: (minLng + maxLng) / 2)
+        let span = MKCoordinateSpan(
+            latitudeDelta: (maxLat - minLat) * 1.4 + 0.005,
+            longitudeDelta: (maxLng - minLng) * 1.4 + 0.005
+        )
+        cameraPosition = .region(MKCoordinateRegion(center: center, span: span))
     }
 
     /// Nearest-neighbor sort: pick the closest unvisited lead from the current position
@@ -894,7 +818,6 @@ struct LeadsMapView: View {
         }
         guard !coords.isEmpty else { return }
 
-        // Google Maps URL: destination is last stop, waypoints are intermediate
         let destination = "\(coords.last!.latitude),\(coords.last!.longitude)"
         var urlString = "comgooglemaps://?daddr=\(destination)&directionsmode=driving"
 
@@ -903,11 +826,9 @@ struct LeadsMapView: View {
             urlString += "&waypoints=\(waypoints.joined(separator: "|"))"
         }
 
-        // Try Google Maps app first, fall back to web
         if let url = URL(string: urlString), UIApplication.shared.canOpenURL(url) {
             UIApplication.shared.open(url)
         } else {
-            // Fallback to Google Maps web
             let webDest = "\(coords.last!.latitude),\(coords.last!.longitude)"
             var webUrl = "https://www.google.com/maps/dir/?api=1&destination=\(webDest)&travelmode=driving"
             if coords.count > 1 {
@@ -923,14 +844,12 @@ struct LeadsMapView: View {
     // MARK: — Formatting
 
     private func formatRouteInfo(_ route: MKRoute) -> String {
-        "\(formatTime(route.expectedTravelTime)) · \(formatDistance(route.distance)) · Drive"
+        "\(formatTime(route.expectedTravelTime)) · \(formatDistance(route.distance)) · DRIVE"
     }
 
     private func formatTime(_ seconds: TimeInterval) -> String {
         let minutes = Int(seconds) / 60
-        if minutes < 60 {
-            return "\(minutes) min"
-        }
+        if minutes < 60 { return "\(minutes) min" }
         let hours = minutes / 60
         let remainingMinutes = minutes % 60
         return "\(hours)h \(remainingMinutes)m"
@@ -938,9 +857,7 @@ struct LeadsMapView: View {
 
     private func formatDistance(_ meters: Double) -> String {
         let miles = meters / 1609.34
-        if miles < 0.1 {
-            return "\(Int(meters)) m"
-        }
+        if miles < 0.1 { return "\(Int(meters)) m" }
         return String(format: "%.1f mi", miles)
     }
 }
@@ -955,16 +872,19 @@ private struct LeadMapPin: View {
     var body: some View {
         VStack(spacing: 0) {
             ZStack {
-                // Balloon body
+                // Balloon body — uses Brand.statusColor so pins read the same
+                // colour story as the StatusPill on the lead card.
                 Circle()
-                    .fill(Theme.statusColor(for: lead.status))
+                    .fill(Brand.statusColor(for: lead.status))
                     .frame(width: 36, height: 36)
-                    .shadow(color: .black.opacity(0.3), radius: 4, y: 2)
+                    .overlay(
+                        Circle().strokeBorder(.white.opacity(0.85), lineWidth: 2)
+                    )
+                    .shadow(color: .black.opacity(0.35), radius: 4, y: 2)
 
-                // Stop number or business icon
                 if let number = stopNumber {
                     Text("\(number)")
-                        .font(.system(size: 14, weight: .bold))
+                        .font(Brand.Font.mono(13, weight: .semibold))
                         .foregroundStyle(.white)
                 } else {
                     Image(systemName: lead.businessIcon)
@@ -974,7 +894,7 @@ private struct LeadMapPin: View {
             }
             // Triangle pointer
             PinPointer()
-                .fill(Theme.statusColor(for: lead.status))
+                .fill(Brand.statusColor(for: lead.status))
                 .frame(width: 14, height: 8)
                 .offset(y: -2)
         }
@@ -1006,12 +926,12 @@ private struct LeadMapCard: View {
     @State private var dragOffset: CGFloat = 0
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 12) {
             // Drag indicator
             HStack {
                 Spacer()
                 RoundedRectangle(cornerRadius: 2)
-                    .fill(Theme.textMuted.opacity(0.4))
+                    .fill(Brand.creamMuted)
                     .frame(width: 36, height: 4)
                 Spacer()
             }
@@ -1019,62 +939,47 @@ private struct LeadMapCard: View {
 
             // Header: icon + name + dismiss
             HStack(alignment: .top, spacing: 12) {
-                // Business type icon
                 Image(systemName: lead.businessIcon)
-                    .font(.system(size: 18, weight: .medium))
-                    .foregroundStyle(Color(hex: "#5B7B9D"))
-                    .frame(width: 40, height: 40)
-                    .background(Color(hex: "#5B7B9D").opacity(0.1))
-                    .clipShape(RoundedRectangle(cornerRadius: 10))
+                    .font(.system(size: 16, weight: .medium))
+                    .foregroundStyle(Brand.signal)
+                    .frame(width: 36, height: 36)
+                    .background(
+                        RoundedRectangle(cornerRadius: 9, style: .continuous)
+                            .fill(Brand.signalSoft)
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 9, style: .continuous)
+                            .strokeBorder(Brand.signalBorder, lineWidth: 1)
+                    )
 
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(lead.businessName)
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundStyle(Theme.textPrimary)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(lead.businessType.uppercased())
+                        .font(Brand.Font.mono(9))
+                        .tracking(Brand.Tracking.eyebrow)
+                        .foregroundStyle(Brand.creamMuted)
                         .lineLimit(1)
 
-                    // Metadata line
-                    HStack(spacing: 4) {
-                        Text(lead.businessType)
-                            .font(.system(size: 12))
-                            .foregroundStyle(Theme.textSecondary)
+                    Text(lead.businessName)
+                        .font(Brand.Font.display(15, weight: .medium))
+                        .foregroundStyle(Brand.cream)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.85)
 
-                        Text("·")
-                            .foregroundStyle(Theme.textMuted)
-
-                        Text(lead.postcode)
-                            .font(.system(size: 12))
-                            .foregroundStyle(Theme.textSecondary)
-
-                        if let rating = lead.googleRating {
-                            Text("·")
-                                .foregroundStyle(Theme.textMuted)
-                            HStack(spacing: 2) {
-                                Image(systemName: "star.fill")
-                                    .font(.system(size: 9))
-                                    .foregroundStyle(Color(hex: "#B8922A"))
-                                Text(String(format: "%.1f", rating))
-                                    .font(.system(size: 12, weight: .medium))
-                                    .foregroundStyle(Theme.textSecondary)
-                                if let count = lead.googleReviewCount {
-                                    Text("(\(count))")
-                                        .font(.system(size: 11))
-                                        .foregroundStyle(Theme.textMuted)
-                                }
-                            }
-                        }
-                    }
+                    metadataLine
                 }
 
                 Spacer()
 
-                Button(action: onDismiss) {
+                Button(action: {
+                    BrandHaptics.tap()
+                    onDismiss()
+                }) {
                     Image(systemName: "xmark")
                         .font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(Theme.textMuted)
+                        .foregroundStyle(Brand.creamMuted)
                         .padding(6)
-                        .background(Theme.surfaceElevated)
-                        .clipShape(Circle())
+                        .background(Circle().fill(Brand.bgCard))
+                        .overlay(Circle().strokeBorder(Brand.line, lineWidth: 1))
                 }
                 .buttonStyle(.plain)
             }
@@ -1084,17 +989,18 @@ private struct LeadMapCard: View {
                 StatusPill(status: lead.status)
 
                 if let person = lead.contactPerson {
-                    HStack(spacing: 3) {
+                    HStack(spacing: 4) {
                         Image(systemName: "person.fill")
-                            .font(.system(size: 10))
-                            .foregroundStyle(Theme.textMuted)
+                            .font(.system(size: 9))
+                            .foregroundStyle(Brand.creamMuted)
                         Text(person)
-                            .font(.system(size: 12))
-                            .foregroundStyle(Theme.textSecondary)
+                            .font(Brand.Font.body(11))
+                            .foregroundStyle(Brand.creamDim)
                         if let role = lead.contactRole {
-                            Text("· \(role)")
-                                .font(.system(size: 12))
-                                .foregroundStyle(Theme.textMuted)
+                            Text("·").foregroundStyle(Brand.creamMuted)
+                            Text(role)
+                                .font(Brand.Font.body(11))
+                                .foregroundStyle(Brand.creamMuted)
                         }
                     }
                 }
@@ -1102,33 +1008,25 @@ private struct LeadMapCard: View {
                 Spacer()
             }
 
-            Divider().overlay(Theme.border)
+            Rectangle().fill(Brand.line2).frame(height: 1)
 
             // Action buttons
             HStack(spacing: 8) {
-                // Directions
-                Button(action: onDirections) {
+                Button(action: {
+                    BrandHaptics.tap()
+                    onDirections()
+                }) {
                     HStack(spacing: 4) {
                         Image(systemName: "arrow.triangle.turn.up.right.circle")
-                            .font(.system(size: 13))
+                            .font(.system(size: 12))
                         Text("Directions")
-                            .font(.system(size: 13, weight: .medium))
                     }
-                    .foregroundStyle(Theme.accent)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 7)
-                    .background(Theme.accent.opacity(0.1))
-                    .clipShape(RoundedRectangle(cornerRadius: Theme.radiusButton))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: Theme.radiusButton)
-                            .stroke(Theme.accent.opacity(0.3), lineWidth: Theme.borderWidth)
-                    )
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(GhostButtonStyle(size: .sm))
 
-                // Call (if phone available)
                 if let phone = lead.phone, !phone.isEmpty {
                     Button {
+                        BrandHaptics.tap()
                         let cleaned = phone.replacingOccurrences(of: " ", with: "")
                         if let url = URL(string: "tel:\(cleaned)") {
                             UIApplication.shared.open(url)
@@ -1136,49 +1034,27 @@ private struct LeadMapCard: View {
                     } label: {
                         HStack(spacing: 4) {
                             Image(systemName: "phone.fill")
-                                .font(.system(size: 12))
+                                .font(.system(size: 11))
                             Text("Call")
-                                .font(.system(size: 13, weight: .medium))
                         }
-                        .foregroundStyle(Theme.statusSold)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 7)
-                        .background(Theme.statusSold.opacity(0.1))
-                        .clipShape(RoundedRectangle(cornerRadius: Theme.radiusButton))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: Theme.radiusButton)
-                                .stroke(Theme.statusSold.opacity(0.3), lineWidth: Theme.borderWidth)
-                        )
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(GhostButtonStyle(size: .sm))
                 }
 
                 Spacer()
 
-                // View detail
                 NavigationLink(destination: LeadDetailView(lead: lead)) {
                     HStack(spacing: 4) {
                         Text("View")
-                            .font(.system(size: 13, weight: .semibold))
                         Image(systemName: "chevron.right")
-                            .font(.system(size: 10, weight: .bold))
+                            .font(.system(size: 9, weight: .bold))
                     }
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 7)
-                    .background(Theme.accent)
-                    .clipShape(RoundedRectangle(cornerRadius: Theme.radiusButton))
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(PrimaryButtonStyle(size: .sm))
             }
         }
-        .padding(14)
-        .background(Theme.surface)
-        .clipShape(RoundedRectangle(cornerRadius: Theme.radiusCard))
-        .overlay(
-            RoundedRectangle(cornerRadius: Theme.radiusCard)
-                .stroke(Theme.border, lineWidth: Theme.borderWidth)
-        )
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .brandCard(padding: 14)
         .offset(y: dragOffset)
         .gesture(
             DragGesture()
@@ -1188,12 +1064,39 @@ private struct LeadMapCard: View {
                     }
                 }
                 .onEnded { value in
-                    if value.translation.height > 60 {
-                        onDismiss()
-                    }
+                    if value.translation.height > 60 { onDismiss() }
                     dragOffset = 0
                 }
         )
+    }
+
+    /// Postcode + rating in mono. Hidden if both are blank.
+    private var metadataLine: some View {
+        HStack(spacing: 6) {
+            let postcode = lead.postcode.trimmingCharacters(in: .whitespaces)
+            if !postcode.isEmpty {
+                Text(postcode)
+                    .font(Brand.Font.mono(10.5))
+                    .foregroundStyle(Brand.creamDim)
+            }
+            if let rating = lead.googleRating, rating > 0 {
+                if !postcode.isEmpty {
+                    Circle().fill(Brand.line).frame(width: 3, height: 3)
+                }
+                HStack(spacing: 2) {
+                    Image(systemName: "star.fill").font(.system(size: 8))
+                    Text(String(format: "%.1f", rating))
+                        .font(Brand.Font.mono(10.5))
+                    if let count = lead.googleReviewCount {
+                        Text("(\(count))")
+                            .font(Brand.Font.mono(10))
+                            .foregroundStyle(Brand.creamMuted)
+                    }
+                }
+                .foregroundStyle(Brand.creamDim)
+            }
+        }
+        .lineLimit(1)
     }
 }
 
