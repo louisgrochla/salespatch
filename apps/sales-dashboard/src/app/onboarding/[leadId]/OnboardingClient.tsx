@@ -1,9 +1,10 @@
 /**
  * /onboarding/[leadId] — bottom-sheet form rendered over a peek of the demo.
  *
- * The demo iframe sits behind the sheet so the customer can still see what
- * they're buying while filling in the form. Sheet is ~62% of viewport height
- * and scrollable internally.
+ * Editorial tactile sheet: warm cream gradient, gold (SIGNAL) primary CTA,
+ * pill controls, motion between steps, soft backdrop-blur top pill. Demo
+ * iframe sits behind, dimmed and slightly blurred so it stays a backdrop and
+ * doesn't compete with the form for focus.
  *
  * Auto-saves every change debounced 500ms. "Continue to payment" pre-warms
  * the Stripe Checkout URL on mount and redirects on click.
@@ -15,9 +16,11 @@ import { useRouter } from 'next/navigation';
 
 const INK = '#0F0E0C';
 const CREAM = '#FAF8F5';
+const CREAM_WARM = '#F3EDE3';
 const CREAM_MUTED = '#9A9489';
 const SIGNAL = '#B8860B';
-const LINE = 'rgba(15,14,12,0.10)';
+const SIGNAL_DEEP = '#8E6608';
+const LINE = 'rgba(15,14,12,0.08)';
 
 type StepKey = 'contact' | 'changes' | 'photos' | 'domain' | 'else';
 const STEPS: StepKey[] = ['contact', 'changes', 'photos', 'domain', 'else'];
@@ -48,31 +51,44 @@ const EMPTY: Answers = {
   photos: [],
 };
 
-const LABELS: Record<StepKey, { eyebrow: string; question: string; sub?: string }> = {
+const LABELS: Record<
+  StepKey,
+  { eyebrow: string; question: string; emphasis?: string; sub?: string; glyph: string }
+> = {
   contact: {
     eyebrow: '01 / 05',
-    question: 'Best mobile to text you on?',
+    question: 'Best mobile to',
+    emphasis: 'text you on?',
     sub: 'Updates and check-ins only. We won’t spam.',
+    glyph: '✶',
   },
   changes: {
     eyebrow: '02 / 05',
-    question: 'Any first-day tweaks?',
-    sub: 'Tap any that apply, or write your own. We’ll handle bigger asks after launch.',
+    question: 'Any',
+    emphasis: 'first-day tweaks?',
+    sub: 'Tap any that apply, or write your own. We’ll handle the bigger stuff after launch.',
+    glyph: '✦',
   },
   photos: {
     eyebrow: '03 / 05',
-    question: 'Add photos of your business',
-    sub: 'Storefront, products, food, a smiling face. As many as you like.',
+    question: 'Bring your business',
+    emphasis: 'to life.',
+    sub: 'Storefront, products, food, a smiling face. Add as many as you like.',
+    glyph: '◐',
   },
   domain: {
     eyebrow: '04 / 05',
-    question: 'Got a domain already?',
-    sub: 'If not, we’ll buy one for you.',
+    question: 'Where will',
+    emphasis: 'people find you?',
+    sub: 'If you don’t have a domain yet, we’ll buy one for you.',
+    glyph: '◊',
   },
   else: {
     eyebrow: '05 / 05',
-    question: 'Anything else we should know?',
-    sub: 'Optional. 30 seconds, max.',
+    question: 'Anything else',
+    emphasis: 'we should know?',
+    sub: 'Optional — 30 seconds, max.',
+    glyph: '✺',
   },
 };
 
@@ -103,7 +119,6 @@ export default function OnboardingClient({ leadId, businessName, demoUrl }: Prop
   const [checkoutLoading, setCheckoutLoading] = useState(false);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Hydrate answers from server on mount (resume if customer returns later).
   useEffect(() => {
     fetch(`/api/onboarding/${leadId}`)
       .then((r) => r.json())
@@ -126,7 +141,6 @@ export default function OnboardingClient({ leadId, businessName, demoUrl }: Prop
       .catch(() => undefined);
   }, [leadId]);
 
-  // Pre-warm Stripe Checkout URL. Bounce to /paid if already sold.
   useEffect(() => {
     fetch('/api/payments/customer-checkout-url', {
       method: 'POST',
@@ -248,8 +262,8 @@ export default function OnboardingClient({ leadId, businessName, demoUrl }: Prop
           "'Inter Tight', -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif",
       }}
     >
-      {/* Demo iframe — peeks above the sheet. Pointer events disabled so taps
-          fall through to the sheet drag area if user reaches up there. */}
+      <style>{KEYFRAMES_CSS}</style>
+
       {demoUrl ? (
         <iframe
           src={demoUrl}
@@ -263,9 +277,21 @@ export default function OnboardingClient({ leadId, businessName, demoUrl }: Prop
             height: '100dvh',
             display: 'block',
             pointerEvents: 'none',
+            filter: 'saturate(0.78)',
           }}
         />
       ) : null}
+
+      {/* Veil over the demo so the sheet isn't fighting the demo for focus */}
+      <div
+        style={{
+          position: 'absolute',
+          inset: 0,
+          background:
+            'linear-gradient(180deg, rgba(15,14,12,0) 0%, rgba(15,14,12,0.16) 30%, rgba(15,14,12,0.55) 90%)',
+          pointerEvents: 'none',
+        }}
+      />
 
       {/* Top business pill */}
       <div
@@ -319,9 +345,9 @@ export default function OnboardingClient({ leadId, businessName, demoUrl }: Prop
               width: 5,
               height: 5,
               borderRadius: '50%',
-              background: '#3D9E5F',
+              background: SIGNAL,
               display: 'inline-block',
-              boxShadow: '0 0 6px #3D9E5F',
+              boxShadow: `0 0 8px ${SIGNAL}`,
             }}
           />
           Setting up
@@ -335,15 +361,17 @@ export default function OnboardingClient({ leadId, businessName, demoUrl }: Prop
           left: 0,
           right: 0,
           bottom: 0,
-          height: 'min(72dvh, 640px)',
-          background: CREAM,
+          height: 'min(74dvh, 660px)',
+          background: `linear-gradient(180deg, ${CREAM} 0%, ${CREAM_WARM} 100%)`,
           color: INK,
-          borderTopLeftRadius: 22,
-          borderTopRightRadius: 22,
-          boxShadow: '0 -18px 48px rgba(15,14,12,0.36)',
+          borderTopLeftRadius: 28,
+          borderTopRightRadius: 28,
+          boxShadow:
+            '0 -2px 0 rgba(184,134,11,0.18), 0 -22px 56px rgba(15,14,12,0.42)',
           display: 'flex',
           flexDirection: 'column',
           zIndex: 10,
+          animation: 'sheetIn 520ms cubic-bezier(0.22, 1, 0.36, 1) both',
         }}
       >
         {/* Drag handle */}
@@ -352,69 +380,78 @@ export default function OnboardingClient({ leadId, businessName, demoUrl }: Prop
             display: 'flex',
             justifyContent: 'center',
             paddingTop: 10,
-            paddingBottom: 6,
+            paddingBottom: 4,
             flexShrink: 0,
           }}
         >
           <span
             style={{
-              width: 36,
+              width: 38,
               height: 4,
               borderRadius: 2,
-              background: 'rgba(15,14,12,0.18)',
+              background: 'rgba(15,14,12,0.16)',
             }}
           />
         </div>
 
-        {/* Header: progress bar + step label + save indicator */}
-        <header
+        {/* Progress bar */}
+        <div
           style={{
-            padding: '6px 22px 14px',
-            borderBottom: `1px solid ${LINE}`,
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 10,
+            height: 3,
+            margin: '8px 22px 0',
+            background: 'rgba(15,14,12,0.06)',
+            borderRadius: 2,
+            overflow: 'hidden',
             flexShrink: 0,
           }}
         >
           <div
             style={{
-              height: 3,
-              background: 'rgba(15,14,12,0.08)',
-              borderRadius: 2,
-              overflow: 'hidden',
+              height: '100%',
+              width: `${progressPct}%`,
+              background: `linear-gradient(90deg, ${SIGNAL}, ${SIGNAL_DEEP})`,
+              boxShadow: `0 0 12px ${SIGNAL}66`,
+              transition: 'width 320ms cubic-bezier(0.22, 1, 0.36, 1)',
             }}
-          >
-            <div
-              style={{
-                height: '100%',
-                width: `${progressPct}%`,
-                background: SIGNAL,
-                transition: 'width 220ms ease',
-              }}
-            />
-          </div>
-          <div
+          />
+        </div>
+
+        {/* Eyebrow row */}
+        <header
+          style={{
+            padding: '12px 22px 6px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 12,
+            flexShrink: 0,
+          }}
+        >
+          <span
             style={{
-              display: 'flex',
+              display: 'inline-flex',
               alignItems: 'center',
-              justifyContent: 'space-between',
-              gap: 12,
+              gap: 8,
+              fontFamily: "'JetBrains Mono', ui-monospace, monospace",
+              fontSize: 10,
+              letterSpacing: '0.18em',
+              textTransform: 'uppercase',
+              color: SIGNAL,
             }}
           >
             <span
               style={{
-                fontFamily: "'JetBrains Mono', ui-monospace, monospace",
-                fontSize: 11,
-                letterSpacing: '0.16em',
-                textTransform: 'uppercase',
+                fontFamily: "'Inter Tight', sans-serif",
+                fontSize: 14,
                 color: SIGNAL,
+                lineHeight: 1,
               }}
             >
-              Setting up · {stepIndex + 1}/{STEPS.length}
+              {LABELS[step].glyph}
             </span>
-            <SaveIndicator state={savingState} />
-          </div>
+            Step {stepIndex + 1} of {STEPS.length}
+          </span>
+          <SaveIndicator state={savingState} />
         </header>
 
         {/* Scrollable question content */}
@@ -422,97 +459,101 @@ export default function OnboardingClient({ leadId, businessName, demoUrl }: Prop
           style={{
             flex: 1,
             overflowY: 'auto',
-            padding: '20px 22px 16px',
+            padding: '4px 22px 18px',
             WebkitOverflowScrolling: 'touch',
           }}
         >
-          <p
-            style={{
-              margin: 0,
-              fontFamily: "'JetBrains Mono', ui-monospace, monospace",
-              fontSize: 11,
-              letterSpacing: '0.16em',
-              textTransform: 'uppercase',
-              color: CREAM_MUTED,
-              marginBottom: 10,
-            }}
+          <div
+            key={step}
+            style={{ animation: 'stepIn 360ms cubic-bezier(0.22, 1, 0.36, 1) both' }}
           >
-            {LABELS[step].eyebrow}
-          </p>
-          <h1
-            style={{
-              margin: 0,
-              fontSize: 24,
-              fontWeight: 500,
-              letterSpacing: '-0.025em',
-              lineHeight: 1.18,
-              color: INK,
-              marginBottom: 6,
-            }}
-          >
-            {LABELS[step].question}
-          </h1>
-          {LABELS[step].sub && (
-            <p
+            <h1
               style={{
-                margin: 0,
-                fontSize: 14,
-                lineHeight: 1.5,
-                color: 'rgba(15,14,12,0.6)',
-                marginBottom: 22,
+                margin: '6px 0 0',
+                fontSize: 28,
+                fontWeight: 500,
+                letterSpacing: '-0.03em',
+                lineHeight: 1.12,
+                color: INK,
               }}
             >
-              {LABELS[step].sub}
-            </p>
-          )}
+              {LABELS[step].question}
+              {LABELS[step].emphasis && (
+                <>
+                  <br />
+                  <span
+                    style={{
+                      fontStyle: 'italic',
+                      fontWeight: 400,
+                      color: SIGNAL_DEEP,
+                    }}
+                  >
+                    {LABELS[step].emphasis}
+                  </span>
+                </>
+              )}
+            </h1>
+            {LABELS[step].sub && (
+              <p
+                style={{
+                  margin: '10px 0 22px',
+                  fontSize: 14,
+                  lineHeight: 1.55,
+                  color: 'rgba(15,14,12,0.62)',
+                }}
+              >
+                {LABELS[step].sub}
+              </p>
+            )}
 
-          {step === 'contact' && (
-            <PhoneInput
-              value={answers.contact_phone}
-              onChange={(v) => update('contact_phone', v)}
-            />
-          )}
+            {step === 'contact' && (
+              <PhoneInput
+                value={answers.contact_phone}
+                onChange={(v) => update('contact_phone', v)}
+              />
+            )}
 
-          {step === 'changes' && (
-            <ChangesPicker
-              value={answers.top_changes}
-              onChange={(v) => update('top_changes', v)}
-            />
-          )}
+            {step === 'changes' && (
+              <ChangesPicker
+                value={answers.top_changes}
+                onChange={(v) => update('top_changes', v)}
+              />
+            )}
 
-          {step === 'photos' && (
-            <PhotoUploader
-              leadId={leadId}
-              photos={answers.photos}
-              onChange={(photos) => setAnswers((p) => ({ ...p, photos }))}
-              onError={(msg) => setError(msg)}
-            />
-          )}
+            {step === 'photos' && (
+              <PhotoUploader
+                leadId={leadId}
+                photos={answers.photos}
+                onChange={(photos) => setAnswers((p) => ({ ...p, photos }))}
+                onError={(msg) => setError(msg)}
+              />
+            )}
 
-          {step === 'domain' && (
-            <DomainPicker
-              answers={answers}
-              update={update}
-              businessName={businessName}
-            />
-          )}
+            {step === 'domain' && (
+              <DomainPicker
+                answers={answers}
+                update={update}
+                businessName={businessName}
+              />
+            )}
 
-          {step === 'else' && (
-            <textarea
-              placeholder="Optional…"
-              rows={5}
-              value={answers.anything_else}
-              onChange={(e) => update('anything_else', e.target.value)}
-              style={textareaStyle}
-            />
-          )}
+            {step === 'else' && (
+              <textarea
+                placeholder="Optional…"
+                rows={5}
+                value={answers.anything_else}
+                onChange={(e) => update('anything_else', e.target.value)}
+                style={textareaStyle}
+              />
+            )}
 
-          {error && (
-            <p style={{ marginTop: 16, color: '#A8332B', fontSize: 13 }}>{error}</p>
-          )}
+            {error && (
+              <p style={{ marginTop: 16, color: '#A8332B', fontSize: 13 }}>{error}</p>
+            )}
+          </div>
         </main>
 
-        {/* Action row pinned to sheet bottom */}
+        {/* Action row */}
         <div
           style={{
             display: 'flex',
@@ -522,7 +563,7 @@ export default function OnboardingClient({ leadId, businessName, demoUrl }: Prop
             padding: '14px 22px calc(env(safe-area-inset-bottom) + 16px)',
             borderTop: `1px solid ${LINE}`,
             flexShrink: 0,
-            background: CREAM,
+            background: CREAM_WARM,
           }}
         >
           <button
@@ -533,13 +574,15 @@ export default function OnboardingClient({ leadId, businessName, demoUrl }: Prop
               opacity: stepIndex === 0 ? 0.3 : 1,
               pointerEvents: stepIndex === 0 ? 'none' : 'auto',
             }}
+            className="oc-press"
           >
-            Back
+            ← Back
           </button>
           {isLastStep ? (
             <button
               onClick={continueToPayment}
               disabled={checkoutLoading}
+              className="oc-press"
               style={{
                 ...primaryButtonStyle,
                 opacity: checkoutLoading ? 0.6 : 1,
@@ -549,7 +592,7 @@ export default function OnboardingClient({ leadId, businessName, demoUrl }: Prop
               {checkoutLoading ? 'Opening checkout…' : 'Continue to payment →'}
             </button>
           ) : (
-            <button onClick={advance} style={primaryButtonStyle}>
+            <button onClick={advance} className="oc-press" style={primaryButtonStyle}>
               Next →
             </button>
           )}
@@ -575,9 +618,11 @@ function SaveIndicator({ state }: { state: 'idle' | 'saving' | 'saved' | 'error'
     <span
       style={{
         fontFamily: "'JetBrains Mono', ui-monospace, monospace",
-        fontSize: 11,
+        fontSize: 10,
         letterSpacing: '0.10em',
+        textTransform: 'uppercase',
         color: state === 'error' ? '#A8332B' : CREAM_MUTED,
+        animation: state === 'saving' ? 'pulse 1.2s ease-in-out infinite' : undefined,
       }}
     >
       {map[state]}
@@ -585,24 +630,33 @@ function SaveIndicator({ state }: { state: 'idle' | 'saving' | 'saved' | 'error'
   );
 }
 
-/** UK phone — formats "07712 345678" while typing. */
 function PhoneInput({ value, onChange }: { value: string; onChange: (v: string) => void }) {
   const formatted = useMemo(() => formatUkPhone(value), [value]);
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+    <div
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 0,
+        background: CREAM,
+        border: `1px solid rgba(15,14,12,0.14)`,
+        borderRadius: 16,
+        padding: 4,
+        boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.6)',
+      }}
+    >
       <span
         style={{
-          padding: '14px 12px',
-          background: 'rgba(15,14,12,0.05)',
-          border: `1px solid rgba(15,14,12,0.16)`,
-          borderRadius: 12,
-          fontSize: 16,
+          padding: '12px 14px',
+          fontSize: 15,
           fontFamily: 'inherit',
-          color: 'rgba(15,14,12,0.55)',
+          color: 'rgba(15,14,12,0.65)',
           flexShrink: 0,
+          borderRight: `1px solid rgba(15,14,12,0.10)`,
+          letterSpacing: '0.02em',
         }}
       >
-        🇬🇧 UK
+        🇬🇧 +44
       </span>
       <input
         type="tel"
@@ -611,7 +665,19 @@ function PhoneInput({ value, onChange }: { value: string; onChange: (v: string) 
         placeholder="07712 345678"
         value={formatted}
         onChange={(e) => onChange(e.target.value)}
-        style={{ ...inputStyle, fontVariantNumeric: 'tabular-nums', letterSpacing: '0.04em' }}
+        style={{
+          flex: 1,
+          padding: '12px 14px',
+          fontSize: 18,
+          color: INK,
+          background: 'transparent',
+          border: 0,
+          outline: 'none',
+          fontFamily: 'inherit',
+          fontVariantNumeric: 'tabular-nums',
+          letterSpacing: '0.06em',
+          fontWeight: 500,
+        }}
       />
     </div>
   );
@@ -623,9 +689,6 @@ function formatUkPhone(raw: string): string {
   return `${digits.slice(0, 5)} ${digits.slice(5)}`;
 }
 
-/** Chip-picker for common changes plus a free-text "more" field.
- * Stored as a single string in `top_changes` — chips serialise to lines
- * starting "— " so we can re-split on hydrate. */
 function ChangesPicker({
   value,
   onChange,
@@ -652,34 +715,17 @@ function ChangesPicker({
           display: 'flex',
           flexWrap: 'wrap',
           gap: 8,
-          marginBottom: 14,
+          marginBottom: 16,
         }}
       >
-        {COMMON_CHANGES.map((chip) => {
-          const active = selected.includes(chip);
-          return (
-            <button
-              key={chip}
-              type="button"
-              onClick={() => toggleChip(chip)}
-              style={{
-                padding: '8px 14px',
-                borderRadius: 9999,
-                fontSize: 13.5,
-                fontWeight: 500,
-                fontFamily: 'inherit',
-                cursor: 'pointer',
-                background: active ? INK : 'transparent',
-                color: active ? CREAM : INK,
-                border: `1px solid ${active ? INK : 'rgba(15,14,12,0.18)'}`,
-                transition: 'all 0.12s ease',
-              }}
-            >
-              {active ? '✓ ' : '+ '}
-              {chip}
-            </button>
-          );
-        })}
+        {COMMON_CHANGES.map((chip) => (
+          <Chip
+            key={chip}
+            label={chip}
+            active={selected.includes(chip)}
+            onClick={() => toggleChip(chip)}
+          />
+        ))}
       </div>
       <textarea
         placeholder="Anything else specific? (optional)"
@@ -689,6 +735,52 @@ function ChangesPicker({
         style={textareaStyle}
       />
     </div>
+  );
+}
+
+function Chip({
+  label,
+  active,
+  onClick,
+}: {
+  label: string;
+  active: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="oc-chip"
+      style={{
+        padding: '9px 14px',
+        borderRadius: 9999,
+        fontSize: 13.5,
+        fontWeight: 500,
+        fontFamily: 'inherit',
+        cursor: 'pointer',
+        background: active ? INK : CREAM,
+        color: active ? CREAM : INK,
+        border: `1px solid ${active ? INK : 'rgba(15,14,12,0.16)'}`,
+        boxShadow: active
+          ? '0 6px 14px rgba(15,14,12,0.16)'
+          : '0 1px 0 rgba(255,255,255,0.6) inset',
+        transition: 'transform 140ms ease, box-shadow 140ms ease, background 140ms ease',
+      }}
+    >
+      <span
+        style={{
+          color: active ? SIGNAL : 'rgba(15,14,12,0.55)',
+          fontWeight: 600,
+          marginRight: 4,
+          display: 'inline-block',
+          width: 10,
+        }}
+      >
+        {active ? '✓' : '+'}
+      </span>
+      {label}
+    </button>
   );
 }
 
@@ -727,16 +819,16 @@ function DomainPicker({
 
   return (
     <div>
-      <div style={{ display: 'flex', gap: 12, marginBottom: 18 }}>
-        <ToggleButton
+      <div style={{ display: 'flex', gap: 10, marginBottom: 18 }}>
+        <SegmentButton
           active={answers.has_existing_domain === true}
           onClick={() => update('has_existing_domain', true)}
-          label="Yes, I have one"
+          label="I have one"
         />
-        <ToggleButton
+        <SegmentButton
           active={answers.has_existing_domain === false}
           onClick={() => update('has_existing_domain', false)}
-          label="No, please buy one"
+          label="Buy one for me"
         />
       </div>
 
@@ -757,70 +849,50 @@ function DomainPicker({
             <>
               <p
                 style={{
-                  margin: 0,
-                  fontSize: 12,
+                  margin: '0 0 10px',
+                  fontSize: 11,
                   fontFamily: "'JetBrains Mono', ui-monospace, monospace",
-                  letterSpacing: '0.12em',
+                  letterSpacing: '0.16em',
                   textTransform: 'uppercase',
                   color: CREAM_MUTED,
-                  marginBottom: 8,
                 }}
               >
-                Suggestions
+                Suggestions for {businessName}
               </p>
               <div
                 style={{
                   display: 'flex',
-                  flexWrap: 'wrap',
+                  flexDirection: 'column',
                   gap: 8,
-                  marginBottom: 16,
+                  marginBottom: 18,
                 }}
               >
-                {suggestions.map((s) => {
-                  const active = answers.domain_preferences.includes(s);
-                  return (
-                    <button
-                      key={s}
-                      type="button"
-                      onClick={() => {
-                        const cur = answers.domain_preferences.filter((x) => x.trim().length > 0);
-                        if (active) {
-                          const next = [...cur.filter((x) => x !== s), '', '', ''].slice(0, 3);
-                          update('domain_preferences', next);
-                        } else {
-                          const next = [...cur, s, '', '', ''].slice(0, 3);
-                          update('domain_preferences', next);
-                        }
-                      }}
-                      style={{
-                        padding: '8px 14px',
-                        borderRadius: 9999,
-                        fontSize: 13.5,
-                        fontWeight: 500,
-                        fontFamily: 'inherit',
-                        cursor: 'pointer',
-                        background: active ? INK : 'transparent',
-                        color: active ? CREAM : INK,
-                        border: `1px solid ${active ? INK : 'rgba(15,14,12,0.18)'}`,
-                      }}
-                    >
-                      {active ? '✓ ' : '+ '}
-                      {s}
-                    </button>
-                  );
-                })}
+                {suggestions.map((s) => (
+                  <DomainSuggestion
+                    key={s}
+                    domain={s}
+                    active={answers.domain_preferences.includes(s)}
+                    onToggle={() => {
+                      const cur = answers.domain_preferences.filter((x) => x.trim().length > 0);
+                      const isOn = cur.includes(s);
+                      const next = isOn
+                        ? [...cur.filter((x) => x !== s), '', '', ''].slice(0, 3)
+                        : [...cur, s, '', '', ''].slice(0, 3);
+                      update('domain_preferences', next);
+                    }}
+                  />
+                ))}
               </div>
             </>
           )}
           <p
             style={{
-              margin: 0,
-              fontSize: 13,
+              margin: '0 0 10px',
+              fontSize: 12.5,
               color: 'rgba(15,14,12,0.6)',
-              marginBottom: 10,
             }}
           >
-            Top 3 names you’d like, in order. We’ll buy the first available.
+            Or write your top three — we’ll buy the first available.
           </p>
           {[0, 1, 2].map((i) => (
             <input
@@ -833,12 +905,74 @@ function DomainPicker({
                 next[i] = e.target.value;
                 update('domain_preferences', next);
               }}
-              style={{ ...inputStyle, marginBottom: 10 }}
+              style={{ ...inputStyle, marginBottom: 8 }}
             />
           ))}
         </div>
       )}
     </div>
+  );
+}
+
+function DomainSuggestion({
+  domain,
+  active,
+  onToggle,
+}: {
+  domain: string;
+  active: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      className="oc-press"
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        gap: 12,
+        padding: '12px 16px',
+        background: active ? INK : CREAM,
+        color: active ? CREAM : INK,
+        border: `1px solid ${active ? INK : 'rgba(15,14,12,0.14)'}`,
+        borderRadius: 14,
+        fontFamily: 'inherit',
+        fontSize: 15,
+        cursor: 'pointer',
+        boxShadow: active
+          ? '0 6px 16px rgba(15,14,12,0.18)'
+          : '0 1px 0 rgba(255,255,255,0.6) inset',
+        transition: 'all 160ms ease',
+      }}
+    >
+      <span
+        style={{
+          fontFamily: "'JetBrains Mono', ui-monospace, monospace",
+          letterSpacing: '0.01em',
+          fontSize: 14,
+        }}
+      >
+        {domain}
+      </span>
+      <span
+        style={{
+          width: 24,
+          height: 24,
+          borderRadius: '50%',
+          background: active ? SIGNAL : 'rgba(15,14,12,0.06)',
+          color: active ? INK : 'rgba(15,14,12,0.5)',
+          display: 'inline-flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          fontSize: 13,
+          fontWeight: 700,
+        }}
+      >
+        {active ? '✓' : '+'}
+      </span>
+    </button>
   );
 }
 
@@ -852,7 +986,7 @@ function suggestDomains(businessName: string): string[] {
   return [`${slug}.co.uk`, `${slug}.com`, `the${slug}.co.uk`];
 }
 
-function ToggleButton({
+function SegmentButton({
   active,
   onClick,
   label,
@@ -865,18 +999,22 @@ function ToggleButton({
     <button
       type="button"
       onClick={onClick}
+      className="oc-press"
       style={{
         flex: 1,
         padding: '14px 16px',
-        background: active ? INK : 'transparent',
+        background: active ? INK : CREAM,
         color: active ? CREAM : INK,
-        border: `1px solid ${active ? INK : 'rgba(15,14,12,0.18)'}`,
-        borderRadius: 12,
+        border: `1px solid ${active ? INK : 'rgba(15,14,12,0.14)'}`,
+        borderRadius: 14,
         fontSize: 15,
         fontWeight: 500,
         cursor: 'pointer',
         fontFamily: 'inherit',
-        transition: 'all 0.12s ease',
+        boxShadow: active
+          ? '0 6px 16px rgba(15,14,12,0.16)'
+          : '0 1px 0 rgba(255,255,255,0.6) inset',
+        transition: 'all 160ms ease',
       }}
     >
       {label}
@@ -943,25 +1081,48 @@ function PhotoUploader({
     <div>
       <label
         htmlFor="photo-input"
+        className="oc-press"
         style={{
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'center',
           justifyContent: 'center',
-          gap: 6,
-          padding: '24px 20px',
-          background: 'rgba(15,14,12,0.04)',
-          border: `1.5px dashed rgba(15,14,12,0.25)`,
-          borderRadius: 14,
+          gap: 8,
+          padding: '28px 20px',
+          background:
+            'linear-gradient(180deg, rgba(184,134,11,0.05) 0%, rgba(184,134,11,0.10) 100%)',
+          border: `1.5px dashed rgba(184,134,11,0.40)`,
+          borderRadius: 18,
           textAlign: 'center',
           cursor: busy ? 'wait' : 'pointer',
           fontSize: 15,
           color: busy ? CREAM_MUTED : INK,
+          transition: 'all 160ms ease',
         }}
       >
-        <span style={{ fontSize: 26, lineHeight: 1 }}>{busy ? '⌛' : '📷'}</span>
-        <span style={{ fontWeight: 500 }}>{busy ? 'Uploading…' : 'Tap to add photos'}</span>
-        <span style={{ fontSize: 12, color: CREAM_MUTED }}>JPG, PNG, HEIC — multiple OK</span>
+        <span
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            width: 44,
+            height: 44,
+            borderRadius: '50%',
+            background: SIGNAL,
+            color: CREAM,
+            fontSize: 20,
+            boxShadow: `0 8px 22px ${SIGNAL}55`,
+            animation: busy ? 'pulse 1.2s ease-in-out infinite' : undefined,
+          }}
+        >
+          {busy ? '⌛' : '＋'}
+        </span>
+        <span style={{ fontWeight: 500, marginTop: 2 }}>
+          {busy ? 'Uploading…' : 'Add photos'}
+        </span>
+        <span style={{ fontSize: 12, color: CREAM_MUTED }}>
+          JPG, PNG, HEIC — pick as many as you like
+        </span>
         <input
           id="photo-input"
           type="file"
@@ -977,7 +1138,7 @@ function PhotoUploader({
         <div
           style={{
             display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fill, minmax(86px, 1fr))',
+            gridTemplateColumns: 'repeat(auto-fill, minmax(82px, 1fr))',
             gap: 8,
             marginTop: 14,
           }}
@@ -988,10 +1149,11 @@ function PhotoUploader({
               style={{
                 position: 'relative',
                 aspectRatio: '1 / 1',
-                borderRadius: 10,
+                borderRadius: 12,
                 overflow: 'hidden',
                 background: 'rgba(15,14,12,0.06)',
                 border: `1px solid ${LINE}`,
+                boxShadow: '0 2px 6px rgba(15,14,12,0.08)',
               }}
             >
               {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -1019,11 +1181,12 @@ const inputStyle: React.CSSProperties = {
   fontSize: 16,
   color: INK,
   background: CREAM,
-  border: `1px solid rgba(15,14,12,0.16)`,
-  borderRadius: 12,
+  border: `1px solid rgba(15,14,12,0.14)`,
+  borderRadius: 14,
   outline: 'none',
   fontFamily: 'inherit',
   WebkitAppearance: 'none',
+  boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.6)',
 };
 
 const textareaStyle: React.CSSProperties = {
@@ -1034,23 +1197,47 @@ const textareaStyle: React.CSSProperties = {
 
 const primaryButtonStyle: React.CSSProperties = {
   padding: '14px 22px',
-  background: INK,
-  color: CREAM,
+  background: `linear-gradient(180deg, ${SIGNAL} 0%, ${SIGNAL_DEEP} 100%)`,
+  color: INK,
   border: 'none',
-  borderRadius: 12,
+  borderRadius: 9999,
   fontSize: 15,
-  fontWeight: 500,
+  fontWeight: 600,
+  letterSpacing: '-0.01em',
   cursor: 'pointer',
   fontFamily: 'inherit',
+  boxShadow: `0 8px 22px ${SIGNAL}55, inset 0 1px 0 rgba(255,255,255,0.4)`,
+  transition: 'transform 140ms ease, box-shadow 160ms ease',
 };
 
 const ghostButtonStyle: React.CSSProperties = {
-  padding: '14px 18px',
+  padding: '12px 18px',
   background: 'transparent',
-  color: INK,
-  border: `1px solid rgba(15,14,12,0.18)`,
-  borderRadius: 12,
-  fontSize: 15,
+  color: 'rgba(15,14,12,0.7)',
+  border: `1px solid rgba(15,14,12,0.14)`,
+  borderRadius: 9999,
+  fontSize: 14,
   cursor: 'pointer',
   fontFamily: 'inherit',
+  transition: 'all 140ms ease',
 };
+
+const KEYFRAMES_CSS = `
+  @keyframes sheetIn {
+    from { transform: translateY(40px); opacity: 0; }
+    to   { transform: translateY(0); opacity: 1; }
+  }
+  @keyframes stepIn {
+    from { transform: translateY(8px); opacity: 0; }
+    to   { transform: translateY(0); opacity: 1; }
+  }
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+  }
+  .oc-press { transition: transform 120ms ease, box-shadow 160ms ease, background 160ms ease, color 160ms ease; }
+  .oc-press:active:not(:disabled) { transform: scale(0.97); }
+  .oc-press:hover:not(:disabled) { transform: translateY(-1px); }
+  .oc-chip { transition: transform 140ms ease, box-shadow 160ms ease, background 160ms ease, color 160ms ease; }
+  .oc-chip:active:not(:disabled) { transform: scale(0.94); }
+`;
