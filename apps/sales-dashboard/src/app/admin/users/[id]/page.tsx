@@ -63,6 +63,18 @@ interface ActivityEvent {
   color: 'cream' | 'amber' | 'signal' | 'muted';
 }
 
+interface SoldPayout {
+  assignment_id: string;
+  business_name: string;
+  sold_at: string | null;
+  commission_amount_pence: number;
+  payout_status: 'pending' | 'paid_out' | 'failed';
+  payout_transfer_id: string | null;
+  payout_paid_out_at: string | null;
+  payout_failed_at: string | null;
+  payout_failure_reason: string | null;
+}
+
 interface UserDetail {
   user: {
     id: string;
@@ -72,6 +84,7 @@ interface UserDetail {
     area_postcode: string | null;
     commission_rate: number;
     commission_amount_pence: number | null;
+    stripe_connect_id: string | null;
     active: boolean;
     device_type: string | null;
     created_at: string;
@@ -79,6 +92,7 @@ interface UserDetail {
   };
   stats: UserStats;
   recent_leads: RecentLead[];
+  sold_payouts: SoldPayout[];
   recent_activity: ActivityEvent[];
 }
 
@@ -167,6 +181,61 @@ export default function AdminUserDetailPage() {
     load();
   };
 
+  // Per-row payout state — busy: in-flight, message keyed by assignment_id.
+  const [payoutBusyId, setPayoutBusyId] = useState<string | null>(null);
+  const [payoutMessage, setPayoutMessage] = useState<{ id: string; kind: 'ok' | 'err'; text: string } | null>(null);
+
+  const payOut = async (assignmentId: string) => {
+    if (!data) return;
+    if (!data.user.stripe_connect_id) {
+      setPayoutMessage({
+        id: assignmentId,
+        kind: 'err',
+        text: 'Salesperson hasn’t finished Stripe Connect setup.',
+      });
+      return;
+    }
+    if (
+      !window.confirm(
+        'Send this commission via Stripe? This is real money — make sure the sale is genuine.',
+      )
+    ) {
+      return;
+    }
+    setPayoutBusyId(assignmentId);
+    setPayoutMessage(null);
+    try {
+      const res = await fetch('/api/payments/payout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ lead_assignment_id: assignmentId }),
+      });
+      const j = await res.json();
+      if (!res.ok) {
+        setPayoutMessage({
+          id: assignmentId,
+          kind: 'err',
+          text: j.error ?? 'Payout failed',
+        });
+      } else {
+        setPayoutMessage({
+          id: assignmentId,
+          kind: 'ok',
+          text: `Paid £${(j.amount_pence / 100).toFixed(2)} · ${j.transfer_id}`,
+        });
+        load();
+      }
+    } catch (e) {
+      setPayoutMessage({
+        id: assignmentId,
+        kind: 'err',
+        text: e instanceof Error ? e.message : 'Network error',
+      });
+    } finally {
+      setPayoutBusyId(null);
+    }
+  };
+
   const resetPin = async () => {
     if (!/^\d{4,6}$/.test(resetPinValue)) {
       setErr('PIN must be 4–6 digits.');
@@ -215,7 +284,9 @@ export default function AdminUserDetailPage() {
     );
   }
 
-  const { user, stats, recent_leads, recent_activity } = data;
+  const { user, stats, recent_leads, sold_payouts, recent_activity } = data;
+  const pendingPayouts = (sold_payouts ?? []).filter((p) => p.payout_status === 'pending');
+  const totalPendingPence = pendingPayouts.reduce((a, p) => a + p.commission_amount_pence, 0);
   const initials = user.name
     .split(' ')
     .map((p) => p[0])
@@ -372,6 +443,158 @@ export default function AdminUserDetailPage() {
                     </span>
                   </div>
                 ))}
+              </Card>
+            )}
+          </Section>
+
+          {/* Payouts */}
+          <Section
+            eyebrow="Money"
+            title={
+              pendingPayouts.length > 0
+                ? `Owed: £${(totalPendingPence / 100).toFixed(2)} across ${pendingPayouts.length} sale${pendingPayouts.length === 1 ? '' : 's'}`
+                : 'Payouts'
+            }
+          >
+            {!user.stripe_connect_id && pendingPayouts.length > 0 && (
+              <Card padding="md" className="mb-3">
+                <p className="text-[13px] m-0" style={{ color: AMBER }}>
+                  ⚠ This contractor hasn’t finished Stripe Connect onboarding —
+                  payouts will fail until they do. Have them open the
+                  <span style={{ fontFamily: MONO_FONT }}> Settings → Payout setup </span>
+                  link in the iOS app.
+                </p>
+              </Card>
+            )}
+            {(sold_payouts ?? []).length === 0 ? (
+              <EmptyState
+                eyebrow="Nothing sold yet"
+                title="No commissions to pay out."
+                sub="Once a sale closes, it'll show here with a Pay button."
+              />
+            ) : (
+              <Card padding="none">
+                <div
+                  className="grid grid-cols-[1fr_90px_120px_140px] gap-4 px-5 py-3 text-[10.5px] uppercase"
+                  style={{
+                    fontFamily: MONO_FONT,
+                    letterSpacing: '0.14em',
+                    color: CREAM_MUTED,
+                    borderBottom: `1px solid ${LINE}`,
+                  }}
+                >
+                  <span>Sale</span>
+                  <span>Amount</span>
+                  <span>State</span>
+                  <span style={{ textAlign: 'right' }}>Action</span>
+                </div>
+                {(sold_payouts ?? []).map((p, i) => {
+                  const last = i === (sold_payouts ?? []).length - 1;
+                  const isPending = p.payout_status === 'pending';
+                  const isPaid = p.payout_status === 'paid_out';
+                  const isFailed = p.payout_status === 'failed';
+                  const stateColor = isPaid ? SIGNAL : isFailed ? ERR : AMBER;
+                  const stateLabel = isPaid ? '✓ Paid' : isFailed ? '⚠ Failed' : '● Pending';
+                  const showMsg = payoutMessage && payoutMessage.id === p.assignment_id;
+                  const busy = payoutBusyId === p.assignment_id;
+                  return (
+                    <div
+                      key={p.assignment_id}
+                      className="grid grid-cols-[1fr_90px_120px_140px] gap-4 px-5 py-3.5 items-center"
+                      style={{ borderBottom: last ? 'none' : `1px solid ${LINE2}` }}
+                    >
+                      <div className="min-w-0">
+                        <p
+                          className="m-0 text-[14.5px] truncate"
+                          style={{
+                            color: CREAM,
+                            fontFamily: DISPLAY_FONT,
+                            fontWeight: 500,
+                            letterSpacing: '-0.015em',
+                          }}
+                        >
+                          {p.business_name}
+                        </p>
+                        <p
+                          className="m-0 text-[11px]"
+                          style={{
+                            color: CREAM_MUTED,
+                            fontFamily: MONO_FONT,
+                            letterSpacing: '0.06em',
+                          }}
+                        >
+                          Sold {relTime(p.sold_at) ?? '—'}
+                          {p.payout_paid_out_at && ` · paid ${relTime(p.payout_paid_out_at)}`}
+                        </p>
+                        {showMsg && (
+                          <p
+                            className="m-0 mt-1 text-[11.5px]"
+                            style={{
+                              color: payoutMessage.kind === 'ok' ? SIGNAL : ERR,
+                              fontFamily: MONO_FONT,
+                              letterSpacing: '0.04em',
+                            }}
+                          >
+                            {payoutMessage.text}
+                          </p>
+                        )}
+                        {isFailed && p.payout_failure_reason && !showMsg && (
+                          <p
+                            className="m-0 mt-1 text-[11.5px]"
+                            style={{ color: ERR, fontFamily: MONO_FONT, letterSpacing: '0.04em' }}
+                          >
+                            {p.payout_failure_reason}
+                          </p>
+                        )}
+                      </div>
+                      <span
+                        className="text-[13px]"
+                        style={{
+                          color: CREAM,
+                          fontFamily: MONO_FONT,
+                          letterSpacing: '0.04em',
+                        }}
+                      >
+                        £{(p.commission_amount_pence / 100).toFixed(2)}
+                      </span>
+                      <span
+                        className="text-[11px] uppercase"
+                        style={{
+                          fontFamily: MONO_FONT,
+                          letterSpacing: '0.14em',
+                          color: stateColor,
+                        }}
+                      >
+                        {stateLabel}
+                      </span>
+                      <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                        {isPaid ? (
+                          <span
+                            className="text-[11px] uppercase"
+                            style={{
+                              fontFamily: MONO_FONT,
+                              letterSpacing: '0.12em',
+                              color: CREAM_MUTED,
+                            }}
+                          >
+                            {p.payout_transfer_id?.slice(-8) ?? '—'}
+                          </span>
+                        ) : (
+                          <PrimaryButton
+                            onClick={() => payOut(p.assignment_id)}
+                            disabled={busy || !user.stripe_connect_id}
+                          >
+                            {busy
+                              ? 'Sending…'
+                              : isFailed
+                                ? `Retry · £${(p.commission_amount_pence / 100).toFixed(0)}`
+                                : `Pay · £${(p.commission_amount_pence / 100).toFixed(0)}`}
+                          </PrimaryButton>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
               </Card>
             )}
           </Section>

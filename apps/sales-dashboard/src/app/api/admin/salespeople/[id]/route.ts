@@ -24,7 +24,9 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
   const [userRes, leadsRes] = await Promise.all([
     sb
       .from('sales_users')
-      .select('id, name, email, phone, area_postcode, commission_rate, commission_amount_pence, active, device_type, created_at, last_active_at')
+      .select(
+        'id, name, email, phone, area_postcode, commission_rate, commission_amount_pence, stripe_connect_id, active, device_type, created_at, last_active_at',
+      )
       .eq('id', params.id)
       .maybeSingle(),
     sb
@@ -75,6 +77,26 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     };
   });
 
+  // Sold leads with payout state — what the admin uses to trigger transfers.
+  const sold_payouts = leads
+    .filter((r) => r.status === 'sold')
+    .map((r) => {
+      const n = safeParse(r.notes as string | null, {} as any);
+      return {
+        assignment_id: r.id,
+        business_name: n.business_name ?? 'Unknown',
+        sold_at: r.sold_at,
+        commission_amount_pence:
+          (typeof r.commission_amount_pence === 'number' && r.commission_amount_pence) ||
+          (typeof r.commission_amount === 'number' ? Math.round(r.commission_amount * 100) : 0),
+        payout_status: (r.payout_status as string) ?? 'pending',
+        payout_transfer_id: (r.payout_transfer_id as string | null) ?? null,
+        payout_paid_out_at: (r.payout_paid_out_at as string | null) ?? null,
+        payout_failed_at: (r.payout_failed_at as string | null) ?? null,
+        payout_failure_reason: (r.payout_failure_reason as string | null) ?? null,
+      };
+    });
+
   // Activity timeline — every status transition, newest first
   const activity: Array<{
     action: string;
@@ -101,6 +123,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
       user: userRes.data,
       stats,
       recent_leads,
+      sold_payouts,
       recent_activity: activity.slice(0, 30),
     },
   });
