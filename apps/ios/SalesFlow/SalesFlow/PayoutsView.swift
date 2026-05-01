@@ -7,13 +7,22 @@ import SwiftData
 // → commission terms → confirmed sales / pipeline lists.
 
 struct PayoutsView: View {
+    @EnvironmentObject private var authStore: AuthStore
     @Query private var leads: [Lead]
     @State private var stats: Stats = .empty
 
     private var soldLeads: [Lead] { leads.filter { $0.status == "sold" } }
     private var pitchedLeads: [Lead] { leads.filter { $0.status == "pitched" } }
-    private var totalEarned: Double { Double(soldLeads.count) * 50 }
-    private var potentialEarned: Double { Double(pitchedLeads.count) * 50 }
+
+    // Source of truth = the user's commission_amount_pence on sales_users,
+    // delivered to us via /api/auth/me. Falls back to £150 (current default)
+    // if missing from the legacy session.
+    private var commissionPounds: Double {
+        Double((authStore.currentUser?.commissionAmountPence ?? 15000)) / 100
+    }
+    private var commissionDisplay: String { "£\(Int(commissionPounds))" }
+    private var totalEarned: Double { Double(soldLeads.count) * commissionPounds }
+    private var potentialEarned: Double { Double(pitchedLeads.count) * commissionPounds }
 
     var body: some View {
         NavigationStack {
@@ -61,7 +70,7 @@ struct PayoutsView: View {
             StatDivider()
             StatCell(label: "Pitched",  value: "\(pitchedLeads.count)")
             StatDivider()
-            StatCell(label: "Per sale", value: "£50")
+            StatCell(label: "Per sale", value: commissionDisplay)
             StatDivider()
             StatCell(label: "Payout",   value: "Fri")
         }
@@ -107,7 +116,7 @@ struct PayoutsView: View {
     private var commissionSection: some View {
         BrandSection(eyebrow: "Commission terms") {
             VStack(alignment: .leading, spacing: 14) {
-                termRow(icon: "sterlingsign.circle", label: "£50 flat per confirmed sale", highlight: true)
+                termRow(icon: "sterlingsign.circle", label: "\(commissionDisplay) flat per confirmed sale", highlight: true)
                 termRow(icon: "calendar", label: "Weekly payout every Friday")
                 termRow(icon: "person.badge.key", label: "Self-employed — no targets, no minimums")
                 termRow(icon: "clock", label: "Payment within 3 working days of verification")
@@ -136,7 +145,7 @@ struct PayoutsView: View {
         BrandSection(eyebrow: "Confirmed sales", title: nil) {
             VStack(spacing: 8) {
                 ForEach(soldLeads) { lead in
-                    SaleRow(lead: lead, amount: "£50", highlight: true)
+                    SaleRow(lead: lead, amount: commissionDisplay, highlight: true)
                 }
             }
         }
@@ -146,7 +155,7 @@ struct PayoutsView: View {
         BrandSection(eyebrow: "Pipeline · potential £\(Int(potentialEarned))") {
             VStack(spacing: 8) {
                 ForEach(pitchedLeads) { lead in
-                    SaleRow(lead: lead, amount: "£50", highlight: false)
+                    SaleRow(lead: lead, amount: commissionDisplay, highlight: false)
                 }
             }
         }

@@ -113,11 +113,14 @@ struct ProfileView: View {
     // ───────────── Performance ribbon ─────────────
 
     private var performanceRibbon: some View {
-        BrandSection(eyebrow: "Performance") {
+        // Source = sales_users.commission_amount_pence via /api/auth/me.
+        // Fallback to £150 (current default) if absent on legacy sessions.
+        let perSale = "£\((authStore.currentUser?.commissionAmountPence ?? 15000) / 100)"
+        return BrandSection(eyebrow: "Performance") {
             MetricRibbon {
                 StatCell(label: "This week", value: "—")
                 StatDivider()
-                StatCell(label: "Per sale",  value: "£50")
+                StatCell(label: "Per sale",  value: perSale)
                 StatDivider()
                 StatCell(label: "Payout",    value: "Fri")
             }
@@ -260,7 +263,7 @@ struct HelpView: View {
         ("03", "Tap 'I'm here' on arrival", "This starts visit tracking and logs your GPS position for payout verification."),
         ("04", "Show the demo site", "In the Pitch tab, tap 'Show client demo' to walk them through the website on your phone."),
         ("05", "Update the status", "After each interaction, update the status: Visited, Pitched, Sold, or Rejected."),
-        ("06", "Collect your commission", "£50 lands every Friday for each confirmed sale. No targets. No minimums."),
+        ("06", "Collect your commission", "Your flat per-sale commission lands every Friday for each confirmed sale — see the Payouts tab for the exact rate. No targets. No minimums."),
     ]
 
     var body: some View {

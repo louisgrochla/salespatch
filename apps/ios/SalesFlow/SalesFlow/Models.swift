@@ -357,14 +357,23 @@ struct User: Codable {
     let phone: String?
     let areaPostcode: String?
     let commissionRate: Double?
+    // Flat per-sale commission in pence. Source of truth = sales_users
+    // row, editable from /admin/users/[id]. Null on legacy responses.
+    let commissionAmountPence: Int?
     let contractorNumber: String?
     let role: String?
 
+    /// Pounds-and-zero-pence string for display. Falls back to £150
+    /// (current default) if the field is missing.
+    var commissionPounds: Int { (commissionAmountPence ?? 15000) / 100 }
+    var commissionDisplay: String { "£\(commissionPounds)" }
+
     enum CodingKeys: String, CodingKey {
         case id, name, email, phone, role
-        case areaPostcode    = "area_postcode"
-        case commissionRate  = "commission_rate"
-        case contractorNumber = "contractor_number"
+        case areaPostcode         = "area_postcode"
+        case commissionRate       = "commission_rate"
+        case commissionAmountPence = "commission_amount_pence"
+        case contractorNumber     = "contractor_number"
     }
 }
 

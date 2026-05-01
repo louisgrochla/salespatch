@@ -97,6 +97,8 @@ export function loginUser(name: string, pin: string): { user: SalesUser; token: 
     phone: row.phone as string | null,
     area_postcode: row.area_postcode as string | null,
     commission_rate: (row.commission_rate as number) ?? 0.1,
+    commission_amount_pence:
+      typeof row.commission_amount_pence === 'number' ? row.commission_amount_pence : null,
     active: true,
     device_type: (row.device_type as SalesUser['device_type']) ?? null,
     last_active_at: row.last_active_at as string | null,
@@ -158,6 +160,8 @@ export function createSalesUser(
     phone: opts?.phone ?? null,
     area_postcode: opts?.area_postcode ?? null,
     commission_rate: opts?.commission_rate ?? 0.1,
+    // Falls back to the DB default (15000) on the next /api/auth/me read.
+    commission_amount_pence: null,
     active: true,
     device_type: null,
     last_active_at: null,

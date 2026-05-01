@@ -45,6 +45,7 @@ export async function POST(req: NextRequest) {
       phone: row.phone,
       area_postcode: row.area_postcode,
       commission_rate: row.commission_rate,
+      commission_amount_pence: row.commission_amount_pence,
       active: row.active,
       device_type: (row.device_type as SalesUser['device_type']) ?? null,
       last_active_at: row.last_active_at ?? null,

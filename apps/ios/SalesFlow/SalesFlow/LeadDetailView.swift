@@ -13,6 +13,7 @@ import MapKit
 struct LeadDetailView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
+    @EnvironmentObject private var authStore: AuthStore
     let lead: Lead
 
     @State private var selectedTab: Int = 0
@@ -660,7 +661,7 @@ struct LeadDetailView: View {
                     rowDivider
                     priceRow("Domain & SSL", "Included")
                     rowDivider
-                    priceRow("Your commission", "£50", highlight: true)
+                    priceRow("Your commission", "£\((authStore.currentUser?.commissionAmountPence ?? 15000) / 100)", highlight: true)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .brandCard(padding: 8)
