@@ -9,6 +9,10 @@ export interface SalesUser {
   phone: string | null;
   area_postcode: string | null;
   commission_rate: number;
+  // Flat per-sale commission in pence. Editable from /admin/users/[id]; this
+  // is the SOURCE OF TRUTH the webhook reads at checkout.session.completed.
+  // Default for new contractors is 15000 (£150).
+  commission_amount_pence: number | null;
   active: boolean;
   device_type: 'web' | 'ios' | 'android' | null;
   last_active_at: string | null;

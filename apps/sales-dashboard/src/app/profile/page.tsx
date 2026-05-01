@@ -28,6 +28,7 @@ interface UserMe {
   phone: string | null;
   area_postcode: string | null;
   commission_rate: number;
+  commission_amount_pence: number | null;
   created_at: string;
   last_active_at: string | null;
 }
@@ -151,7 +152,10 @@ export default function ProfilePage() {
             <Row label="Phone" value={me?.phone ?? '—'} />
             <Row label="Email" value={me?.email ?? '—'} />
             <Row label="Patch postcode" value={me?.area_postcode ?? '—'} mono />
-            <Row label="Commission" value={`${Math.round((me?.commission_rate ?? 0.1) * 100)}% · £50 per close`} />
+            <Row
+              label="Commission"
+              value={`£${Math.round((me?.commission_amount_pence ?? 15000) / 100)} per close`}
+            />
           </div>
         </Card>
 

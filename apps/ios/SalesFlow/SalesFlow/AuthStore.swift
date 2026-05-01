@@ -47,53 +47,37 @@ final class AuthStore: ObservableObject {
     }
 
     private init() {
-        // Restore session if token exists
+        // Restore session if a token exists; otherwise the app lands on
+        // LoginView. No auto-login — users must authenticate with real
+        // credentials created by an admin (or via SignUpView).
         if let savedToken = token {
             APIClient.shared.token = savedToken
             isAuthenticated = true
             // Only require unlock if a PIN was previously saved
             isUnlocked = (storedPIN == nil && !biometricEnabled)
-            // Restore user from UserDefaults
             if let data = UserDefaults.standard.data(forKey: userKey),
                let user = try? JSONDecoder().decode(User.self, from: data) {
                 currentUser = user
             }
         }
-        #if DEBUG
-        // Auto-login with a fake user when no server is available
-        if !isAuthenticated {
-            debugAutoLogin()
-        }
-        #endif
     }
 
-    #if DEBUG
-    private func debugAutoLogin() {
-        let fakeUser = User(
-            id: "debug-user", name: "Test", email: "test@salesflow.co.uk",
-            phone: "07123456789", areaPostcode: "EC1", commissionRate: 50,
-            contractorNumber: "SF-001", role: "salesperson"
-        )
-        currentUser = fakeUser
-        if let data = try? JSONEncoder().encode(fakeUser) {
-            UserDefaults.standard.set(data, forKey: userKey)
-        }
+    /// One-tap login as the shared "Demo Account" via /api/auth/demo.
+    /// Useful for backend smoke-testing; exposed via a button on LoginView.
+    @MainActor
+    func signInAsDemo() async throws {
+        let response = try await APIClient.shared.demoLogin()
+        storedPIN = nil // demo doesn't carry a local PIN
+        persist(token: response.token, user: response.user)
         isAuthenticated = true
         isUnlocked = true
     }
-    #endif
 
     @MainActor
     func signIn(name: String, pin: String) async throws {
         let response = try await APIClient.shared.login(name: name, pin: pin)
-        token = response.token
         storedPIN = pin
-        APIClient.shared.token = response.token
-        currentUser = response.user
-        // Persist user for offline restore
-        if let user = response.user, let data = try? JSONEncoder().encode(user) {
-            UserDefaults.standard.set(data, forKey: userKey)
-        }
+        persist(token: response.token, user: response.user)
         isAuthenticated = true
         isUnlocked = true
     }
@@ -101,15 +85,20 @@ final class AuthStore: ObservableObject {
     @MainActor
     func signUp(name: String, pin: String, phone: String, area: String) async throws {
         let response = try await APIClient.shared.signup(name: name, pin: pin, phone: phone, area: area)
-        token = response.token
         storedPIN = pin
-        APIClient.shared.token = response.token
-        currentUser = response.user
-        if let user = response.user, let data = try? JSONEncoder().encode(user) {
-            UserDefaults.standard.set(data, forKey: userKey)
-        }
+        persist(token: response.token, user: response.user)
         isAuthenticated = true
         isUnlocked = true
+    }
+
+    @MainActor
+    private func persist(token newToken: String, user: User?) {
+        token = newToken
+        APIClient.shared.token = newToken
+        currentUser = user
+        if let user, let data = try? JSONEncoder().encode(user) {
+            UserDefaults.standard.set(data, forKey: userKey)
+        }
     }
 
     @MainActor

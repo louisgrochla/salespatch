@@ -1,16 +1,27 @@
 import Foundation
 
 // MARK: — APIClient
+//
+// Talks to the sales-dashboard Next.js API at
+// https://salesflow-sigma.vercel.app/api. All endpoints wrap responses in
+// `{ data: ... }` (`ApiSuccess<T>` on the server side), which we peel here.
+//
+// Auth: tokens come back from /auth/login, /auth/signup, /auth/demo and are
+// sent on subsequent requests via `Authorization: Bearer <token>` —
+// `resolveUserFromRequest` on the server accepts that as the mobile path.
+//
+// Override the base URL at launch (e.g. to hit `vercel dev` on a laptop) by
+// setting `UserDefaults.standard.string(forKey: "apiBaseURL")` before the
+// first request.
+
 final class APIClient {
     static let shared = APIClient()
 
-    // Simulator → localhost, device → Mac via Tailscale (dev), Pi (production)
-    // To switch to production: change device URL to http://100.93.24.14:4350
-    #if targetEnvironment(simulator)
-    private let baseURL = "http://localhost:4350"
-    #else
-    private let baseURL = "http://100.66.206.3:4350"  // Mac Tailscale IP (dev)
-    #endif
+    private let defaultBaseURL = "https://salesflow-sigma.vercel.app/api"
+
+    private var baseURL: String {
+        UserDefaults.standard.string(forKey: "apiBaseURL") ?? defaultBaseURL
+    }
 
     // Sales-dashboard (Next.js) base URL — different host from mobile-api.
     // Used for customer-facing payment endpoints (`/api/payments/*`) which
@@ -30,6 +41,14 @@ final class APIClient {
         return d
     }
 
+    // ───────────── Envelope ─────────────
+
+    private struct Envelope<T: Decodable>: Decodable {
+        let data: T
+    }
+
+    // ───────────── Low-level request ─────────────
+
     private func request(
         path: String,
         method: String = "GET",
@@ -41,6 +60,7 @@ final class APIClient {
         var req = URLRequest(url: url)
         req.httpMethod = method
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.setValue("application/json", forHTTPHeaderField: "Accept")
         if let tok = token {
             req.setValue("Bearer \(tok)", forHTTPHeaderField: "Authorization")
         }
@@ -56,110 +76,130 @@ final class APIClient {
         return data
     }
 
-    // MARK: — Auth
-    func login(name: String, pin: String) async throws -> LoginResponse {
+    /// Hits an endpoint, decodes `{ data: T }` and returns `T`.
+    private func requestEnvelope<T: Decodable>(
+        path: String,
+        method: String = "GET",
+        body: (any Encodable)? = nil
+    ) async throws -> T {
+        let data = try await request(path: path, method: method, body: body)
+        return try decoder.decode(Envelope<T>.self, from: data).data
+    }
+
+    // ───────────── Auth ─────────────
+
+    struct LoginPayload: Decodable {
+        let user: User?
+        let token: String
+    }
+
+    func login(name: String, pin: String) async throws -> LoginPayload {
         struct Body: Encodable { let name: String; let pin: String }
-        let data = try await request(path: "/auth/login", method: "POST", body: Body(name: name, pin: pin))
-        return try decoder.decode(LoginResponse.self, from: data)
+        return try await requestEnvelope(
+            path: "/auth/login",
+            method: "POST",
+            body: Body(name: name, pin: pin)
+        )
     }
 
-    func checkNameAvailable(name: String) async throws -> Bool {
-        let encoded = name.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? name
-        let data = try await request(path: "/auth/check-name?name=\(encoded)")
-        struct Response: Decodable { let available: Bool }
-        return try decoder.decode(Response.self, from: data).available
+    /// Idempotent demo login — creates / updates the "Demo Account" user and
+    /// returns a valid session. Used in DEBUG bootstrapping and from the
+    /// "Use demo account" button.
+    func demoLogin() async throws -> LoginPayload {
+        return try await requestEnvelope(path: "/auth/demo", method: "POST")
     }
 
-    func signup(name: String, pin: String, phone: String, area: String) async throws -> LoginResponse {
-        struct Body: Encodable { let name: String; let pin: String; let phone: String; let area_postcode: String }
-        let data = try await request(path: "/auth/register", method: "POST", body: Body(name: name, pin: pin, phone: phone, area_postcode: area))
-        return try decoder.decode(LoginResponse.self, from: data)
+    func signup(name: String, pin: String, phone: String, area: String) async throws -> LoginPayload {
+        struct Body: Encodable {
+            let name: String
+            let pin: String
+            let phone: String
+            let area_postcode: String
+        }
+        return try await requestEnvelope(
+            path: "/auth/signup",
+            method: "POST",
+            body: Body(name: name, pin: pin, phone: phone, area_postcode: area)
+        )
     }
 
-    // MARK: — Training / Academy
-    func fetchTrainingUnits() async throws -> [TrainingUnit] {
-        let data = try await request(path: "/training")
-        return try decoder.decode(TrainingUnitsResponse.self, from: data).units
+    /// No separate name-check endpoint on the server; signup returns 409 if
+    /// the name is taken. This stub keeps existing call sites compiling.
+    func checkNameAvailable(name: String) async throws -> Bool { true }
+
+    func fetchMe() async throws -> User {
+        return try await requestEnvelope(path: "/auth/me")
     }
 
-    func fetchTrainingUnit(id: String) async throws -> TrainingUnitDetailResponse {
-        let data = try await request(path: "/training/\(id)")
-        return try decoder.decode(TrainingUnitDetailResponse.self, from: data)
-    }
+    // ───────────── Leads ─────────────
 
-    func startTrainingUnit(id: String) async throws {
-        _ = try await request(path: "/training/\(id)/start", method: "POST")
-    }
-
-    func respondToScenario(unitId: String, lessonIndex: Int, scenarioId: String, option: String, score: Int) async throws {
-        struct Body: Encodable { let lesson_index: Int; let scenario_id: String; let selected_option: String; let score: Int }
-        _ = try await request(path: "/training/\(unitId)/respond", method: "POST",
-                              body: Body(lesson_index: lessonIndex, scenario_id: scenarioId, selected_option: option, score: score))
-    }
-
-    func completeTrainingUnit(id: String) async throws {
-        _ = try await request(path: "/training/\(id)/complete", method: "POST")
-    }
-
-    // MARK: — Leads
     func fetchLeads() async throws -> [LeadDTO] {
-        let data = try await request(path: "/leads")
-        return try decoder.decode(LeadsResponse.self, from: data).leads
+        return try await requestEnvelope(path: "/leads")
     }
 
     func fetchLead(id: String) async throws -> LeadDTO {
-        let data = try await request(path: "/leads/\(id)")
-        return try decoder.decode(LeadDTO.self, from: data)
+        return try await requestEnvelope(path: "/leads/\(id)")
     }
 
     func updateLeadStatus(id: String, status: String, lat: Double? = nil, lng: Double? = nil) async throws {
-        let body = StatusUpdateRequest(status: status, lat: lat, lng: lng)
-        _ = try await request(path: "/leads/\(id)/status", method: "PATCH", body: body)
+        struct Body: Encodable {
+            let status: String
+            let location_lat: Double?
+            let location_lng: Double?
+        }
+        _ = try await request(
+            path: "/leads/\(id)/status",
+            method: "PATCH",
+            body: Body(status: status, location_lat: lat, location_lng: lng)
+        )
     }
 
+    /// No `/leads/{id}/visit` endpoint on the web API — visit tracking on the
+    /// server is inferred from the `visited_at` timestamp set when status
+    /// transitions to `visited`. We keep the signature so existing call
+    /// sites compile; the local timer still drives UX.
     func postVisit(id: String, action: String, lat: Double, lng: Double) async throws {
-        let body = VisitRequest(action: action, lat: lat, lng: lng)
-        _ = try await request(path: "/leads/\(id)/visit", method: "POST", body: body)
+        // Intentionally no-op.
+    }
+
+    // ───────────── Stats ─────────────
+
+    func fetchStats() async throws -> Stats {
+        return try await requestEnvelope(path: "/stats")
+    }
+
+    // ───────────── Training / Leaderboard / Photos ─────────────
+    //
+    // These endpoints exist in the old OpenClaw runtime but not in the
+    // Vercel API. They throw so the dependent screens show a clear error
+    // rather than silently failing. Re-implement when the server catches up.
+
+    func fetchTrainingUnits() async throws -> [TrainingUnit] {
+        throw SalesFlowError.unavailable
+    }
+
+    func fetchTrainingUnit(id: String) async throws -> TrainingUnitDetailResponse {
+        throw SalesFlowError.unavailable
+    }
+
+    func startTrainingUnit(id: String) async throws {
+        throw SalesFlowError.unavailable
+    }
+
+    func respondToScenario(unitId: String, lessonIndex: Int, scenarioId: String, option: String, score: Int) async throws {
+        throw SalesFlowError.unavailable
+    }
+
+    func completeTrainingUnit(id: String) async throws {
+        throw SalesFlowError.unavailable
+    }
+
+    func fetchLeaderboard(period: String = "alltime") async throws -> [LeaderboardEntry] {
+        throw SalesFlowError.unavailable
     }
 
     func uploadPhoto(leadId: String, imageData: Data, category: String, lat: Double?, lng: Double?) async throws {
-        guard let url = URL(string: baseURL + "/leads/\(leadId)/photos") else { throw URLError(.badURL) }
-        let boundary = "Boundary-\(UUID().uuidString)"
-        var req = URLRequest(url: url)
-        req.httpMethod = "POST"
-        req.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
-        if let tok = token { req.setValue("Bearer \(tok)", forHTTPHeaderField: "Authorization") }
-
-        var body = Data()
-        func append(_ string: String) { body.append(Data(string.utf8)) }
-        // category field
-        append("--\(boundary)\r\n")
-        append("Content-Disposition: form-data; name=\"category\"\r\n\r\n")
-        append("\(category)\r\n")
-        // photo field
-        append("--\(boundary)\r\n")
-        append("Content-Disposition: form-data; name=\"photo\"; filename=\"photo.jpg\"\r\n")
-        append("Content-Type: image/jpeg\r\n\r\n")
-        body.append(imageData)
-        append("\r\n--\(boundary)--\r\n")
-        req.httpBody = body
-
-        let (_, response) = try await URLSession.shared.data(for: req)
-        guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
-            throw SalesFlowError.server("Photo upload failed")
-        }
-    }
-
-    // MARK: — Leaderboard
-    func fetchLeaderboard(period: String = "alltime") async throws -> [LeaderboardEntry] {
-        let data = try await request(path: "/leaderboard?period=\(period)")
-        return try decoder.decode(LeaderboardResponse.self, from: data).rankings
-    }
-
-    // MARK: — Stats
-    func fetchStats() async throws -> Stats {
-        let data = try await request(path: "/stats")
-        return try decoder.decode(Stats.self, from: data)
+        throw SalesFlowError.unavailable
     }
 
     // MARK: — Payments
@@ -232,15 +272,18 @@ extension APIClient {
     }
 }
 
-// MARK: — Error type
+// MARK: — Errors
+
 enum SalesFlowError: LocalizedError {
     case server(String)
     case offline
+    case unavailable
 
     var errorDescription: String? {
         switch self {
         case .server(let msg): return msg
-        case .offline: return "You are offline. Changes will sync when you reconnect."
+        case .offline:         return "You're offline. Changes will sync when you reconnect."
+        case .unavailable:     return "This feature isn't available on the current server yet."
         }
     }
 }

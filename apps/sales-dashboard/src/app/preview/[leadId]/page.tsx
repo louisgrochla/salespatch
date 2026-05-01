@@ -15,7 +15,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { notFound } from 'next/navigation';
 import {
-  getOrCreateActiveSession,
   getSetupFeePence,
   getMonthlyPence,
   formatPenceAsPounds,
@@ -81,14 +80,28 @@ function parseNotes(raw: string | null): ParsedNotes {
  *   - a slug like "third-circle-coffee" → routed through /api/demo-site/<slug>
  *     (server-side proxy that fetches from Supabase Storage; serves under our
  *     own origin so the iframe doesn't hit X-Frame-Options issues)
- *   - a full URL like "https://example.com/site.html" → used as-is
+ *   - a Supabase Storage URL like
+ *     "https://<proj>.supabase.co/storage/v1/object/public/demo-sites/<slug>.html"
+ *     → extract the slug and route through the proxy. Supabase serves these
+ *     with `content-type: text/plain`, which makes the browser display the
+ *     raw HTML as text instead of rendering it. The proxy rewrites the
+ *     content-type to `text/html`.
+ *   - any other full URL like "https://example.com/site.html" → used as-is
  *   - the doubled-protocol bug "https://https://..." → strip leading dup
  *   - null/empty → null (preview page falls back to a friendly message)
  */
 function resolveDemoUrl(raw: string | null): string | null {
   if (!raw) return null;
   // Strip leading doubled protocol (historic iOS bug).
-  let v = raw.replace(/^https?:\/\/(?=https?:\/\/)/, '');
+  const v = raw.replace(/^https?:\/\/(?=https?:\/\/)/, '');
+  // Supabase Storage URL — pull the slug and route through our proxy so the
+  // content-type comes back as text/html.
+  const supabaseMatch = v.match(
+    /^https?:\/\/[^/]+\.supabase\.co\/storage\/v1\/object\/public\/demo-sites\/([^/?#]+?)(?:\.html)?(?:[?#].*)?$/i,
+  );
+  if (supabaseMatch) {
+    return `/api/demo-site/${encodeURIComponent(supabaseMatch[1])}`;
+  }
   if (/^https?:\/\//i.test(v)) return v;
   // Slug — route through our proxy.
   return `/api/demo-site/${encodeURIComponent(v)}`;
@@ -121,19 +134,9 @@ export default async function PreviewPage({
     return <PaidState businessName={business_name} demoUrl={demo_site_domain} />;
   }
 
-  // Get or create the active checkout session for this assignment.
-  // This is the same session the salesperson's QR-gen call cached, refreshed
-  // lazily if the cached one expired. Customer never sees the seam.
-  let checkoutUrl: string | null = null;
-  try {
-    const sb = getSupabase();
-    const session = await getOrCreateActiveSession(sb, assignment.id);
-    checkoutUrl = session.stripe_session_url;
-  } catch (err) {
-    console.error('[preview] session create/fetch failed:', err);
-    // Render the demo anyway — better to show something than 500.
-  }
-
+  // No Stripe round-trip on this page — the CTA links to /onboarding/<id>
+  // first (5-question form), which then redirects to Stripe Checkout when
+  // the customer hits "Continue to payment".
   const setupLabel = formatPenceAsPounds(getSetupFeePence());
   const monthlyLabel = formatPenceAsPounds(getMonthlyPence());
 
@@ -141,7 +144,7 @@ export default async function PreviewPage({
     <PreviewWithCTA
       businessName={business_name}
       demoUrl={demo_site_domain}
-      checkoutUrl={checkoutUrl}
+      onboardingHref={`/onboarding/${assignment.id}`}
       setupLabel={setupLabel}
       monthlyLabel={monthlyLabel}
     />
@@ -154,19 +157,19 @@ export default async function PreviewPage({
 
 const INK = '#0F0E0C';
 const CREAM = '#FAF8F5';
-const CREAM_DIM = '#D4CFC4';
 const SIGNAL = '#B8860B';
+const LIVE_GREEN = '#3D9E5F';
 
 function PreviewWithCTA({
   businessName,
   demoUrl,
-  checkoutUrl,
+  onboardingHref,
   setupLabel,
   monthlyLabel,
 }: {
   businessName: string;
   demoUrl: string | null;
-  checkoutUrl: string | null;
+  onboardingHref: string;
   setupLabel: string;
   monthlyLabel: string;
 }) {
@@ -177,96 +180,167 @@ function PreviewWithCTA({
         padding: 0,
         background: CREAM,
         minHeight: '100dvh',
-        display: 'flex',
-        flexDirection: 'column',
+        position: 'relative',
+        overflow: 'hidden',
       }}
     >
-      <main
-        style={{
-          flex: 1,
-          // Reserve room for the sticky CTA + iOS home indicator.
-          paddingBottom: 'calc(72px + env(safe-area-inset-bottom))',
-          background: CREAM,
-        }}
-      >
-        {demoUrl ? (
-          <iframe
-            src={demoUrl}
-            title={`${businessName} — preview`}
-            sandbox="allow-scripts allow-same-origin allow-popups allow-forms"
-            style={{
-              border: 0,
-              width: '100%',
-              height: 'calc(100dvh - 72px - env(safe-area-inset-bottom))',
-              display: 'block',
-            }}
-          />
-        ) : (
-          <DemoMissingFallback businessName={businessName} />
-        )}
-      </main>
-
-      {checkoutUrl ? (
-        <a
-          href={checkoutUrl}
+      {demoUrl ? (
+        <iframe
+          src={demoUrl}
+          title={`${businessName} — preview`}
+          sandbox="allow-scripts allow-same-origin allow-popups allow-forms"
           style={{
-            position: 'fixed',
-            left: 0,
-            right: 0,
-            bottom: 0,
-            paddingTop: 16,
-            paddingBottom: 'calc(16px + env(safe-area-inset-bottom))',
-            paddingLeft: 20,
-            paddingRight: 20,
-            background: INK,
-            color: CREAM,
-            fontFamily:
-              "'Inter Tight', -apple-system, BlinkMacSystemFont, sans-serif",
-            fontSize: 16,
-            fontWeight: 500,
-            textAlign: 'center',
-            textDecoration: 'none',
-            letterSpacing: '-0.01em',
-            borderTop: `1px solid rgba(250, 248, 245, 0.08)`,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: 12,
-            transition: 'background 0.18s ease',
+            border: 0,
+            width: '100%',
+            height: '100dvh',
+            display: 'block',
           }}
-        >
-          <span>
-            Go live now ·{' '}
-            <span style={{ color: SIGNAL }}>
-              {setupLabel} setup, then {monthlyLabel}/mo
-            </span>
-          </span>
-          <span style={{ color: SIGNAL, fontSize: 18, lineHeight: 1 }}>→</span>
-        </a>
+        />
       ) : (
-        <div
-          style={{
-            position: 'fixed',
-            left: 0,
-            right: 0,
-            bottom: 0,
-            padding: 'calc(16px + env(safe-area-inset-bottom)) 20px 16px',
-            background: INK,
-            color: CREAM_DIM,
-            fontFamily:
-              "'JetBrains Mono', ui-monospace, monospace",
-            fontSize: 12,
-            textAlign: 'center',
-            letterSpacing: '0.06em',
-            borderTop: `1px solid rgba(250, 248, 245, 0.08)`,
-          }}
-        >
-          Checkout is being prepared — refresh in a moment.
-        </div>
+        <DemoMissingFallback businessName={businessName} />
       )}
+
+      <BusinessLivePill businessName={businessName} />
+
+      <FloatingCTAButton
+        href={onboardingHref}
+        setupLabel={setupLabel}
+        monthlyLabel={monthlyLabel}
+      />
     </div>
   );
 }
+
+function BusinessLivePill({ businessName }: { businessName: string }) {
+  return (
+    <div
+      style={{
+        position: 'fixed',
+        top: 'calc(env(safe-area-inset-top) + 12px)',
+        left: '50%',
+        transform: 'translateX(-50%)',
+        display: 'inline-flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        gap: 2,
+        padding: '8px 14px',
+        background: 'rgba(15, 14, 12, 0.62)',
+        backdropFilter: 'blur(12px)',
+        WebkitBackdropFilter: 'blur(12px)',
+        borderRadius: 9999,
+        border: '1px solid rgba(250, 248, 245, 0.08)',
+        zIndex: 10,
+        fontFamily:
+          "'Inter Tight', -apple-system, BlinkMacSystemFont, sans-serif",
+        pointerEvents: 'none',
+        maxWidth: 'calc(100vw - 32px)',
+      }}
+    >
+      <span
+        style={{
+          color: CREAM,
+          fontSize: 13,
+          fontWeight: 600,
+          letterSpacing: '-0.01em',
+          lineHeight: 1.1,
+          whiteSpace: 'nowrap',
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          maxWidth: '60vw',
+        }}
+      >
+        {businessName}
+      </span>
+      <span
+        style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: 5,
+          fontSize: 10,
+          color: 'rgba(250, 248, 245, 0.55)',
+          lineHeight: 1,
+        }}
+      >
+        <span
+          style={{
+            width: 5,
+            height: 5,
+            borderRadius: '50%',
+            background: LIVE_GREEN,
+            display: 'inline-block',
+            boxShadow: `0 0 6px ${LIVE_GREEN}`,
+          }}
+        />
+        Live
+      </span>
+    </div>
+  );
+}
+
+function FloatingCTAButton({
+  href,
+  setupLabel,
+  monthlyLabel,
+}: {
+  href: string;
+  setupLabel: string;
+  monthlyLabel: string;
+}) {
+  return (
+    <a
+      href={href}
+      style={{
+        position: 'fixed',
+        right: 16,
+        bottom: 'calc(env(safe-area-inset-bottom) + 36px)',
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 12,
+        padding: '12px 18px 12px 20px',
+        background: 'rgba(15, 14, 12, 0.58)',
+        backdropFilter: 'blur(14px) saturate(140%)',
+        WebkitBackdropFilter: 'blur(14px) saturate(140%)',
+        color: CREAM,
+        textDecoration: 'none',
+        borderRadius: 16,
+        fontFamily:
+          "'Inter Tight', -apple-system, BlinkMacSystemFont, sans-serif",
+        letterSpacing: '-0.01em',
+        boxShadow:
+          '0 10px 28px rgba(15, 14, 12, 0.32), 0 1px 2px rgba(15, 14, 12, 0.18)',
+        border: '1px solid rgba(250, 248, 245, 0.10)',
+        zIndex: 10,
+      }}
+    >
+      <span style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+        <span style={{ fontSize: 15, fontWeight: 600, lineHeight: 1.1 }}>
+          Go live now
+        </span>
+        <span
+          style={{
+            fontSize: 11,
+            color: SIGNAL,
+            letterSpacing: '0.02em',
+            lineHeight: 1.1,
+          }}
+        >
+          {setupLabel} setup · then {monthlyLabel}/mo
+        </span>
+      </span>
+      <span
+        style={{
+          color: SIGNAL,
+          fontSize: 18,
+          lineHeight: 1,
+          fontWeight: 500,
+        }}
+      >
+        →
+      </span>
+    </a>
+  );
+}
+
 
 function PaidState({ businessName, demoUrl }: { businessName: string; demoUrl: string | null }) {
   return (
@@ -276,54 +350,52 @@ function PaidState({ businessName, demoUrl }: { businessName: string; demoUrl: s
         padding: 0,
         background: CREAM,
         minHeight: '100dvh',
-        display: 'flex',
-        flexDirection: 'column',
+        position: 'relative',
+        overflow: 'hidden',
       }}
     >
-      <main
-        style={{
-          flex: 1,
-          paddingBottom: 'calc(72px + env(safe-area-inset-bottom))',
-        }}
-      >
-        {demoUrl ? (
-          <iframe
-            src={demoUrl}
-            title={`${businessName} — preview`}
-            sandbox="allow-scripts allow-same-origin allow-popups allow-forms"
-            style={{
-              border: 0,
-              width: '100%',
-              height: 'calc(100dvh - 72px - env(safe-area-inset-bottom))',
-              display: 'block',
-            }}
-          />
-        ) : (
-          <DemoMissingFallback businessName={businessName} />
-        )}
-      </main>
+      {demoUrl ? (
+        <iframe
+          src={demoUrl}
+          title={`${businessName} — preview`}
+          sandbox="allow-scripts allow-same-origin allow-popups allow-forms"
+          style={{
+            border: 0,
+            width: '100%',
+            height: '100dvh',
+            display: 'block',
+          }}
+        />
+      ) : (
+        <DemoMissingFallback businessName={businessName} />
+      )}
+
+      <BusinessLivePill businessName={businessName} />
+
       <div
         style={{
           position: 'fixed',
-          left: 0,
-          right: 0,
-          bottom: 0,
-          paddingTop: 16,
-          paddingBottom: 'calc(16px + env(safe-area-inset-bottom))',
-          paddingLeft: 20,
-          paddingRight: 20,
-          background: INK,
+          right: 16,
+          bottom: 'calc(env(safe-area-inset-bottom) + 36px)',
+          padding: '12px 18px',
+          background: 'rgba(15, 14, 12, 0.58)',
+          backdropFilter: 'blur(14px) saturate(140%)',
+          WebkitBackdropFilter: 'blur(14px) saturate(140%)',
           color: CREAM,
+          borderRadius: 9999,
           fontFamily:
             "'Inter Tight', -apple-system, BlinkMacSystemFont, sans-serif",
-          fontSize: 15,
+          fontSize: 13,
           fontWeight: 500,
-          textAlign: 'center',
           letterSpacing: '-0.01em',
-          borderTop: `1px solid rgba(250, 248, 245, 0.08)`,
+          border: '1px solid rgba(250, 248, 245, 0.10)',
+          boxShadow:
+            '0 10px 28px rgba(15, 14, 12, 0.32), 0 1px 2px rgba(15, 14, 12, 0.18)',
+          zIndex: 10,
+          maxWidth: 'calc(100vw - 32px)',
         }}
       >
-        <span style={{ color: SIGNAL }}>✓ Paid</span> — your real site is being built. We'll text you within 24h.
+        <span style={{ color: SIGNAL }}>✓ Paid</span> — building your site. We'll text you within 24h.
       </div>
     </div>
   );

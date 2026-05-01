@@ -20,6 +20,7 @@ CREATE TABLE sales_users (
   push_token      text,
   device_type     text CHECK (device_type IN ('web', 'ios', 'android')),
   last_active_at  timestamptz,
+  stripe_connect_id text,                  -- Stripe Connect account for payouts
   created_at      timestamptz NOT NULL DEFAULT now(),
   updated_at      timestamptz NOT NULL DEFAULT now()
 );

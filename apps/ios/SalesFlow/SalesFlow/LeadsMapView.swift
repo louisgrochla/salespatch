@@ -1081,7 +1081,7 @@ private struct LeadMapCard: View {
 
             // Status + contact
             HStack(spacing: 10) {
-                StatusBadge(status: lead.status)
+                StatusPill(status: lead.status)
 
                 if let person = lead.contactPerson {
                     HStack(spacing: 3) {

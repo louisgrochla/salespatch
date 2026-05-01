@@ -20,9 +20,17 @@ struct ClientPresentationView: View {
     @State private var isCached = false
     @State private var isCaching = false
 
-    // Preview URL fetched lazily on first share-sheet open. Falls back to the
-    // raw demo URL if createCheckout fails (offline / auth / backend error).
-    @State private var previewURL: String?
+    // Public host for the customer-facing preview page. Always salespatch.co.uk
+    // regardless of build target — customers scan from their own phone, never
+    // from localhost.
+    private static let publicShareHost = "https://salespatch.co.uk"
+
+    // The URL we share / encode in the QR. Routes the customer through
+    // /preview/<assignment-id>, which lazily creates the Stripe Checkout
+    // session on first load (no eager iOS roundtrip needed).
+    private var shareURL: String {
+        "\(Self.publicShareHost)/preview/\(leadAssignmentId)"
+    }
 
     // Sold-detection: poll lead status every 3s while share sheet is up.
     // When status flips to 'sold', show the celebratory paid state.
@@ -122,18 +130,14 @@ struct ClientPresentationView: View {
                 HStack {
                     Spacer()
                     Button(action: {
-                        Task {
-                            // Fetch the preview URL first if we don't have one cached.
-                            // Sets eager-attribution metadata into Stripe (salesperson_id)
-                            // BEFORE the customer scans, so commission attribution is
-                            // unambiguous when payment lands.
-                            if previewURL == nil {
-                                if let r = try? await APIClient.shared.createCheckout(leadId: leadAssignmentId) {
-                                    previewURL = r.preview_url
-                                }
-                            }
-                            showShareSheet = true
+                        // Fire-and-forget: warm the Stripe session so the customer
+                        // doesn't wait on first scan + lock attribution metadata.
+                        // The QR URL itself is deterministic — we don't depend on
+                        // this call succeeding to share.
+                        Task.detached {
+                            _ = try? await APIClient.shared.createCheckout(leadId: leadAssignmentId)
                         }
+                        showShareSheet = true
                     }) {
                         Image(systemName: "square.and.arrow.up")
                             .font(.system(size: 16, weight: .semibold))
@@ -177,14 +181,12 @@ struct ClientPresentationView: View {
             GetWebsiteSheet(businessName: businessName)
         }
 
-        // Share sheet — use the preview URL if we have one (preferred —
-        // routes the customer through salespatch.co.uk/preview which has the
-        // sticky payment CTA). Fall back to the raw demo URL with a defensive
-        // hasPrefix("http") check that fixes the historic doubled-https bug.
+        // Share sheet — always shares the salespatch.co.uk/preview URL so the
+        // customer lands on our payment page (not the raw Supabase demo URL).
         .sheet(isPresented: $showShareSheet, onDismiss: { stopPolling() }) {
             DemoShareSheet(
                 businessName: businessName,
-                demoURL: previewURL ?? normalisedDomainURL(domain)
+                demoURL: shareURL
             )
             .onAppear { startPolling() }
         }
@@ -202,10 +204,6 @@ struct ClientPresentationView: View {
                 }
             )
         }
-    }
-
-    private func normalisedDomainURL(_ raw: String) -> String {
-        raw.hasPrefix("http") ? raw : "https://\(raw)"
     }
 
     // MARK: — Polling
@@ -413,38 +411,103 @@ private struct ClientWebView: UIViewRepresentable {
             webView.loadFileURL(cachedURL, allowingReadAccessTo: dir)
             return
         }
-        // 3. Live URL if online
-        if network.isOnline, let url = URL(string: "https://\(domain)") {
-            webView.load(URLRequest(url: url))
-            return
+        // 3. Live URL if online — short timeout so an unresolvable domain
+        //    (common for test leads) fails fast instead of spinning 30s.
+        //    Handle both "bare.domain.com" and a full "https://…" URL
+        //    (admin may stash the Supabase Storage URL directly).
+        if network.isOnline {
+            let urlString = domain.lowercased().hasPrefix("http")
+                ? domain
+                : "https://\(domain)"
+            if let url = URL(string: urlString) {
+                var req = URLRequest(url: url)
+                req.timeoutInterval = 8
+                webView.load(req)
+                return
+            }
         }
         // 4. Nothing available
-        webView.loadHTMLString(offlineHTML, baseURL: nil)
+        webView.loadHTMLString(notAvailableHTML, baseURL: nil)
     }
 
-    private var offlineHTML: String {
+    private var notAvailableHTML: String {
         """
         <html><head><meta name="viewport" content="width=device-width,initial-scale=1">
-        <style>body{background:#000;color:#555;font-family:-apple-system,sans-serif;
-        display:flex;align-items:center;justify-content:center;height:100vh;margin:0;
-        flex-direction:column;gap:10px;text-align:center;padding:32px;}
-        h2{color:#fff;font-size:18px;}p{font-size:14px;max-width:260px;line-height:1.5;}</style>
-        </head><body>
-        <h2>No connection</h2>
-        <p>Connect to the internet once to save this demo for offline use.</p>
+        <style>
+          body{background:rgb(20,20,19);color:rgb(210,200,185);
+            font-family:-apple-system,sans-serif;
+            display:flex;align-items:center;justify-content:center;
+            height:100vh;margin:0;flex-direction:column;gap:12px;
+            text-align:center;padding:40px;}
+          h2{color:rgb(248,244,238);font-size:22px;margin:0;letter-spacing:-0.02em;}
+          p{font-size:14px;max-width:300px;line-height:1.5;margin:0;}
+          .tag{font-family:ui-monospace,monospace;font-size:10px;letter-spacing:0.14em;
+            color:rgb(184,134,11);text-transform:uppercase;}
+        </style></head><body>
+        <div class="tag">/ DEMO UNAVAILABLE</div>
+        <h2>This demo hasn't been uploaded yet.</h2>
+        <p>Ask admin to upload the HTML for this lead via the web portal.
+          The demo will then render even with no signal.</p>
         </body></html>
         """
     }
 
     class Coordinator: NSObject, WKNavigationDelegate {
         @Binding var isLoading: Bool
+        private weak var lastWebView: WKWebView?
+        private var hasFallenBack = false
+
         init(isLoading: Binding<Bool>) { _isLoading = isLoading }
 
-        func webView(_ webView: WKWebView, didStartProvisionalNavigation _: WKNavigation!) { isLoading = true }
-        func webView(_ webView: WKWebView, didFinish _: WKNavigation!) { isLoading = false }
-        func webView(_ webView: WKWebView, didFail _: WKNavigation!, withError _: Error) { isLoading = false }
-        func webView(_ webView: WKWebView, didFailProvisionalNavigation _: WKNavigation!, withError _: Error) { isLoading = false }
+        func webView(_ webView: WKWebView, didStartProvisionalNavigation _: WKNavigation!) {
+            lastWebView = webView
+            isLoading = true
+        }
+        func webView(_ webView: WKWebView, didFinish _: WKNavigation!) {
+            isLoading = false
+            hasFallenBack = false
+        }
+        func webView(_ webView: WKWebView, didFail _: WKNavigation!, withError _: Error) {
+            showFallback(in: webView)
+        }
+        func webView(_ webView: WKWebView, didFailProvisionalNavigation _: WKNavigation!, withError _: Error) {
+            showFallback(in: webView)
+        }
+
+        /// When the live URL fails (DNS miss / timeout / 404 with no body),
+        /// the webview is otherwise left blank and shows as black. Replace
+        /// with a clear "demo unavailable" page.
+        private func showFallback(in webView: WKWebView) {
+            guard !hasFallenBack else { isLoading = false; return }
+            hasFallenBack = true
+            webView.loadHTMLString(ClientWebView.fallbackHTML, baseURL: nil)
+            // isLoading stays true until the fallback load finishes —
+            // didFinish will flip it false.
+        }
     }
+
+    /// Static fallback HTML — separate from instance-level `notAvailableHTML`
+    /// so the Coordinator (which doesn't have a ClientPresentationView
+    /// reference) can use it directly.
+    fileprivate static let fallbackHTML: String = """
+    <html><head><meta name="viewport" content="width=device-width,initial-scale=1">
+    <style>
+      body{background:rgb(20,20,19);color:rgb(210,200,185);
+        font-family:-apple-system,sans-serif;
+        display:flex;align-items:center;justify-content:center;
+        height:100vh;margin:0;flex-direction:column;gap:12px;
+        text-align:center;padding:40px;}
+      h2{color:rgb(248,244,238);font-size:22px;margin:0;letter-spacing:-0.02em;}
+      p{font-size:14px;max-width:300px;line-height:1.5;margin:0;}
+      .tag{font-family:ui-monospace,monospace;font-size:10px;letter-spacing:0.14em;
+        color:rgb(184,134,11);text-transform:uppercase;}
+    </style></head><body>
+    <div class="tag">/ DEMO UNAVAILABLE</div>
+    <h2>This demo hasn't been uploaded yet.</h2>
+    <p>Ask admin to upload the HTML for this lead via the web portal.
+      The demo will then render even with no signal.</p>
+    </body></html>
+    """
 }
 
 #Preview {

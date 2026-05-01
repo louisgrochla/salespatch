@@ -381,6 +381,7 @@ export async function POST(_req: NextRequest) {
           phone: user.phone,
           area_postcode: user.area_postcode,
           commission_rate: user.commission_rate,
+          commission_amount_pence: user.commission_amount_pence,
           active: true,
         },
         token,

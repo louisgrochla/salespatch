@@ -5,17 +5,23 @@ import CoreLocation
 import MapKit
 
 // MARK: — LeadDetailView
+//
+// Layout: PageHero → pill-tab selector (Overview / Prepare / Pitch /
+// Follow-up) → tab content → sticky bottom action bar. The demo preview
+// is the "wow" moment; it opens full-screen via `ClientPresentationView`.
+
 struct LeadDetailView: View {
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.dismiss) private var dismiss
+    @EnvironmentObject private var authStore: AuthStore
     let lead: Lead
 
-    @State private var selectedTab = 0
+    @State private var selectedTab: Int = 0
     @State private var showStatusPicker = false
     @State private var isUpdatingStatus = false
     @State private var errorMessage: String?
     @State private var showClientPresentation = false
 
-    // Visit tracking
     @State private var visitActive = false
     @State private var visitStartTime: Date?
     @State private var visitDuration: TimeInterval = 0
@@ -26,76 +32,52 @@ struct LeadDetailView: View {
     private let statuses = ["new", "visited", "pitched", "sold", "rejected"]
 
     var body: some View {
-        ZStack {
-            Theme.background.ignoresSafeArea()
-            SubtleGridBackground().ignoresSafeArea()
-
-            VStack(spacing: 0) {
-                // Business header strip
-                businessHeader
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 12)
-                    .background(Theme.surface)
-                    .overlay(alignment: .bottom) {
-                        Rectangle().fill(Theme.borderSubtle).frame(height: Theme.borderWidth)
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                topBar
+                hero
+                tabBar
+                Group {
+                    switch selectedTab {
+                    case 0: overviewTab
+                    case 1: prepareTab
+                    case 2: pitchTab
+                    case 3: followUpTab
+                    default: EmptyView()
                     }
-
-                // Segmented tabs
-                HStack(spacing: 0) {
-                    ForEach(tabs.indices, id: \.self) { i in
-                        Button {
-                            withAnimation(.easeInOut(duration: 0.15)) { selectedTab = i }
-                        } label: {
-                            VStack(spacing: 0) {
-                                Text(tabs[i])
-                                    .font(.system(size: 13, weight: selectedTab == i ? .semibold : .regular))
-                                    .foregroundStyle(selectedTab == i ? Theme.textPrimary : Theme.textMuted)
-                                    .frame(maxWidth: .infinity)
-                                    .padding(.vertical, 10)
-                                Rectangle()
-                                    .fill(selectedTab == i ? Theme.accent : Color.clear)
-                                    .frame(height: 2)
-                            }
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
-                .background(Theme.surface)
-                .overlay(alignment: .bottom) {
-                    Rectangle().fill(Theme.borderSubtle).frame(height: Theme.borderWidth)
-                }
-
-                // Content
-                ScrollView {
-                    Group {
-                        switch selectedTab {
-                        case 0: overviewTab
-                        case 1: prepareTab
-                        case 2: pitchTab
-                        case 3: followUpTab
-                        default: EmptyView()
-                        }
-                    }
-                    .padding(.horizontal, 16)
-                    .padding(.top, 16)
-                    .padding(.bottom, 40)
                 }
             }
+            .padding(.horizontal, 20)
+            .padding(.top, 4)
+            .padding(.bottom, 84) // clear the compact sticky bar
         }
-        .navigationTitle(lead.businessName)
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbarBackground(Theme.surface, for: .navigationBar)
-        .toolbarBackground(.visible, for: .navigationBar)
-        .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                Button { showStatusPicker = true } label: {
-                    StatusBadge(status: lead.status)
-                }
+        .scrollContentBackground(.hidden)
+        .background(Color.clear)
+        .toolbar(.hidden, for: .navigationBar)
+        .overlay(alignment: .bottom) { stickyActionBar }
+        .task(id: lead.assignmentId) {
+            await fetchDetail()
+            await geocodeIfNeeded()
+        }
+        // Mounted at root so the sticky-bar "Show demo" button works from
+        // any tab — when this lived inside pitchTab it only fired once
+        // pitchTab was the visible tab, causing a confusing no-op-then-
+        // open-on-tab-switch behaviour.
+        .fullScreenCover(isPresented: $showClientPresentation) {
+            if let domain = lead.demoSiteDomain {
+                ClientPresentationView(
+                    domain: domain,
+                    businessName: lead.businessName,
+                    leadAssignmentId: lead.assignmentId
+                )
             }
         }
         .confirmationDialog("Update Status", isPresented: $showStatusPicker, titleVisibility: .visible) {
             ForEach(statuses, id: \.self) { s in
-                Button(Theme.statusLabel(for: s)) { updateStatus(s) }
+                Button(Brand.statusLabel(for: s)) {
+                    BrandHaptics.tap()
+                    updateStatus(s)
+                }
             }
             Button("Cancel", role: .cancel) {}
         }
@@ -104,458 +86,962 @@ struct LeadDetailView: View {
         }, message: { Text(errorMessage ?? "") })
     }
 
-    // MARK: — Business header strip
+    // ───────────── Custom top bar (replaces system nav bar) ─────────────
 
-    private var businessHeader: some View {
-        HStack(alignment: .center, spacing: 14) {
-            // Initials avatar — slate blue per DESIGN_NOTES
-            ZStack {
-                RoundedRectangle(cornerRadius: 10)
-                    .fill(Color(hex: "#5B7B9D").opacity(0.1))
-                    .frame(width: 44, height: 44)
-                Text(lead.businessName.prefix(2).uppercased())
-                    .font(.system(size: 14, weight: .bold, design: .monospaced))
-                    .foregroundStyle(Color(hex: "#5B7B9D"))
+    /// Compact back chevron + eyebrow. Scrolls with content — no dedicated
+    /// nav-bar chrome. Tapping the chevron pops the stack.
+    private var topBar: some View {
+        HStack(spacing: 10) {
+            Button {
+                BrandHaptics.tap()
+                dismiss()
+            } label: {
+                Image(systemName: "chevron.left")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(Brand.cream)
+                    .frame(width: 28, height: 28)
+                    .background(Circle().fill(Brand.bgCard))
+                    .overlay(Circle().strokeBorder(Brand.line, lineWidth: 1))
             }
+            .buttonStyle(.plain)
 
-            VStack(alignment: .leading, spacing: 3) {
-                HStack(spacing: 6) {
-                    Text(lead.businessType)
-                        .font(.system(size: 12))
-                        .foregroundStyle(Theme.textSecondary)
-                    if let rating = lead.googleRating {
-                        Text("·").foregroundStyle(Theme.textMuted).font(.system(size: 12))
-                        HStack(spacing: 3) {
-                            Image(systemName: "star.fill")
-                                .font(.system(size: 9))
-                                .foregroundStyle(Color(hex: "#9B8B6B"))
-                            Text(String(format: "%.1f", rating))
-                                .font(.system(size: 11, weight: .medium, design: .monospaced))
-                                .foregroundStyle(Theme.textSecondary)
-                            if let n = lead.googleReviewCount {
-                                Text("(\(n))")
-                                    .font(.system(size: 11))
-                                    .foregroundStyle(Theme.textMuted)
+            Text("/ LEAD")
+                .font(Brand.Font.mono(10))
+                .tracking(Brand.Tracking.eyebrow)
+                .foregroundStyle(Brand.creamMuted)
+
+            Spacer()
+        }
+        .padding(.top, 4)
+    }
+
+    // ───────────── Hero ─────────────
+
+    private var hero: some View {
+        HStack(alignment: .center, spacing: 12) {
+            Image(systemName: lead.businessIcon)
+                .font(.system(size: 16, weight: .medium))
+                .foregroundStyle(Brand.signal)
+                .frame(width: 36, height: 36)
+                .background(
+                    RoundedRectangle(cornerRadius: 9, style: .continuous)
+                        .fill(Brand.signalSoft)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 9, style: .continuous)
+                        .strokeBorder(Brand.signalBorder, lineWidth: 1)
+                )
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(lead.businessType.uppercased())
+                    .font(Brand.Font.mono(9))
+                    .tracking(Brand.Tracking.eyebrow)
+                    .foregroundStyle(Brand.creamMuted)
+                    .lineLimit(1)
+
+                Text(lead.businessName)
+                    .font(Brand.Font.display(18, weight: .medium))
+                    .tracking(-0.3)
+                    .foregroundStyle(Brand.cream)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+
+                let postcode = lead.postcode.trimmingCharacters(in: .whitespaces)
+                let hasRating = (lead.googleRating ?? 0) > 0
+                if !postcode.isEmpty || hasRating {
+                    HStack(spacing: 5) {
+                        if !postcode.isEmpty {
+                            Text(postcode)
+                                .font(Brand.Font.mono(10.5))
+                                .foregroundStyle(Brand.creamDim)
+                        }
+                        if hasRating, let rating = lead.googleRating {
+                            if !postcode.isEmpty { dotInline }
+                            HStack(spacing: 2) {
+                                Image(systemName: "star.fill").font(.system(size: 8))
+                                Text(String(format: "%.1f", rating))
+                                    .font(Brand.Font.mono(10.5))
+                                if let n = lead.googleReviewCount {
+                                    Text("(\(n))")
+                                        .font(Brand.Font.mono(10))
+                                        .foregroundStyle(Brand.creamMuted)
+                                }
                             }
+                            .foregroundStyle(Brand.creamDim)
                         }
                     }
-                }
-                Text("\(lead.address), \(lead.postcode)")
-                    .font(.system(size: 12))
-                    .foregroundStyle(Theme.textMuted)
                     .lineLimit(1)
+                }
             }
-            Spacer()
+
+            Spacer(minLength: 8)
+
+            StatusPill(status: lead.status)
         }
     }
 
-    // MARK: — Overview tab
+    private var dotInline: some View {
+        Circle().fill(Brand.line).frame(width: 3, height: 3)
+    }
 
-    private var overviewTab: some View {
-        VStack(spacing: 12) {
-            // Info card
-            DetailCard {
-                VStack(alignment: .leading, spacing: 0) {
-                    cardLabel("Business Info")
-                    VStack(alignment: .leading, spacing: 10) {
-                        DetailRow(icon: "building.2", label: "Type", value: lead.businessType)
-                        DetailRow(icon: "mappin", label: "Address", value: "\(lead.address), \(lead.postcode)")
-                        if let phone = lead.phone {
-                            HStack(alignment: .top, spacing: 8) {
-                                Image(systemName: "phone")
-                                    .font(.system(size: 13))
-                                    .foregroundStyle(Theme.textMuted)
-                                    .frame(width: 20)
-                                Text("Phone")
-                                    .font(.system(size: 12))
-                                    .foregroundStyle(Theme.textMuted)
-                                    .frame(width: 60, alignment: .leading)
-                                Link(phone, destination: URL(string: "tel:\(phone.filter { $0.isNumber })")!)
-                                    .font(.system(size: 13))
-                                    .foregroundStyle(Theme.accent)
-                                Spacer()
-                            }
-                        }
-                        if let contact = lead.contactPerson {
-                            DetailRow(
-                                icon: "person",
-                                label: "Contact",
-                                value: lead.contactRole.map { "\(contact), \($0)" } ?? contact
-                            )
-                        }
+    // ───────────── Tab bar ─────────────
+
+    private var tabBar: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                ForEach(tabs.indices, id: \.self) { i in
+                    BrandChip(
+                        label: tabs[i],
+                        active: selectedTab == i
+                    ) {
+                        BrandHaptics.tap()
+                        withAnimation(.easeInOut(duration: 0.18)) { selectedTab = i }
                     }
                 }
-            }
-
-            // Status card
-            DetailCard {
-                VStack(alignment: .leading, spacing: 10) {
-                    cardLabel("Status")
-                    Button { showStatusPicker = true } label: {
-                        HStack(spacing: 10) {
-                            Circle()
-                                .fill(Theme.statusColor(for: lead.status))
-                                .frame(width: 8, height: 8)
-                            Text(Theme.statusLabel(for: lead.status))
-                                .font(.system(size: 14, weight: .medium))
-                                .foregroundStyle(Theme.textPrimary)
-                            Spacer()
-                            if isUpdatingStatus {
-                                ProgressView().scaleEffect(0.75)
-                            } else {
-                                Image(systemName: "chevron.up.chevron.down")
-                                    .font(.system(size: 11))
-                                    .foregroundStyle(Theme.textMuted)
-                            }
-                        }
-                        .padding(10)
-                        .background(Theme.surfaceElevated)
-                        .clipShape(RoundedRectangle(cornerRadius: Theme.radiusButton))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: Theme.radiusButton)
-                                .stroke(Theme.border, lineWidth: Theme.borderWidth)
-                        )
-                    }
-                    .buttonStyle(.plain)
-                    .disabled(isUpdatingStatus)
-                }
-            }
-
-            // Visit card
-            visitCard
-
-            // Opening hours
-            if !lead.openingHoursArray.isEmpty {
-                openingHoursCard
             }
         }
+    }
+
+    // ───────────── Overview ─────────────
+
+    private var overviewTab: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            if hasAnyAction { quickActions }
+            if hasGeocodableAddress { mapCard }
+            if hasInfoRows { infoCard }
+            visitCard
+            if !lead.openingHoursArray.isEmpty { openingHoursCard }
+        }
+    }
+
+    private var hasAnyAction: Bool {
+        lead.phone != nil || hasGeocodableAddress || (lead.hasDemoSite && lead.demoSiteDomain != nil)
+    }
+
+    private var hasInfoRows: Bool {
+        addressLine != nil || lead.phone != nil || lead.contactPerson != nil
+    }
+
+    private var hasGeocodableAddress: Bool {
+        !lead.address.trimmingCharacters(in: .whitespaces).isEmpty ||
+        !lead.postcode.trimmingCharacters(in: .whitespaces).isEmpty
+    }
+
+    /// Combined "Address, Postcode" string, or nil if both parts are blank.
+    private var addressLine: String? {
+        let a = lead.address.trimmingCharacters(in: .whitespaces)
+        let p = lead.postcode.trimmingCharacters(in: .whitespaces)
+        if a.isEmpty && p.isEmpty { return nil }
+        if a.isEmpty { return p }
+        if p.isEmpty { return a }
+        return "\(a), \(p)"
+    }
+
+    // Quick-action chip row: Call / Directions / Copy / Share
+    private var quickActions: some View {
+        HStack(spacing: 8) {
+            if let phone = lead.phone,
+               let url = URL(string: "tel:\(phone.filter { $0.isNumber })") {
+                QuickActionButton(icon: "phone.fill", label: "Call", accent: true) {
+                    BrandHaptics.tap()
+                    UIApplication.shared.open(url)
+                }
+            }
+            QuickActionButton(icon: "arrow.triangle.turn.up.right.diamond.fill", label: "Route") {
+                BrandHaptics.tap()
+                openMaps()
+            }
+            QuickActionButton(icon: "doc.on.doc.fill", label: "Copy") {
+                BrandHaptics.success()
+                UIPasteboard.general.string = "\(lead.address), \(lead.postcode)"
+            }
+            if lead.hasDemoSite, let domain = lead.demoSiteDomain {
+                QuickActionButton(icon: "square.and.arrow.up.fill", label: "Share") {
+                    BrandHaptics.tap()
+                    shareDemo(domain: domain)
+                }
+            }
+        }
+    }
+
+    private var mapCard: some View {
+        Group {
+            if let coord = leadCoordinate {
+                MapCard(name: lead.businessName, coordinate: coord, onTap: openMaps)
+            } else {
+                HStack(spacing: 10) {
+                    Image(systemName: "mappin.and.ellipse")
+                        .font(.system(size: 13))
+                        .foregroundStyle(Brand.signal)
+                    Text("Tap Route to open in Apple Maps")
+                        .font(Brand.Font.body(Brand.Font.caption))
+                        .foregroundStyle(Brand.creamMuted)
+                    Spacer(minLength: 0)
+                }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 14)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .brandCard(padding: 0)
+            }
+        }
+    }
+
+    private var leadCoordinate: CLLocationCoordinate2D? {
+        guard let lat = lead.cachedLat, let lng = lead.cachedLng else { return nil }
+        return CLLocationCoordinate2D(latitude: lat, longitude: lng)
+    }
+
+    private func openMaps() {
+        let q = "\(lead.businessName), \(lead.address), \(lead.postcode)"
+            .addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
+        if let url = URL(string: "http://maps.apple.com/?q=\(q)&daddr=\(q)") {
+            UIApplication.shared.open(url)
+        }
+    }
+
+    private func shareDemo(domain: String) {
+        guard let url = URL(string: "https://\(domain)") else { return }
+        let av = UIActivityViewController(activityItems: [url], applicationActivities: nil)
+        guard let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+              let root = scene.windows.first?.rootViewController else { return }
+        root.present(av, animated: true)
+    }
+
+    private var infoCard: some View {
+        VStack(spacing: 0) {
+            let rows = availableInfoRows()
+            ForEach(rows.indices, id: \.self) { i in
+                rows[i]
+                if i < rows.count - 1 { rowDivider }
+            }
+        }
+        .brandCard(padding: 0)
+    }
+
+    private func availableInfoRows() -> [AnyView] {
+        var out: [AnyView] = []
+        if let line = addressLine {
+            out.append(AnyView(infoRow(label: "Address", value: line, mono: true)))
+        }
+        if let phone = lead.phone {
+            out.append(AnyView(infoRow(label: "Phone", value: phone, mono: true, trailing: {
+                if let url = URL(string: "tel:\(phone.filter { $0.isNumber })") {
+                    Link(destination: url) {
+                        HStack(spacing: 4) {
+                            Image(systemName: "phone.fill").font(.system(size: 10))
+                            Text("CALL")
+                                .font(Brand.Font.mono(9.5))
+                                .tracking(Brand.Tracking.eyebrow)
+                        }
+                        .foregroundStyle(Brand.signal)
+                    }
+                }
+            })))
+        }
+        if let contact = lead.contactPerson {
+            out.append(AnyView(infoRow(
+                label: "Contact",
+                value: lead.contactRole.map { "\(contact), \($0)" } ?? contact
+            )))
+        }
+        return out
+    }
+
+    @ViewBuilder
+    private func infoRow<Trailing: View>(
+        label: String,
+        value: String,
+        mono: Bool = false,
+        @ViewBuilder trailing: () -> Trailing = { EmptyView() }
+    ) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 12) {
+            Text(label.uppercased())
+                .font(Brand.Font.mono(9.5))
+                .tracking(Brand.Tracking.eyebrow)
+                .foregroundStyle(Brand.creamMuted)
+                .frame(width: 70, alignment: .leading)
+
+            Text(value)
+                .font(mono ? Brand.Font.mono(13) : Brand.Font.body(13))
+                .foregroundStyle(Brand.cream)
+                .multilineTextAlignment(.leading)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Spacer(minLength: 8)
+
+            trailing()
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
     }
 
     private var visitCard: some View {
-        DetailCard {
-            VStack(alignment: .leading, spacing: 10) {
-                cardLabel("Visit Tracking")
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 6) {
+                Text("/ VISIT")
+                    .font(Brand.Font.mono(9.5))
+                    .tracking(Brand.Tracking.eyebrow)
+                    .foregroundStyle(Brand.signal)
                 if visitActive {
-                    HStack(alignment: .center) {
-                        VStack(alignment: .leading, spacing: 2) {
-                            HStack(spacing: 6) {
-                                Circle()
-                                    .fill(Theme.statusSold)
-                                    .frame(width: 6, height: 6)
-                                Text("Visit in progress")
-                                    .font(.system(size: 12, weight: .medium))
-                                    .foregroundStyle(Theme.statusSold)
-                            }
-                            Text(formatDuration(visitDuration))
-                                .font(.system(size: 26, weight: .bold, design: .monospaced))
-                                .foregroundStyle(Theme.textPrimary)
-                        }
-                        Spacer()
-                        Button("Leave") { endVisit() }
-                            .font(.system(size: 13, weight: .semibold))
-                            .foregroundStyle(Theme.statusRejected)
-                            .padding(.horizontal, 16)
-                            .padding(.vertical, 9)
-                            .background(Theme.statusRejected.opacity(0.10))
-                            .clipShape(RoundedRectangle(cornerRadius: Theme.radiusButton))
-                            .overlay(
-                                RoundedRectangle(cornerRadius: Theme.radiusButton)
-                                    .stroke(Theme.statusRejected.opacity(0.35), lineWidth: Theme.borderWidth)
-                            )
-                    }
-                } else {
-                    Button(action: startVisit) {
-                        HStack(spacing: 8) {
-                            Image(systemName: "location.fill")
-                                .font(.system(size: 12))
-                            Text("I'm Here — Start Visit")
-                                .font(.system(size: 14, weight: .semibold))
-                        }
-                        .foregroundStyle(.white)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 11)
-                        .background(Theme.accent)
-                        .clipShape(RoundedRectangle(cornerRadius: Theme.radiusButton))
-                    }
-                    .buttonStyle(.plain)
-                    Text("Tap when you're at the business. GPS position will be logged.")
-                        .font(.system(size: 11))
-                        .foregroundStyle(Theme.textMuted)
+                    Text("· LIVE")
+                        .font(Brand.Font.mono(9.5))
+                        .tracking(Brand.Tracking.eyebrow)
+                        .foregroundStyle(Brand.signal)
+                }
+                Spacer()
+                if visitActive {
+                    Text(formatDuration(visitDuration))
+                        .font(Brand.Font.mono(13, weight: .medium).monospacedDigit())
+                        .foregroundStyle(Brand.cream)
                 }
             }
+
+            if visitActive {
+                Button("End visit") { endVisit() }
+                    .buttonStyle(GhostButtonStyle())
+                    .frame(maxWidth: .infinity)
+            } else {
+                Button {
+                    BrandHaptics.tap(.medium)
+                    startVisit()
+                } label: {
+                    HStack(spacing: 8) {
+                        Image(systemName: "location.fill").font(.system(size: 11))
+                        Text("I'm here — start visit")
+                    }
+                    .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(PrimaryButtonStyle(size: .md))
+            }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .brandCard(padding: 14)
     }
 
     private var openingHoursCard: some View {
-        DetailCard {
-            VStack(alignment: .leading, spacing: 10) {
-                cardLabel("Opening Hours")
+        VStack(alignment: .leading, spacing: 8) {
+            Text("/ HOURS")
+                .font(Brand.Font.mono(9.5))
+                .tracking(Brand.Tracking.eyebrow)
+                .foregroundStyle(Brand.signal)
+
+            VStack(alignment: .leading, spacing: 4) {
                 ForEach(lead.openingHoursArray, id: \.self) { entry in
                     Text(entry)
-                        .font(.system(size: 12, design: .monospaced))
-                        .foregroundStyle(Theme.textSecondary)
+                        .font(Brand.Font.mono(11.5))
+                        .foregroundStyle(Brand.creamDim)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .brandCard(padding: 14)
+    }
+
+    // ───────────── Prepare ─────────────
+
+    private var prepareTab: some View {
+        VStack(alignment: .leading, spacing: 20) {
+            if lead.isPassBrief {
+                passCard(lead.hook ?? "")
+            } else {
+                if let hook = lead.hook, !hook.isEmpty {
+                    hookCard(hook)
+                }
+                if !lead.painPointsArray.isEmpty {
+                    bulletSection(eyebrow: "What's costing them money", icon: "bolt.fill", items: lead.painPointsArray, tint: Brand.signal)
+                }
+                if let extended = lead.painPointsExtended, !extended.isEmpty {
+                    painContextCard(extended)
+                }
+                if !lead.servicesArray.isEmpty {
+                    bulletSection(eyebrow: "Services offered", icon: "minus", items: lead.servicesArray, tint: Brand.creamDim)
+                }
+                if !lead.trustBadgesArray.isEmpty {
+                    bulletSection(eyebrow: "Trust signals", icon: "checkmark", items: lead.trustBadgesArray, tint: Brand.signal)
+                }
+                if !lead.bestReviewsArray.isEmpty { reviewsSection }
+                if !lead.avoidTopicsArray.isEmpty {
+                    bulletSection(eyebrow: "Don't mention", icon: "xmark", items: lead.avoidTopicsArray, tint: Brand.err)
+                }
+                if lead.hook == nil && lead.painPointsArray.isEmpty &&
+                   lead.servicesArray.isEmpty && lead.trustBadgesArray.isEmpty && lead.bestReviewsArray.isEmpty {
+                    EmptyState(
+                        eyebrow: "No intel",
+                        title: "Nothing on file yet.",
+                        sub: "Pull to refresh on the Leads screen to pick up the latest enrichment."
+                    )
                 }
             }
         }
     }
 
-    // MARK: — Prepare tab
+    /// The single sharpest angle to open with — gold-bordered display card,
+    /// the largest sales-brief text on the page. Match web brief styling:
+    /// signal @ 0.12 fill + signal @ 0.4 border.
+    private func hookCard(_ text: String) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("/ THE HOOK")
+                .font(Brand.Font.mono(9.5))
+                .tracking(Brand.Tracking.eyebrow)
+                .foregroundStyle(Brand.signal)
+            Text(text)
+                .font(Brand.Font.display(19, weight: .medium))
+                .tracking(-0.3)
+                .foregroundStyle(Brand.cream)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(16)
+        .background(
+            RoundedRectangle(cornerRadius: Brand.Radius.card, style: .continuous)
+                .fill(Brand.signal.opacity(0.12))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: Brand.Radius.card, style: .continuous)
+                .strokeBorder(Brand.signal.opacity(0.4), lineWidth: 1)
+        )
+    }
 
-    private var prepareTab: some View {
-        VStack(spacing: 12) {
-            if !lead.servicesArray.isEmpty {
-                BulletCard(
-                    title: "Services Offered",
-                    items: lead.servicesArray,
-                    icon: "minus",
-                    accentColor: Color(hex: "#7B7B9D")   // muted lavender
-                )
+    /// PASS state — the business already has a modern site, no sale to make.
+    /// Distinct warning style so the rep skips rather than pitches.
+    private func passCard(_ text: String) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 6) {
+                Image(systemName: "hand.raised.fill")
+                    .font(.system(size: 11))
+                Text("/ SKIP THIS LEAD")
+                    .font(Brand.Font.mono(9.5))
+                    .tracking(Brand.Tracking.eyebrow)
             }
-            if !lead.trustBadgesArray.isEmpty {
-                BulletCard(
-                    title: "Trust Signals",
-                    items: lead.trustBadgesArray,
-                    icon: "checkmark",
-                    accentColor: Color(hex: "#6B8F7B")    // sage green
-                )
+            .foregroundStyle(Brand.amber)
+
+            Text(text)
+                .font(Brand.Font.display(17, weight: .medium))
+                .foregroundStyle(Brand.cream)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Text("Mark it rejected and move on to the next patch. No pitch needed.")
+                .font(Brand.Font.body(Brand.Font.caption))
+                .foregroundStyle(Brand.creamDim)
+                .padding(.top, 4)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(16)
+        .background(
+            RoundedRectangle(cornerRadius: Brand.Radius.card, style: .continuous)
+                .fill(Brand.amber.opacity(0.10))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: Brand.Radius.card, style: .continuous)
+                .strokeBorder(Brand.amber.opacity(0.35), lineWidth: 1)
+        )
+    }
+
+    /// Free-text pain context — only rendered when `pain_points_extended` is
+    /// provided. Sits below the bullet list.
+    private func painContextCard(_ text: String) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("/ CONTEXT")
+                .font(Brand.Font.mono(9.5))
+                .tracking(Brand.Tracking.eyebrow)
+                .foregroundStyle(Brand.creamMuted)
+            Text(text)
+                .font(Brand.Font.body(Brand.Font.bodySmall))
+                .foregroundStyle(Brand.creamDim)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .brandCard(padding: 14)
+    }
+
+    private func bulletSection(eyebrow: String, icon: String, items: [String], tint: Color) -> some View {
+        BrandSection(eyebrow: eyebrow) {
+            VStack(alignment: .leading, spacing: 10) {
+                ForEach(items, id: \.self) { item in
+                    HStack(alignment: .top, spacing: 12) {
+                        Image(systemName: icon)
+                            .font(.system(size: 10, weight: .medium))
+                            .foregroundStyle(tint)
+                            .frame(width: 22, height: 22)
+                            .background(tint.opacity(0.1))
+                            .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                        Text(item)
+                            .font(Brand.Font.body(Brand.Font.bodySmall))
+                            .foregroundStyle(Brand.creamDim)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
             }
-            if !lead.bestReviewsArray.isEmpty {
-                reviewsCard
-            }
-            if !lead.avoidTopicsArray.isEmpty {
-                BulletCard(
-                    title: "Avoid These Topics",
-                    items: lead.avoidTopicsArray,
-                    icon: "xmark",
-                    accentColor: Color(hex: "#B06060")    // muted rose
-                )
-            }
-            if lead.servicesArray.isEmpty && lead.trustBadgesArray.isEmpty && lead.bestReviewsArray.isEmpty {
-                emptyCard("No intelligence available for this business yet. Pull to refresh on the Leads screen.")
-            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .brandCard()
         }
     }
 
-    private var reviewsCard: some View {
-        DetailCard {
-            VStack(alignment: .leading, spacing: 12) {
-                cardLabel("Top Reviews")
+    private var reviewsSection: some View {
+        BrandSection(eyebrow: "Top reviews") {
+            VStack(alignment: .leading, spacing: 14) {
                 ForEach(lead.bestReviewsArray.indices, id: \.self) { i in
                     let review = lead.bestReviewsArray[i]
-                    VStack(alignment: .leading, spacing: 5) {
-                        HStack(spacing: 2) {
+                    VStack(alignment: .leading, spacing: 6) {
+                        HStack(spacing: 4) {
                             ForEach(0..<min(review.rating, 5), id: \.self) { _ in
                                 Image(systemName: "star.fill")
                                     .font(.system(size: 9))
-                                    .foregroundStyle(Color(hex: "#9B8B6B"))
+                                    .foregroundStyle(Brand.signal)
                             }
-                            Text("— \(review.author)")
-                                .font(.system(size: 10))
-                                .foregroundStyle(Theme.textMuted)
+                            Text("— \(review.author.uppercased())")
+                                .font(Brand.Font.mono(10))
+                                .tracking(Brand.Tracking.eyebrow)
+                                .foregroundStyle(Brand.creamMuted)
                         }
-                        Text("\"\(review.text)\"")
-                            .font(.system(size: 13))
-                            .foregroundStyle(Theme.textSecondary)
+                        Text("\u{201C}\(review.text)\u{201D}")
+                            .font(Brand.Font.body(Brand.Font.bodySmall))
                             .italic()
+                            .foregroundStyle(Brand.creamDim)
                     }
                     if i < lead.bestReviewsArray.count - 1 {
-                        Rectangle().fill(Theme.border).frame(height: Theme.borderWidth)
+                        Rectangle().fill(Brand.line2).frame(height: 1)
                     }
                 }
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .brandCard()
         }
     }
 
-    // MARK: — Pitch tab
+    // ───────────── Pitch ─────────────
 
     private var pitchTab: some View {
-        VStack(spacing: 12) {
-            // Client presentation button
-            if lead.hasDemoSite, let domain = lead.demoSiteDomain {
-                // Primary action — prominent, full width
-                Button(action: { showClientPresentation = true }) {
-                    HStack(spacing: 12) {
-                        ZStack {
-                            Circle()
-                                .fill(.white.opacity(0.12))
-                                .frame(width: 38, height: 38)
-                            Image(systemName: "iphone")
-                                .font(.system(size: 16, weight: .medium))
-                                .foregroundStyle(.white)
-                        }
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("Show Client Demo")
-                                .font(.system(size: 15, weight: .semibold))
-                                .foregroundStyle(.white)
-                            Text("Full-screen · hides dashboard")
-                                .font(.system(size: 12))
-                                .foregroundStyle(.white.opacity(0.6))
+        VStack(alignment: .leading, spacing: 20) {
+            if let opener = lead.opener, !opener.isEmpty { openerCard(opener) }
+
+            if lead.hasDemoSite, lead.demoSiteDomain != nil {
+                Button {
+                    BrandHaptics.tap(.medium)
+                    showClientPresentation = true
+                } label: {
+                    HStack(spacing: 14) {
+                        Image(systemName: "iphone")
+                            .font(.system(size: 18, weight: .medium))
+                            .foregroundStyle(Brand.ink)
+                            .frame(width: 40, height: 40)
+                            .background(Circle().fill(Brand.ink.opacity(0.12)))
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Show client demo")
+                                .font(Brand.Font.display(16, weight: .medium))
+                                .foregroundStyle(Brand.ink)
+                            Text("FULL-SCREEN · HIDES DASHBOARD")
+                                .font(Brand.Font.mono(10))
+                                .tracking(Brand.Tracking.eyebrow)
+                                .foregroundStyle(Brand.ink.opacity(0.6))
                         }
                         Spacer()
-                        Image(systemName: "arrow.up.forward.app")
-                            .font(.system(size: 14))
-                            .foregroundStyle(.white.opacity(0.7))
+                        Image(systemName: "arrow.up.forward")
+                            .font(.system(size: 14, weight: .medium))
+                            .foregroundStyle(Brand.ink.opacity(0.7))
                     }
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 14)
-                    .background(Theme.accent)
-                    .clipShape(RoundedRectangle(cornerRadius: Theme.radiusCard))
+                    .padding(16)
+                    .background(
+                        RoundedRectangle(cornerRadius: Brand.Radius.card, style: .continuous)
+                            .fill(Brand.cream)
+                    )
                 }
                 .buttonStyle(.plain)
-                .fullScreenCover(isPresented: $showClientPresentation) {
-                    ClientPresentationView(domain: domain, businessName: lead.businessName, leadAssignmentId: lead.id)
-                }
             }
 
-            // Pricing breakdown
-            DetailCard {
-                VStack(alignment: .leading, spacing: 12) {
-                    cardLabel("Pricing")
-                    VStack(spacing: 8) {
-                        PriceRow(label: "Website build", value: "£299")
-                        dividerThin
-                        PriceRow(label: "Monthly hosting", value: "£29/mo")
-                        dividerThin
-                        PriceRow(label: "Domain & SSL", value: "Included")
-                        dividerThin
-                        PriceRow(label: "Your commission", value: "£50", highlight: true)
-                    }
-                }
+            if !lead.demoMomentsArray.isEmpty {
+                demoMomentsSection
             }
 
-            // Objections
-            DetailCard {
-                VStack(alignment: .leading, spacing: 12) {
-                    cardLabel("Objection Handlers")
-                    ObjectionRow(
-                        objection: "\"I already have a website\"",
-                        response: "Ask to see it. If it's not mobile-optimised or ranking locally, that's your opening."
-                    )
-                    dividerThin
-                    ObjectionRow(
-                        objection: "\"It's too expensive\"",
-                        response: "One new customer a month covers it. Most businesses see ROI within 30 days."
-                    )
-                    dividerThin
-                    ObjectionRow(
-                        objection: "\"I need to think about it\"",
-                        response: "What specifically is holding you back — price, timing, or the value?"
-                    )
-                    dividerThin
-                    ObjectionRow(
-                        objection: "\"I don't have time to deal with this\"",
-                        response: "We handle everything. You don't touch it. Just approve the design and it goes live."
-                    )
+            BrandSection(eyebrow: "Pricing") {
+                VStack(spacing: 0) {
+                    priceRow("Website build", "£299")
+                    rowDivider
+                    priceRow("Monthly hosting", "£29/mo")
+                    rowDivider
+                    priceRow("Domain & SSL", "Included")
+                    rowDivider
+                    priceRow("Your commission", "£\((authStore.currentUser?.commissionAmountPence ?? 15000) / 100)", highlight: true)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .brandCard(padding: 8)
+            }
+
+            objectionsSection
+
+            if let close = lead.closeScript, !close.isEmpty { closeCard(close) }
+            if let nxt = lead.nextVisitReason, !nxt.isEmpty { nextVisitCard(nxt) }
+        }
+    }
+
+    /// Exact opening line to say at the door. Quoted, display font, with a
+    /// signal-gold left border to read like a note stuck on the jamb.
+    private func openerCard(_ text: String) -> some View {
+        HStack(spacing: 0) {
+            Rectangle()
+                .fill(Brand.signal)
+                .frame(width: 3)
+
+            VStack(alignment: .leading, spacing: 8) {
+                Text("/ FIRST LINE AT THE DOOR")
+                    .font(Brand.Font.mono(9.5))
+                    .tracking(Brand.Tracking.eyebrow)
+                    .foregroundStyle(Brand.signal)
+                Text("\u{201C}\(text)\u{201D}")
+                    .font(Brand.Font.display(16, weight: .medium))
+                    .italic()
+                    .foregroundStyle(Brand.cream)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(14)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .background(
+            RoundedRectangle(cornerRadius: Brand.Radius.card, style: .continuous)
+                .fill(Brand.bgStrong)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: Brand.Radius.card, style: .continuous)
+                .strokeBorder(Brand.line, lineWidth: 1)
+        )
+        .clipShape(RoundedRectangle(cornerRadius: Brand.Radius.card, style: .continuous))
+    }
+
+    /// The ask — gold-tinted card. Match the hook card's signal-tint style
+    /// but a touch softer since it's the tactical companion, not the frame.
+    private func closeCard(_ text: String) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("/ ASK FOR THE SALE")
+                .font(Brand.Font.mono(9.5))
+                .tracking(Brand.Tracking.eyebrow)
+                .foregroundStyle(Brand.signal)
+            Text("\u{201C}\(text)\u{201D}")
+                .font(Brand.Font.display(15, weight: .medium))
+                .italic()
+                .foregroundStyle(Brand.cream)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(16)
+        .background(
+            RoundedRectangle(cornerRadius: Brand.Radius.card, style: .continuous)
+                .fill(Brand.signal.opacity(0.10))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: Brand.Radius.card, style: .continuous)
+                .strokeBorder(Brand.signal.opacity(0.35), lineWidth: 1)
+        )
+    }
+
+    /// Recovery line if today's a no. Subtle card, muted body.
+    private func nextVisitCard(_ text: String) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("/ IF TODAY'S A NO")
+                .font(Brand.Font.mono(9.5))
+                .tracking(Brand.Tracking.eyebrow)
+                .foregroundStyle(Brand.creamMuted)
+            Text(text)
+                .font(Brand.Font.body(Brand.Font.bodySmall))
+                .foregroundStyle(Brand.creamDim)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .brandCard(padding: 14)
+    }
+
+    /// Objection handlers — tailored per lead from the admin brief when
+    /// available, otherwise fall back to the generic starter set. Each pair
+    /// is rendered as "They say" (amber) + "You say" (signal).
+    private var objectionsSection: some View {
+        let pairs: [ObjectionPair] = lead.specificObjectionsArray.isEmpty
+            ? genericObjections
+            : lead.specificObjectionsArray
+        let eyebrow = lead.specificObjectionsArray.isEmpty ? "Objections (generic)" : "Objections for this owner"
+        return BrandSection(eyebrow: eyebrow) {
+            VStack(spacing: 8) {
+                ForEach(pairs.indices, id: \.self) { i in
+                    objectionPairCard(pairs[i])
                 }
             }
         }
     }
 
-    private var dividerThin: some View {
-        Rectangle().fill(Theme.border).frame(height: Theme.borderWidth)
+    private func objectionPairCard(_ pair: ObjectionPair) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: 5) {
+                Text("/ THEY SAY")
+                    .font(Brand.Font.mono(9))
+                    .tracking(Brand.Tracking.eyebrow)
+                    .foregroundStyle(Brand.amber)
+                Text("\u{201C}\(pair.objection)\u{201D}")
+                    .font(Brand.Font.body(Brand.Font.bodySmall))
+                    .italic()
+                    .foregroundStyle(Brand.cream)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Rectangle().fill(Brand.line2).frame(height: 1)
+            VStack(alignment: .leading, spacing: 5) {
+                Text("/ YOU SAY")
+                    .font(Brand.Font.mono(9))
+                    .tracking(Brand.Tracking.eyebrow)
+                    .foregroundStyle(Brand.signal)
+                Text(pair.response)
+                    .font(Brand.Font.body(Brand.Font.bodySmall))
+                    .foregroundStyle(Brand.creamDim)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .brandCard(padding: 14)
     }
 
-    // MARK: — Follow Up tab
+    /// Arrow-prefixed cards for the demo-walkthrough beats. Each item is
+    /// its own card so the rep can tap-check while walking the owner
+    /// through the site.
+    private var demoMomentsSection: some View {
+        BrandSection(eyebrow: "What to tap during the demo") {
+            VStack(spacing: 6) {
+                ForEach(lead.demoMomentsArray, id: \.self) { moment in
+                    HStack(alignment: .top, spacing: 12) {
+                        Text("\u{2192}")
+                            .font(Brand.Font.display(16, weight: .semibold))
+                            .foregroundStyle(Brand.signal)
+                            .frame(width: 20, alignment: .leading)
+                        Text(moment)
+                            .font(Brand.Font.body(Brand.Font.bodySmall))
+                            .foregroundStyle(Brand.cream)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .brandCard(padding: 12)
+                }
+            }
+        }
+    }
+
+    private var genericObjections: [ObjectionPair] {
+        [
+            .init(objection: "I already have a website",
+                  response: "Ask to see it. If it's not mobile-optimised or ranking locally, that's your opening."),
+            .init(objection: "It's too expensive",
+                  response: "One new customer a month covers it. Most businesses see ROI within 30 days."),
+            .init(objection: "I need to think about it",
+                  response: "What specifically is holding you back — price, timing, or the value?"),
+            .init(objection: "I don't have time to deal with this",
+                  response: "We handle everything. Approve the design, it goes live.")
+        ]
+    }
+
+    private var rowDivider: some View {
+        Rectangle().fill(Brand.line2).frame(height: 1)
+    }
+
+    private func priceRow(_ label: String, _ value: String, highlight: Bool = false) -> some View {
+        HStack {
+            Text(label)
+                .font(Brand.Font.body(Brand.Font.bodySmall, weight: highlight ? .medium : .regular))
+                .foregroundStyle(highlight ? Brand.cream : Brand.creamDim)
+            Spacer()
+            Text(value)
+                .font(Brand.Font.mono(Brand.Font.bodySmall, weight: highlight ? .semibold : .regular))
+                .foregroundStyle(highlight ? Brand.signal : Brand.cream)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 12)
+    }
+
+    private func objectionRow(_ objection: String, _ response: String) -> some View {
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: "exclamationmark.bubble")
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(Brand.signal)
+                .frame(width: 22, height: 22)
+                .background(Brand.signalSoft)
+                .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                .padding(.top, 2)
+            VStack(alignment: .leading, spacing: 6) {
+                Text(objection)
+                    .font(Brand.Font.display(14, weight: .medium))
+                    .foregroundStyle(Brand.cream)
+                Text(response)
+                    .font(Brand.Font.body(Brand.Font.bodySmall))
+                    .foregroundStyle(Brand.creamDim)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(16)
+    }
+
+    // ───────────── Follow up ─────────────
 
     private var followUpTab: some View {
-        VStack(spacing: 12) {
-            // Reminder
-            DetailCard {
-                VStack(alignment: .leading, spacing: 10) {
-                    cardLabel("Reminder")
+        VStack(alignment: .leading, spacing: 20) {
+            BrandSection(eyebrow: "Reminder") {
+                VStack(alignment: .leading, spacing: 12) {
                     if let date = lead.followUpAt {
-                        HStack(spacing: 10) {
+                        HStack(spacing: 12) {
                             Image(systemName: "calendar")
                                 .font(.system(size: 16))
-                                .foregroundStyle(Theme.accent)
+                                .foregroundStyle(Brand.signal)
                                 .frame(width: 22)
-                            VStack(alignment: .leading, spacing: 2) {
+                            VStack(alignment: .leading, spacing: 4) {
                                 Text(date.formatted(date: .long, time: .omitted))
-                                    .font(.system(size: 14, weight: .semibold))
-                                    .foregroundStyle(Theme.textPrimary)
-                                Text(relativeDate(date))
-                                    .font(.system(size: 12))
-                                    .foregroundStyle(Theme.textMuted)
+                                    .font(Brand.Font.display(15, weight: .medium))
+                                    .foregroundStyle(Brand.cream)
+                                Text(relativeDate(date).uppercased())
+                                    .font(Brand.Font.mono(10))
+                                    .tracking(Brand.Tracking.eyebrow)
+                                    .foregroundStyle(Brand.creamMuted)
                             }
                         }
                     } else {
-                        HStack(spacing: 8) {
+                        HStack(spacing: 10) {
                             Image(systemName: "calendar.badge.plus")
-                                .foregroundStyle(Theme.textMuted)
+                                .foregroundStyle(Brand.creamMuted)
                             Text("No follow-up scheduled")
-                                .font(.system(size: 13))
-                                .foregroundStyle(Theme.textMuted)
+                                .font(Brand.Font.body(Brand.Font.bodySmall))
+                                .foregroundStyle(Brand.creamMuted)
                         }
                     }
                 }
-            }
-
-            // Contact
-            if let contact = lead.contactPerson {
-                DetailCard {
-                    VStack(alignment: .leading, spacing: 10) {
-                        cardLabel("Point of Contact")
-                        HStack(spacing: 12) {
-                            ZStack {
-                                Circle()
-                                    .fill(Theme.surfaceElevated)
-                                    .frame(width: 40, height: 40)
-                                    .overlay(Circle().stroke(Theme.border, lineWidth: Theme.borderWidth))
-                                Text(contact.prefix(1).uppercased())
-                                    .font(.system(size: 16, weight: .semibold))
-                                    .foregroundStyle(Theme.textSecondary)
-                            }
-                            VStack(alignment: .leading, spacing: 3) {
-                                Text(contact)
-                                    .font(.system(size: 15, weight: .semibold))
-                                    .foregroundStyle(Theme.textPrimary)
-                                if let role = lead.contactRole {
-                                    Text(role)
-                                        .font(.system(size: 12))
-                                        .foregroundStyle(Theme.textSecondary)
-                                }
-                            }
-                            Spacer()
-                            if let phone = lead.phone,
-                               let url = URL(string: "tel:\(phone.filter { $0.isNumber })") {
-                                Link(destination: url) {
-                                    Image(systemName: "phone.fill")
-                                        .font(.system(size: 16))
-                                        .foregroundStyle(Theme.accent)
-                                        .frame(width: 40, height: 40)
-                                        .background(Theme.accent.opacity(0.10))
-                                        .clipShape(Circle())
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
-            // Notes placeholder
-            emptyCard("Conversation history and notes will appear here after visits are logged.")
-        }
-    }
-
-    // MARK: — Helpers
-
-    private func cardLabel(_ text: String) -> some View {
-        Text(text)
-            .font(.system(size: 11, weight: .semibold))
-            .foregroundStyle(Theme.textMuted)
-            .tracking(0.6)
-            .textCase(.uppercase)
-            .padding(.bottom, 2)
-    }
-
-    private func emptyCard(_ message: String) -> some View {
-        DetailCard {
-            Text(message)
-                .font(.system(size: 13))
-                .foregroundStyle(Theme.textMuted)
                 .frame(maxWidth: .infinity, alignment: .leading)
+                .brandCard()
+            }
+
+            if let contact = lead.contactPerson {
+                BrandSection(eyebrow: "Point of contact") {
+                    HStack(spacing: 14) {
+                        ZStack {
+                            Circle().fill(Brand.bgCard).frame(width: 40, height: 40)
+                                .overlay(Circle().strokeBorder(Brand.line, lineWidth: 1))
+                            Text(contact.prefix(1).uppercased())
+                                .font(Brand.Font.display(15, weight: .semibold))
+                                .foregroundStyle(Brand.cream)
+                        }
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(contact)
+                                .font(Brand.Font.display(15, weight: .medium))
+                                .foregroundStyle(Brand.cream)
+                            if let role = lead.contactRole {
+                                Text(role)
+                                    .font(Brand.Font.body(Brand.Font.caption))
+                                    .foregroundStyle(Brand.creamDim)
+                            }
+                        }
+                        Spacer()
+                        if let phone = lead.phone,
+                           let url = URL(string: "tel:\(phone.filter { $0.isNumber })") {
+                            Link(destination: url) {
+                                Image(systemName: "phone.fill")
+                                    .font(.system(size: 15))
+                                    .foregroundStyle(Brand.signal)
+                                    .frame(width: 40, height: 40)
+                                    .background(Circle().fill(Brand.signalSoft))
+                                    .overlay(Circle().strokeBorder(Brand.signalBorder, lineWidth: 1))
+                            }
+                        }
+                    }
+                    .brandCard()
+                }
+            }
+
+            EmptyState(
+                eyebrow: "Notes",
+                title: "Nothing logged yet.",
+                sub: "Conversation history and notes will appear here after visits."
+            )
         }
     }
+
+    // ───────────── Sticky bottom action bar ─────────────
+
+    @ViewBuilder
+    private var stickyActionBar: some View {
+        HStack(spacing: 10) {
+            if hasPrimaryAction {
+                Button {
+                    BrandHaptics.tap()
+                    showStatusPicker = true
+                } label: {
+                    updateStatusLabel
+                }
+                .buttonStyle(GhostButtonStyle(size: .sm))
+                .disabled(isUpdatingStatus)
+
+                primaryActionButton
+            } else {
+                Button {
+                    BrandHaptics.tap()
+                    showStatusPicker = true
+                } label: {
+                    updateStatusLabel
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(PrimaryButtonStyle(size: .sm))
+                .disabled(isUpdatingStatus)
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.top, 8)
+        .padding(.bottom, 0)
+        .background(
+            ZStack {
+                Brand.ink.opacity(0.92)
+                Rectangle().fill(.ultraThinMaterial)
+            }
+            .ignoresSafeArea(edges: .bottom)
+            .overlay(alignment: .top) {
+                Rectangle().fill(Brand.line).frame(height: 1)
+            }
+        )
+    }
+
+    private var hasPrimaryAction: Bool {
+        (lead.hasDemoSite && lead.demoSiteDomain != nil) || lead.phone != nil
+    }
+
+    @ViewBuilder
+    private var updateStatusLabel: some View {
+        HStack(spacing: 6) {
+            if isUpdatingStatus {
+                ProgressView().scaleEffect(0.7).tint(Brand.cream)
+            } else {
+                Text("UPDATE STATUS")
+                    .font(Brand.Font.mono(11))
+                    .tracking(Brand.Tracking.eyebrow)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var primaryActionButton: some View {
+        if lead.hasDemoSite, lead.demoSiteDomain != nil {
+            Button {
+                BrandHaptics.tap(.medium)
+                showClientPresentation = true
+            } label: {
+                HStack(spacing: 5) {
+                    Image(systemName: "iphone")
+                        .font(.system(size: 12, weight: .medium))
+                    Text("Show demo")
+                }
+                .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(PrimaryButtonStyle(size: .sm))
+        } else if let phone = lead.phone,
+                  let url = URL(string: "tel:\(phone.filter { $0.isNumber })") {
+            Link(destination: url) {
+                HStack(spacing: 5) {
+                    Image(systemName: "phone.fill").font(.system(size: 12))
+                    Text("Call")
+                }
+                .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(PrimaryButtonStyle(size: .sm))
+        }
+    }
+
+    // ───────────── Helpers ─────────────
 
     private func relativeDate(_ date: Date) -> String {
         let days = Calendar.current.dateComponents([.day], from: .now, to: date).day ?? 0
@@ -613,6 +1099,94 @@ struct LeadDetailView: View {
         locationManager.stopUpdating()
     }
 
+    /// Fetches the detail payload from /api/leads/:id and merges the rich
+    /// sales-brief fields into the local SwiftData record. The list
+    /// endpoint (used by LeadsView) returns a compact row without
+    /// services, trust_badges, hook, opener, etc. — so a detail fetch on
+    /// screen open is how those fields ever reach the UI.
+    @MainActor
+    private func fetchDetail() async {
+        do {
+            let dto = try await APIClient.shared.fetchLead(id: lead.assignmentId)
+            let enc = JSONEncoder()
+            func encode<T: Encodable>(_ val: T?) -> String? {
+                guard let v = val, let d = try? enc.encode(v) else { return nil }
+                return String(data: d, encoding: .utf8)
+            }
+
+            if lead.pendingStatusUpdate == nil { lead.status = dto.status }
+            if let n = dto.businessName  { lead.businessName = n }
+            if let t = dto.businessType  { lead.businessType = t }
+            if let p = dto.postcode      { lead.postcode = p }
+            if let a = dto.address       { lead.address = a }
+            lead.phone              = dto.phone ?? lead.phone
+            lead.googleRating       = dto.googleRating ?? lead.googleRating
+            lead.googleReviewCount  = dto.googleReviewCount ?? lead.googleReviewCount
+            lead.hasDemoSite        = dto.hasDemoSite
+            lead.demoSiteDomain     = dto.demoSiteDomain ?? lead.demoSiteDomain
+            lead.hasWebsite         = dto.hasWebsite ?? lead.hasWebsite
+            lead.contactPerson      = dto.contactPerson ?? lead.contactPerson
+            lead.contactRole        = dto.contactRole ?? lead.contactRole
+
+            // Rich content (list endpoint strips these out)
+            lead.openingHours       = encode(dto.openingHours) ?? lead.openingHours
+            lead.services           = encode(dto.services) ?? lead.services
+            lead.trustBadges        = encode(dto.trustBadges) ?? lead.trustBadges
+            lead.avoidTopics        = encode(dto.avoidTopics) ?? lead.avoidTopics
+            lead.bestReviews        = encode(dto.bestReviews) ?? lead.bestReviews
+
+            // Sales brief
+            lead.hook               = dto.hook ?? lead.hook
+            lead.opener             = dto.opener ?? lead.opener
+            lead.demoMoments        = encode(dto.demoMoments) ?? lead.demoMoments
+            lead.specificObjections = encode(dto.specificObjections) ?? lead.specificObjections
+            lead.closeScript        = dto.closeScript ?? lead.closeScript
+            lead.nextVisitReason    = dto.nextVisitReason ?? lead.nextVisitReason
+            lead.painPointsExtended = dto.painPointsExtended ?? lead.painPointsExtended
+            lead.painPoints         = encode(dto.painPoints) ?? lead.painPoints
+
+            lead.lastSyncedAt = .now
+            try? modelContext.save()
+
+            // Persist admin-uploaded demo HTML so it renders offline.
+            // ClientPresentationView's localURLSync picks this up first.
+            //
+            // The admin has two upload paths:
+            //   1. Inline HTML blob in `demo_site_html`      — save directly
+            //   2. File upload to Supabase Storage, URL stashed in
+            //      `demo_site_domain` (starts with http[s]://)  — fetch + save
+            if let domain = dto.demoSiteDomain ?? lead.demoSiteDomain {
+                if let html = dto.demoSiteHtml, !html.isEmpty {
+                    DemoSiteCache.shared.saveHTML(html, for: domain)
+                } else if domain.lowercased().hasPrefix("http") {
+                    Task.detached { await DemoSiteCache.shared.cacheFromURL(domain) }
+                }
+            }
+        } catch {
+            if !(error is CancellationError),
+               !(error is URLError && (error as? URLError)?.code == .cancelled) {
+                NSLog("[LeadDetailView] fetchDetail failed: %@", "\(error)")
+            }
+        }
+    }
+
+    @MainActor
+    private func geocodeIfNeeded() async {
+        guard lead.cachedLat == nil || lead.cachedLng == nil else { return }
+        let address = lead.address.trimmingCharacters(in: .whitespaces)
+        let postcode = lead.postcode.trimmingCharacters(in: .whitespaces)
+        guard !address.isEmpty || !postcode.isEmpty else { return }
+        let parts = [address, postcode, "UK"].filter { !$0.isEmpty }
+        let query = parts.joined(separator: ", ")
+        let geocoder = CLGeocoder()
+        if let placemarks = try? await geocoder.geocodeAddressString(query),
+           let loc = placemarks.first?.location?.coordinate {
+            lead.cachedLat = loc.latitude
+            lead.cachedLng = loc.longitude
+            try? modelContext.save()
+        }
+    }
+
     private func formatDuration(_ interval: TimeInterval) -> String {
         let m = Int(interval) / 60
         let s = Int(interval) % 60
@@ -620,155 +1194,83 @@ struct LeadDetailView: View {
     }
 }
 
-// MARK: — Sub-components
+// MARK: — QuickActionButton
 
-struct DetailCard<Content: View>: View {
-    @ViewBuilder let content: Content
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            content.padding(16)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Theme.surface)
-        .clipShape(RoundedRectangle(cornerRadius: Theme.radiusCard))
-        .overlay(
-            RoundedRectangle(cornerRadius: Theme.radiusCard)
-                .stroke(Theme.border, lineWidth: Theme.borderWidth)
-        )
-    }
-}
-
-struct SectionHeader: View {
-    let title: String
-
-    var body: some View {
-        Text(title)
-            .font(.system(size: 11, weight: .semibold))
-            .foregroundStyle(Theme.textMuted)
-            .tracking(0.6)
-            .textCase(.uppercase)
-    }
-}
-
-struct DetailRow: View {
+private struct QuickActionButton: View {
     let icon: String
     let label: String
-    let value: String
+    var accent: Bool = false
+    let action: () -> Void
 
     var body: some View {
-        HStack(alignment: .top, spacing: 8) {
-            Image(systemName: icon)
-                .font(.system(size: 13))
-                .foregroundStyle(Theme.textMuted)
-                .frame(width: 20)
-            Text(label)
-                .font(.system(size: 12))
-                .foregroundStyle(Theme.textMuted)
-                .frame(width: 60, alignment: .leading)
-            Text(value)
-                .font(.system(size: 13))
-                .foregroundStyle(Theme.textPrimary)
-            Spacer()
-        }
-    }
-}
-
-struct StatusBadge: View {
-    let status: String
-
-    var body: some View {
-        Text(Theme.statusLabel(for: status))
-            .font(.system(size: 11, weight: .semibold))
-            .foregroundStyle(Theme.statusColor(for: status))
-            .padding(.horizontal, 8)
-            .padding(.vertical, 4)
-            .background(Theme.statusColor(for: status).opacity(0.12))
-            .clipShape(RoundedRectangle(cornerRadius: 6))
-            .overlay(
-                RoundedRectangle(cornerRadius: 6)
-                    .stroke(Theme.statusColor(for: status).opacity(0.3), lineWidth: Theme.borderWidth)
+        Button(action: action) {
+            VStack(spacing: 4) {
+                Image(systemName: icon)
+                    .font(.system(size: 13, weight: .medium))
+                Text(label.uppercased())
+                    .font(Brand.Font.mono(9))
+                    .tracking(Brand.Tracking.eyebrow)
+            }
+            .foregroundStyle(accent ? Brand.signal : Brand.creamDim)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 10)
+            .background(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(accent ? Brand.signalSoft : Brand.bgStrong)
             )
+            .overlay(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .strokeBorder(accent ? Brand.signalBorder : Brand.line, lineWidth: 1)
+            )
+        }
+        .buttonStyle(.plain)
     }
 }
 
-private struct BulletCard: View {
-    let title: String
-    let items: [String]
-    let icon: String
-    var accentColor: Color = Color(hex: "#5B7B9D")
+// MARK: — MapCard
+
+private struct MapCard: View {
+    let name: String
+    let coordinate: CLLocationCoordinate2D
+    let onTap: () -> Void
 
     var body: some View {
-        DetailCard {
-            VStack(alignment: .leading, spacing: 10) {
-                SectionHeader(title: title)
-                VStack(alignment: .leading, spacing: 8) {
-                    ForEach(items, id: \.self) { item in
-                        HStack(alignment: .top, spacing: 10) {
-                            Image(systemName: icon)
-                                .font(.system(size: 10, weight: .medium))
-                                .foregroundStyle(accentColor)
-                                .frame(width: 20, height: 20)
-                                .background(accentColor.opacity(0.1))
-                                .clipShape(RoundedRectangle(cornerRadius: 5))
-                            Text(item)
-                                .font(.system(size: 13))
-                                .foregroundStyle(Theme.textSecondary)
-                                .fixedSize(horizontal: false, vertical: true)
-                        }
-                    }
+        Button(action: onTap) {
+            ZStack(alignment: .topTrailing) {
+                Map(initialPosition: .camera(MapCamera(
+                    centerCoordinate: coordinate,
+                    distance: 600
+                ))) {
+                    Marker(name, coordinate: coordinate)
+                        .tint(Brand.signal)
                 }
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-        }
-        .frame(maxWidth: .infinity)
-    }
-}
+                .disabled(true)
+                .frame(height: 140)
+                .clipShape(RoundedRectangle(cornerRadius: Brand.Radius.card, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: Brand.Radius.card, style: .continuous)
+                        .strokeBorder(Brand.line, lineWidth: 1)
+                )
 
-private struct PriceRow: View {
-    let label: String
-    let value: String
-    var highlight: Bool = false
-
-    var body: some View {
-        HStack {
-            Text(label)
-                .font(.system(size: 13, weight: highlight ? .semibold : .regular))
-                .foregroundStyle(highlight ? Theme.textPrimary : Theme.textSecondary)
-            Spacer()
-            Text(value)
-                .font(.system(size: 13, weight: highlight ? .bold : .regular, design: .monospaced))
-                .foregroundStyle(highlight ? Color(hex: "#6B8F7B") : Theme.textPrimary)
-        }
-    }
-}
-
-private struct ObjectionRow: View {
-    let objection: String
-    let response: String
-
-    var body: some View {
-        HStack(alignment: .top, spacing: 10) {
-            Image(systemName: "exclamationmark.bubble")
-                .font(.system(size: 11, weight: .medium))
-                .foregroundStyle(Color(hex: "#9B8B6B"))
-                .frame(width: 22, height: 22)
-                .background(Color(hex: "#9B8B6B").opacity(0.1))
-                .clipShape(RoundedRectangle(cornerRadius: 5))
-                .padding(.top, 1)
-            VStack(alignment: .leading, spacing: 4) {
-                Text(objection)
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(Theme.textPrimary)
-                Text(response)
-                    .font(.system(size: 13))
-                    .foregroundStyle(Theme.textSecondary)
+                HStack(spacing: 4) {
+                    Image(systemName: "arrow.up.forward")
+                        .font(.system(size: 9, weight: .semibold))
+                    Text("MAPS")
+                        .font(Brand.Font.mono(9))
+                        .tracking(Brand.Tracking.eyebrow)
+                }
+                .foregroundStyle(Brand.ink)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .background(Capsule().fill(Brand.cream))
+                .padding(12)
             }
         }
+        .buttonStyle(.plain)
     }
 }
 
-// MARK: — Demo Viewer
+// MARK: — Demo Viewer (unchanged)
 struct DemoViewerView: View {
     let domain: String
     let businessName: String
@@ -785,7 +1287,7 @@ struct DemoViewerView: View {
                         Button(action: share) {
                             Image(systemName: "square.and.arrow.up")
                         }
-                        .foregroundStyle(Theme.accent)
+                        .foregroundStyle(Brand.signal)
                     }
                 }
         }
@@ -800,7 +1302,7 @@ struct DemoViewerView: View {
     }
 }
 
-// MARK: — LocationManager
+// MARK: — LocationManager (unchanged)
 @MainActor
 final class LocationManager: NSObject, ObservableObject, CLLocationManagerDelegate {
     private let manager = CLLocationManager()
@@ -847,9 +1349,13 @@ final class LocationManager: NSObject, ObservableObject, CLLocationManagerDelega
         trustBadges: "[\"Google Guaranteed\",\"5-star rated\",\"Family run since 2008\"]",
         avoidTopics: "[\"Previous web agency\",\"Online reviews\"]"
     )
-    return NavigationStack {
-        LeadDetailView(lead: lead)
+    return ZStack {
+        BrandBackground()
+        NavigationStack {
+            LeadDetailView(lead: lead)
+        }
+        .modelContainer(for: Lead.self, inMemory: true)
+        .environmentObject(AuthStore.shared)
     }
-    .modelContainer(for: Lead.self, inMemory: true)
-    .environmentObject(AuthStore.shared)
+    .preferredColorScheme(.dark)
 }

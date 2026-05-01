@@ -45,5 +45,7 @@
 	<string>SalesFlow needs camera access to photograph storefronts</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>SalesFlow logs your location during visits to verify attendance</string>
+	<key>NSFaceIDUsageDescription</key>
+	<string>SalesFlow uses Face ID so you can sign in without re-typing your PIN</string>
 </dict>
 </plist>

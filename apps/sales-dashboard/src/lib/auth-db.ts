@@ -22,6 +22,7 @@ export interface SalesUserRow {
   phone: string | null;
   area_postcode: string | null;
   commission_rate: number;
+  commission_amount_pence: number | null;
   active: boolean;
   device_type?: string | null;
   last_active_at?: string | null;
@@ -148,6 +149,8 @@ function normaliseRow(row: Record<string, unknown>): SalesUserRow {
     phone: (row.phone as string | null) ?? null,
     area_postcode: (row.area_postcode as string | null) ?? null,
     commission_rate: typeof row.commission_rate === 'number' ? row.commission_rate : 0.1,
+    commission_amount_pence:
+      typeof row.commission_amount_pence === 'number' ? row.commission_amount_pence : null,
     active: row.active === true || row.active === 1,
     device_type: (row.device_type as string | null) ?? null,
     last_active_at: (row.last_active_at as string | null) ?? null,

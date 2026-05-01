@@ -145,6 +145,7 @@ private struct QROptionCard: View {
                         .foregroundStyle(Theme.textMuted)
                 }
                 .padding(16)
+                .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
 
@@ -264,6 +265,7 @@ private struct ShareOptionCard: View {
                 RoundedRectangle(cornerRadius: Theme.radiusCard)
                     .stroke(Theme.border, lineWidth: 1)
             )
+            .contentShape(RoundedRectangle(cornerRadius: Theme.radiusCard))
         }
         .buttonStyle(.plain)
     }
