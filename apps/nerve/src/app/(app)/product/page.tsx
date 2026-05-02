@@ -1,0 +1,60 @@
+import { prisma } from "@/lib/db";
+import Link from "next/link";
+import { PageHeader } from "@/components/PageHeader";
+import { StatTile } from "@/components/StatTile";
+import { ProductSubNav } from "./_components/SubNav";
+
+export const dynamic = "force-dynamic";
+
+export default async function ProductOverviewPage() {
+  const [prompts, totalVersions] = await Promise.all([
+    prisma.promptLibraryEntry.count(),
+    prisma.promptVersion.count(),
+  ]);
+
+  return (
+    <div className="p-6 space-y-6">
+      <ProductSubNav />
+      <PageHeader title="Product & System" subtitle="Prompt library lands first; rest of section in Stage 6." />
+
+      <section>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-px bg-border border border-border">
+          <StatTile label="prompts" value={prompts.toLocaleString()} />
+          <StatTile label="prompt versions" value={totalVersions.toLocaleString()} />
+          <StatTile label="architecture docs" value="—" hint="Stage 6" />
+          <StatTile label="model docs" value="—" hint="Stage 6" />
+        </div>
+      </section>
+
+      <section>
+        <div className="h-section mb-2">available now</div>
+        <div className="border border-border bg-bg-panel divide-y divide-border max-w-2xl">
+          <Link href="/product/prompts" className="block px-4 py-3 hover:bg-bg-hover">
+            <div className="font-sans text-sm text-fg">Prompt library</div>
+            <div className="font-mono text-2xs text-fg-dim mt-1">
+              Versioned prompts. Every iteration kept, never deleted.
+            </div>
+          </Link>
+        </div>
+      </section>
+
+      <section>
+        <div className="h-section mb-2">stage 6</div>
+        <div className="border border-border bg-bg-panel divide-y divide-border max-w-2xl">
+          {[
+            ["Architecture documents", "Versioned design docs in markdown."],
+            ["System changelog", "Date / version / what changed / why."],
+            ["Infrastructure notes", "Service / purpose / config."],
+            ["Pipelines", "Pipeline name / description / version / performance."],
+            ["Models", "Model / purpose / training / cost per cycle."],
+          ].map(([title, desc]) => (
+            <div key={title} className="px-4 py-3">
+              <div className="font-sans text-sm text-fg-muted">{title}</div>
+              <div className="font-mono text-2xs text-fg-dim mt-1">{desc}</div>
+            </div>
+          ))}
+        </div>
+      </section>
+    </div>
+  );
+}
