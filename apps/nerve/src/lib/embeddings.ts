@@ -5,6 +5,15 @@ import { chunkRecord, semanticChunk, type Chunk } from "./chunk";
 const EMBED_MODEL = "text-embedding-3-small";
 const EMBED_DIMS = 1536;
 
+// When OPENAI_API_KEY is unset (dev mode), embedding silently skips so
+// callers don't have to special-case it. Records still save; the rows
+// just don't get vectors. Run `npm run db:backfill-embeddings` once the
+// key is added to backfill the missing ones.
+function isEmbeddingDisabled(): boolean {
+  const key = process.env.OPENAI_API_KEY;
+  return !key || key === "" || key.startsWith("sk-not-real");
+}
+
 let _openai: OpenAI | null = null;
 function client(): OpenAI {
   if (_openai) return _openai;
@@ -41,7 +50,8 @@ async function embedBatch(texts: string[]): Promise<number[][]> {
 export async function embedRecord(
   target: EmbedTarget,
   fields: Record<string, string | number | boolean | Date | null | undefined>,
-): Promise<{ chunks: number }> {
+): Promise<{ chunks: number; skipped?: true }> {
+  if (isEmbeddingDisabled()) return { chunks: 0, skipped: true };
   const chunks = chunkRecord(fields);
   await replaceEmbeddings(target, chunks);
   return { chunks: chunks.length };
@@ -52,7 +62,8 @@ export async function embedRecord(
 export async function embedText(
   target: EmbedTarget,
   text: string,
-): Promise<{ chunks: number }> {
+): Promise<{ chunks: number; skipped?: true }> {
+  if (isEmbeddingDisabled()) return { chunks: 0, skipped: true };
   const chunks = semanticChunk(text);
   await replaceEmbeddings(target, chunks);
   return { chunks: chunks.length };
