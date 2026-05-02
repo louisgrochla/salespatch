@@ -91,7 +91,7 @@ export async function resolveSource(
           sourceType, sourceId, exists: true,
           title: `${r.authors} (${r.year ?? "n.d."})`,
           hint: r.title,
-          url: `/research/literature/${sourceId}`,
+          url: `/dissertation/literature/${sourceId}`,
         };
       }
       case "DissertationSection": {
@@ -104,7 +104,7 @@ export async function resolveSource(
           sourceType, sourceId, exists: true,
           title: r.chapter,
           hint: `${r.status.replace("_", " ")} · ${r.wordCount} words`,
-          url: `/research/sections/${sourceId}`,
+          url: `/dissertation/sections/${sourceId}`,
         };
       }
       case "DissertationMeta": {
@@ -117,7 +117,7 @@ export async function resolveSource(
           sourceType, sourceId, exists: true,
           title: "Dissertation metadata",
           hint: r.workingTitle.slice(0, 120),
-          url: `/research/dissertation`,
+          url: `/dissertation/meta`,
         };
       }
       case "MethodologyDoc": {
@@ -129,7 +129,7 @@ export async function resolveSource(
         return {
           sourceType, sourceId, exists: true,
           title: `Methodology — ${r.phaseName}`,
-          url: `/research/methodology/${sourceId}`,
+          url: `/dissertation/methodology/${sourceId}`,
         };
       }
       case "PhaseBoundary": {
@@ -141,7 +141,7 @@ export async function resolveSource(
         return {
           sourceType, sourceId, exists: true,
           title: r.name, hint: r.operationalDescription.slice(0, 120),
-          url: `/research/phases/${sourceId}`, date: r.startDate,
+          url: `/dissertation/phases/${sourceId}`, date: r.startDate,
         };
       }
       case "PromptLibraryEntry": {
@@ -167,7 +167,7 @@ export async function resolveSource(
           sourceType, sourceId, exists: true,
           title: `Evidence → ${r.sourceType}`,
           hint: r.annotation.slice(0, 120),
-          url: `/research/evidence/${sourceId}`,
+          url: `/dissertation/evidence/${sourceId}`,
         };
       }
       case "SupervisorMeeting": {
@@ -180,7 +180,7 @@ export async function resolveSource(
           sourceType, sourceId, exists: true,
           title: `Supervisor · ${r.date.toISOString().slice(0, 10)}`,
           hint: (r.notes ?? r.feedback ?? "").slice(0, 120),
-          url: `/research/supervisor/${sourceId}`, date: r.date,
+          url: `/dissertation/supervisor/${sourceId}`, date: r.date,
         };
       }
       case "AcademicCalendarItem": {
@@ -192,7 +192,7 @@ export async function resolveSource(
         return {
           sourceType, sourceId, exists: true,
           title: r.milestone, hint: `${r.status} · ${r.deadline.toISOString().slice(0, 10)}`,
-          url: `/research/calendar/${sourceId}`, date: r.deadline,
+          url: `/dissertation/calendar/${sourceId}`, date: r.deadline,
         };
       }
     }

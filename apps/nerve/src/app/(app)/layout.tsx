@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
+import { authOptions, type AppRole } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 import { Sidebar, type SidebarCounts } from "@/components/Sidebar";
@@ -49,6 +49,11 @@ export default async function ProtectedLayout({
 }) {
   const session = await getServerSession(authOptions);
   if (!session) redirect("/login");
+  // Defence-in-depth role enforcement on top of middleware. A
+  // supervisor session signed in via /supervisor/login MUST NOT see
+  // founder content even if middleware misconfigures.
+  const role = (session.user as { role?: AppRole }).role ?? "founder";
+  if (role !== "founder") redirect("/supervisor");
 
   const counts = await loadCounts();
 

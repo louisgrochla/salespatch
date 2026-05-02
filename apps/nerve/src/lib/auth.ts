@@ -1,25 +1,31 @@
 import type { NextAuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
 
-// Single-founder auth. Compares against env vars directly — no user table
-// lookup, no registration. The User table exists for future audit needs
-// but is not consulted here.
+// Two credentials providers in one NextAuth instance:
+// - "founder"    → unrestricted access to NERVE
+// - "supervisor" → read-only /supervisor/* surface
 //
-// Password is plaintext in env (FOUNDER_PASSWORD). That's deliberate:
-// it's a single-tenant deployment, the env is private to the founder, and
-// hashing serves no purpose without a multi-user store.
+// Roles are encoded in the JWT and the session. Middleware enforces
+// per-route role gates.
+
+export type AppRole = "founder" | "supervisor";
 
 export const authOptions: NextAuthOptions = {
   session: {
+    // 24h for founder is fine; supervisor is treated identically at the
+    // session layer but the middleware enforces an 8h idle limit by
+    // checking the iat (issued-at) claim. Keeping a single jwt.maxAge
+    // means we don't need two cookie jars.
     strategy: "jwt",
-    maxAge: 60 * 60 * 24, // 24 hours, per spec
-    updateAge: 60 * 60, // refresh JWT on activity within the window
+    maxAge: 60 * 60 * 24,
+    updateAge: 60 * 60,
   },
   pages: {
-    signIn: "/login",
+    signIn: "/login", // founder default; supervisor login uses its own page
   },
   providers: [
     CredentialsProvider({
+      id: "founder",
       name: "Founder",
       credentials: {
         email: { label: "Email", type: "email" },
@@ -30,20 +36,51 @@ export const authOptions: NextAuthOptions = {
         const expectedPassword = process.env.FOUNDER_PASSWORD;
         if (!expectedEmail || !expectedPassword) return null;
         if (!credentials?.email || !credentials.password) return null;
-        const emailOk = credentials.email.toLowerCase() === expectedEmail.toLowerCase();
-        const pwOk = constantTimeEqual(credentials.password, expectedPassword);
-        if (!emailOk || !pwOk) return null;
-        return { id: "founder", email: expectedEmail, name: "Founder" };
+        if (
+          credentials.email.toLowerCase() === expectedEmail.toLowerCase() &&
+          constantTimeEqual(credentials.password, expectedPassword)
+        ) {
+          return { id: "founder", email: expectedEmail, name: "Founder", role: "founder" } as never;
+        }
+        return null;
+      },
+    }),
+    CredentialsProvider({
+      id: "supervisor",
+      name: "Supervisor",
+      credentials: {
+        email: { label: "Email", type: "email" },
+        password: { label: "Password", type: "password" },
+      },
+      async authorize(credentials) {
+        const expectedEmail = process.env.SUPERVISOR_EMAIL;
+        const expectedPassword = process.env.SUPERVISOR_PASSWORD;
+        if (!expectedEmail || !expectedPassword) return null;
+        if (!credentials?.email || !credentials.password) return null;
+        if (
+          credentials.email.toLowerCase() === expectedEmail.toLowerCase() &&
+          constantTimeEqual(credentials.password, expectedPassword)
+        ) {
+          return { id: "supervisor", email: expectedEmail, name: "Supervisor", role: "supervisor" } as never;
+        }
+        return null;
       },
     }),
   ],
   callbacks: {
     async jwt({ token, user }) {
-      if (user) token.id = user.id;
+      if (user) {
+        token.id = user.id;
+        const role = (user as unknown as { role?: AppRole }).role;
+        if (role) token.role = role;
+      }
       return token;
     },
     async session({ session, token }) {
-      if (session.user) (session.user as { id?: string }).id = token.id as string;
+      if (session.user) {
+        (session.user as { id?: string }).id = token.id as string;
+        (session.user as { role?: AppRole }).role = (token.role as AppRole) ?? "founder";
+      }
       return session;
     },
   },

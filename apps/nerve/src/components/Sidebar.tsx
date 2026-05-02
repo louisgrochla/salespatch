@@ -73,9 +73,9 @@ export function Sidebar({ counts }: { counts: SidebarCounts }) {
     {
       label: "research",
       items: [
-        { href: "/research", label: "Research Project", icon: GraduationCap, count: counts.sections },
-        { href: "/research/literature", label: "Literature", icon: BookOpen, count: counts.literature },
-        { href: "/research/methodology", label: "Methodology", icon: Beaker },
+        { href: "/dissertation", label: "Research Project", icon: GraduationCap, count: counts.sections },
+        { href: "/dissertation/literature", label: "Literature", icon: BookOpen, count: counts.literature },
+        { href: "/dissertation/methodology", label: "Methodology", icon: Beaker },
       ],
     },
     {

@@ -53,7 +53,7 @@ export async function resolveEvidenceSource(
         return { ...base, exists: true,
           title: `${r.authors} (${r.year ?? "n.d."})`,
           hint: r.title,
-          url: `/research/literature/${sourceId}` };
+          url: `/dissertation/literature/${sourceId}` };
       }
       case "PhaseBoundary": {
         const r = await prisma.phaseBoundary.findUnique({
@@ -62,7 +62,7 @@ export async function resolveEvidenceSource(
         if (!r) return base;
         return { ...base, exists: true,
           title: r.name, hint: r.operationalDescription,
-          url: `/research/phases/${sourceId}` };
+          url: `/dissertation/phases/${sourceId}` };
       }
       case "RevenueEntry": {
         const r = await prisma.revenueEntry.findUnique({

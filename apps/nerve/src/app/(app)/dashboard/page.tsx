@@ -274,7 +274,7 @@ export default async function DashboardPage() {
             <QuickAction href="/sales/new" label="Log pitch manually" />
             <QuickAction href="/operations/new" label="Add operations note" />
             <QuickAction href="/operations/new?type=decision" label="Log decision" />
-            <QuickAction href="/research/literature/new" label="Save literature source" />
+            <QuickAction href="/dissertation/literature/new" label="Save literature source" />
             <QuickAction href="/financial/new" label="Add financial entry" />
           </ul>
 
