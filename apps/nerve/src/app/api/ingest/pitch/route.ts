@@ -117,11 +117,11 @@ export async function POST(req: NextRequest) {
   }
 
   const pitchDate = pickPitchDate(record);
-  const phaseLabel = await phaseLabelFor(pitchDate);
   const outcome = normaliseOutcome(record.outcome);
   const supabasePitchId = record.id != null ? String(record.id) : null;
 
   try {
+    const phaseLabel = await phaseLabelFor(pitchDate);
     const pitch = await prisma.pitchLog.upsert({
       where: { supabasePitchId: supabasePitchId ?? "__never__" },
       create: {
