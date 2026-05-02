@@ -7,11 +7,11 @@ import { cn } from "@/lib/cn";
 const ITEMS: { href: string; label: string; ready: boolean }[] = [
   { href: "/product", label: "overview", ready: true },
   { href: "/product/prompts", label: "prompt library", ready: true },
-  { href: "/product/architecture", label: "architecture", ready: false },
-  { href: "/product/changelog", label: "changelog", ready: false },
-  { href: "/product/infrastructure", label: "infrastructure", ready: false },
-  { href: "/product/pipelines", label: "pipelines", ready: false },
-  { href: "/product/models", label: "models", ready: false },
+  { href: "/product/architecture", label: "architecture", ready: true },
+  { href: "/product/changelog", label: "changelog", ready: true },
+  { href: "/product/infrastructure", label: "infrastructure", ready: true },
+  { href: "/product/pipelines", label: "pipelines", ready: true },
+  { href: "/product/models", label: "models", ready: true },
 ];
 
 export function ProductSubNav() {
