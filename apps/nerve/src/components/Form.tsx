@@ -12,7 +12,7 @@ export function Field({
   required,
 }: {
   label: string;
-  hint?: string;
+  hint?: React.ReactNode;
   className?: string;
   required?: boolean;
   children: React.ReactNode;
@@ -24,7 +24,9 @@ export function Field({
         {required && <span className="text-status-rejected ml-1">*</span>}
       </span>
       {children}
-      {hint && <span className="block font-mono text-2xs text-fg-dim mt-1">{hint}</span>}
+      {hint != null && hint !== "" && (
+        <span className="block font-mono text-2xs text-fg-dim mt-1">{hint}</span>
+      )}
     </label>
   );
 }
