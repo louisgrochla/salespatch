@@ -604,6 +604,45 @@ model IpDocument {
   updatedAt   DateTime @updatedAt
 }
 
+// ─── /ask conversation history ──────────────────────────────────────────
+//
+// Each /ask query persists alongside the retrieved sources and Claude's
+// response. The conversation log is itself dissertation evidence —
+// "I asked the system X on date Y" is citable.
+
+model ChatSession {
+  id          String        @id @default(cuid())
+  title       String?
+  phaseLabel  String
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  messages    ChatMessage[]
+
+  @@index([createdAt])
+}
+
+model ChatMessage {
+  id           String      @id @default(cuid())
+  sessionId    String
+  // "user" | "assistant" | "system" — the system message is built fresh
+  // per turn from current vault state, never persisted as a row.
+  role         String
+  content      String
+  // Sources retrieved for THIS turn — array of
+  // { sourceType, sourceId, title, excerpt, distance, sectionPath }.
+  sources      Json?
+  model        String?
+  inputTokens  Int?
+  outputTokens Int?
+  createdAt    DateTime    @default(now())
+
+  session      ChatSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId])
+  @@index([createdAt])
+}
+
 // ─── webhook ingestion log (operational visibility for failures) ─────────
 
 enum IngestStatus {
