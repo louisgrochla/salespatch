@@ -1,0 +1,67 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    color-scheme: dark;
+  }
+
+  html, body {
+    @apply bg-bg text-fg font-sans antialiased;
+  }
+
+  body {
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+
+  ::selection {
+    background: rgba(124, 124, 240, 0.25);
+  }
+
+  /* Hairline scrollbars to match the terminal feel. */
+  *::-webkit-scrollbar { width: 8px; height: 8px; }
+  *::-webkit-scrollbar-track { background: transparent; }
+  *::-webkit-scrollbar-thumb {
+    background: #2a2a2f;
+    border-radius: 4px;
+  }
+  *::-webkit-scrollbar-thumb:hover { background: #3a3a40; }
+}
+
+@layer components {
+  /* Section heading — small caps, tracked, used everywhere. */
+  .h-section {
+    @apply font-sans text-2xs uppercase tracking-wider text-fg-dim;
+  }
+
+  /* Data label / key in a table. */
+  .h-data {
+    @apply font-mono text-xs text-fg;
+  }
+
+  /* Phase pill. */
+  .pill {
+    @apply inline-flex items-center px-1.5 py-0.5 rounded-sm font-mono text-2xs uppercase tracking-wider border;
+  }
+  .pill-phase-1 { @apply border-phase-one/40 text-phase-one bg-phase-one/10; }
+  .pill-phase-2 { @apply border-phase-two/40 text-phase-two bg-phase-two/10; }
+  .pill-phase-3 { @apply border-phase-three/40 text-phase-three bg-phase-three/10; }
+  .pill-status-closed   { @apply border-status-closed/40 text-status-closed bg-status-closed/10; }
+  .pill-status-rejected { @apply border-status-rejected/40 text-status-rejected bg-status-rejected/10; }
+  .pill-status-followup { @apply border-status-followup/40 text-status-followup bg-status-followup/10; }
+  .pill-status-pending  { @apply border-status-pending/40 text-status-pending bg-status-pending/10; }
+
+  /* Generic dense table. */
+  .nv-table {
+    @apply w-full border-collapse;
+  }
+  .nv-table thead th {
+    @apply font-sans text-2xs uppercase tracking-wider text-fg-dim text-left
+           px-3 py-2 border-b border-border;
+  }
+  .nv-table tbody td {
+    @apply font-mono text-xs text-fg px-3 py-2 border-b border-border/60 align-top;
+  }
+  .nv-table tbody tr:hover { @apply bg-bg-hover; }
+}
