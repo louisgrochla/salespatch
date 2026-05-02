@@ -2,6 +2,7 @@ import { prisma } from "@/lib/db";
 import { format, formatDistanceToNow } from "date-fns";
 import { PageHeader, HeaderLink } from "@/components/PageHeader";
 import { Field, TextInput, TextArea, Select, SubmitButton } from "@/components/Form";
+import { Markdown } from "@/components/Markdown";
 import { ResearchSubNav } from "../_components/SubNav";
 import { updateDissertationMeta } from "./actions";
 
@@ -35,7 +36,7 @@ export default async function DissertationPage({
       <PageHeader
         title="Dissertation"
         subtitle={meta
-          ? <>updated {formatDistanceToNow(meta.updatedAt, { addSuffix: true })} · {titleVersions.length} title revisions · {rqVersions.length} RQ revisions</>
+          ? <>updated {formatDistanceToNow(meta.updatedAt, { addSuffix: true })} · {titleVersions.length} title revision{titleVersions.length === 1 ? "" : "s"} · {rqVersions.length} RQ revision{rqVersions.length === 1 ? "" : "s"}</>
           : "no record yet — fill the form below to initialise"}
         actions={
           editing ? (
@@ -59,11 +60,21 @@ export default async function DissertationPage({
           <Field label="research question" required hint="Versioned. The full evolution is preserved.">
             <TextArea name="researchQuestion" rows={4} required defaultValue={meta?.researchQuestion ?? ""} />
           </Field>
+
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="degree" hint="e.g. BA (Hons) Digital Marketing and Business Analytics">
+              <TextInput name="degree" defaultValue={meta?.degree ?? ""} />
+            </Field>
+            <Field label="institution">
+              <TextInput name="institution" defaultValue={meta?.institution ?? ""} />
+            </Field>
+          </div>
+
           <div className="grid grid-cols-3 gap-3">
             <Field label="supervisor">
               <TextInput name="supervisor" defaultValue={meta?.supervisor ?? ""} />
             </Field>
-            <Field label="submission deadline">
+            <Field label="submission deadline" hint="Set when confirmed; use the note field while TBC.">
               <TextInput type="date" name="submissionDeadline" defaultValue={deadline} />
             </Field>
             <Field label="overall status" required>
@@ -75,31 +86,107 @@ export default async function DissertationPage({
               </Select>
             </Field>
           </div>
+
+          <Field label="submission deadline note" hint="Free text — use until the exact deadline is confirmed.">
+            <TextInput name="submissionDeadlineNote" defaultValue={meta?.submissionDeadlineNote ?? ""} />
+          </Field>
+
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="word count target — min">
+              <TextInput type="number" min={0} name="wordCountTargetMin" defaultValue={meta?.wordCountTargetMin ?? ""} />
+            </Field>
+            <Field label="word count target — max">
+              <TextInput type="number" min={0} name="wordCountTargetMax" defaultValue={meta?.wordCountTargetMax ?? ""} />
+            </Field>
+          </div>
+
+          <Field label="academic framing"
+            hint="The reusable paragraph that describes the study to a supervisor in the right register. Surfaced by /ask whenever the dissertation framing is queried.">
+            <TextArea name="academicFraming" rows={6} defaultValue={meta?.academicFraming ?? ""} />
+          </Field>
+
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="degree relevance — digital marketing" hint="Markdown. Use bullet lines.">
+              <TextArea name="degreeRelevanceMarketing" rows={6} defaultValue={meta?.degreeRelevanceMarketing ?? ""} />
+            </Field>
+            <Field label="degree relevance — business analytics" hint="Markdown. Use bullet lines.">
+              <TextArea name="degreeRelevanceAnalytics" rows={6} defaultValue={meta?.degreeRelevanceAnalytics ?? ""} />
+            </Field>
+          </div>
+
           <div className="flex items-center gap-2 pt-2 border-t border-border">
             <SubmitButton>{meta ? "Save changes" : "Initialise dissertation"}</SubmitButton>
           </div>
         </form>
       ) : meta ? (
-        <>
-          <div className="border border-border bg-bg-panel divide-y divide-border max-w-3xl">
-            <Block label="working title" value={meta.workingTitle} />
-            <Block label="research question" value={meta.researchQuestion} />
-            <Row label="supervisor">{meta.supervisor ?? "—"}</Row>
-            <Row label="submission deadline">
-              {meta.submissionDeadline
-                ? <>{format(meta.submissionDeadline, "EEE dd LLL yyyy")} <span className="text-fg-dim">({daysFromNow(meta.submissionDeadline)} days)</span></>
-                : "—"}
-            </Row>
-            <Row label="status">{meta.overallStatus.replace("_", " ")}</Row>
+        <div className="grid grid-cols-1 lg:grid-cols-[1fr_18rem] gap-4">
+          <div className="space-y-4">
+            <div className="border border-border bg-bg-panel divide-y divide-border">
+              <Block label="working title" value={meta.workingTitle} />
+              <Block label="research question" value={meta.researchQuestion} />
+              <Row label="degree">{meta.degree ?? "—"}</Row>
+              <Row label="institution">{meta.institution ?? "—"}</Row>
+              <Row label="supervisor">{meta.supervisor ?? "—"}</Row>
+              <Row label="submission">
+                {meta.submissionDeadline
+                  ? <>{format(meta.submissionDeadline, "EEE dd LLL yyyy")} <span className="text-fg-dim">({daysFromNow(meta.submissionDeadline)} days)</span></>
+                  : meta.submissionDeadlineNote ?? "—"}
+              </Row>
+              <Row label="word count target">
+                {meta.wordCountTargetMin && meta.wordCountTargetMax
+                  ? `${meta.wordCountTargetMin.toLocaleString()} — ${meta.wordCountTargetMax.toLocaleString()} words`
+                  : meta.wordCountTargetMax
+                    ? `${meta.wordCountTargetMax.toLocaleString()} words`
+                    : "—"}
+              </Row>
+              <Row label="status">{meta.overallStatus.replace("_", " ")}</Row>
+            </div>
+
+            {meta.academicFraming && (
+              <div className="border border-border bg-bg-panel">
+                <div className="px-4 py-2 border-b border-border h-section flex items-center justify-between">
+                  <span>academic framing</span>
+                  <span className="font-mono text-2xs text-fg-dim">surfaced by /ask</span>
+                </div>
+                <div className="p-4">
+                  <Markdown source={meta.academicFraming} />
+                </div>
+              </div>
+            )}
+
+            {(meta.degreeRelevanceMarketing || meta.degreeRelevanceAnalytics) && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {meta.degreeRelevanceMarketing && (
+                  <div className="border border-border bg-bg-panel">
+                    <div className="px-4 py-2 border-b border-border h-section">
+                      degree relevance — digital marketing
+                    </div>
+                    <div className="p-4">
+                      <Markdown source={meta.degreeRelevanceMarketing} />
+                    </div>
+                  </div>
+                )}
+                {meta.degreeRelevanceAnalytics && (
+                  <div className="border border-border bg-bg-panel">
+                    <div className="px-4 py-2 border-b border-border h-section">
+                      degree relevance — business analytics
+                    </div>
+                    <div className="p-4">
+                      <Markdown source={meta.degreeRelevanceAnalytics} />
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           {showHistory && (
-            <div className="grid grid-cols-2 gap-4 mt-6 max-w-3xl">
-              <HistoryBlock title="working title revisions" versions={titleVersions} />
-              <HistoryBlock title="research question revisions" versions={rqVersions} />
-            </div>
+            <aside className="space-y-4">
+              <HistoryBlock title={`working title (${titleVersions.length})`} versions={titleVersions} />
+              <HistoryBlock title={`research question (${rqVersions.length})`} versions={rqVersions} />
+            </aside>
           )}
-        </>
+        </div>
       ) : null}
     </div>
   );
@@ -133,9 +220,12 @@ function HistoryBlock({
         <div className="px-3 py-4 font-mono text-xs text-fg-dim text-center">No revisions yet.</div>
       ) : (
         <ul className="divide-y divide-border">
-          {versions.map((v) => (
+          {versions.map((v, i) => (
             <li key={v.id} className="px-3 py-2">
-              <div className="font-mono text-2xs text-fg-dim">{format(v.createdAt, "dd LLL yyyy · HH:mm")}</div>
+              <div className="flex items-center gap-2 text-2xs text-fg-dim font-mono">
+                <span className="text-fg-muted">v{versions.length - i}</span>
+                <span>{format(v.createdAt, "dd LLL yyyy · HH:mm")}</span>
+              </div>
               <div className="font-mono text-xs text-fg whitespace-pre-wrap mt-1">{v.value}</div>
             </li>
           ))}

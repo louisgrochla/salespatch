@@ -14,13 +14,14 @@ interface InitialValues {
 }
 
 const SUGGESTED_THEMES = [
-  "platform economics",
-  "multi-agent systems",
-  "gig economy",
   "algorithmic entrepreneurship",
-  "SME digital marketing",
-  "AI sales automation",
-  "conversion optimisation",
+  "platform economics and two-sided markets",
+  "gig economy sustainability",
+  "multi-agent systems in commercial applications",
+  "AI in SME marketing and sales automation",
+  "conversion rate optimisation",
+  "distributed income models",
+  "lean startup methodology",
 ];
 
 export function LiteratureForm({

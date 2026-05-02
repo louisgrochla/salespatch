@@ -333,18 +333,31 @@ enum LiteraturePosition {
 
 // Single-row table — there is one dissertation. Use id = "main".
 model DissertationMeta {
-  id                   String   @id @default("main")
-  workingTitle         String
-  researchQuestion     String
-  supervisor           String?
-  submissionDeadline   DateTime?
-  overallStatus        DissertationStatus @default(in_progress)
-  phaseLabel           String
-  createdAt            DateTime @default(now())
-  updatedAt            DateTime @updatedAt
+  id                          String   @id @default("main")
+  workingTitle                String
+  researchQuestion            String
+  supervisor                  String?
+  submissionDeadline          DateTime?
+  submissionDeadlineNote      String?  // free text when the deadline isn't yet known
+  overallStatus               DissertationStatus @default(in_progress)
+  degree                      String?  // e.g. "BA (Hons) Digital Marketing and Business Analytics"
+  institution                 String?  // e.g. "Robert Gordon University, Aberdeen"
+  wordCountTargetMin          Int?
+  wordCountTargetMax          Int?
+  // The academic framing paragraph — describes the study to a supervisor in
+  // the right register. Surfaced by /ask in Stage 5 whenever the dissertation
+  // topic or framing is queried.
+  academicFraming             String?
+  // Markdown bullet lists of how this study connects to each half of the
+  // degree.
+  degreeRelevanceMarketing    String?
+  degreeRelevanceAnalytics    String?
+  phaseLabel                  String
+  createdAt                   DateTime @default(now())
+  updatedAt                   DateTime @updatedAt
 
-  workingTitleVersions     WorkingTitleVersion[]
-  researchQuestionVersions ResearchQuestionVersion[]
+  workingTitleVersions        WorkingTitleVersion[]
+  researchQuestionVersions    ResearchQuestionVersion[]
 }
 
 model WorkingTitleVersion {

@@ -5,6 +5,7 @@ import { PageHeader, HeaderLink } from "@/components/PageHeader";
 import { StatTile } from "@/components/StatTile";
 import { PhasePill } from "@/components/PhasePill";
 import { ResearchSubNav } from "./_components/SubNav";
+import { Markdown } from "@/components/Markdown";
 import { cn } from "@/lib/cn";
 
 export const dynamic = "force-dynamic";
@@ -89,12 +90,55 @@ export default async function ResearchDashboardPage() {
       />
 
       {meta && (
-        <section>
-          <div className="h-section mb-2">research question {rqVersionCount > 1 && <span className="text-fg-dim">· v{rqVersionCount}</span>}</div>
-          <div className="border border-border bg-bg-panel p-4">
-            <p className="font-sans text-base text-fg leading-relaxed">{meta.researchQuestion}</p>
-          </div>
-        </section>
+        <>
+          <section>
+            <div className="h-section mb-2">
+              research question {rqVersionCount > 1 && <span className="text-fg-dim">· v{rqVersionCount}</span>}
+            </div>
+            <div className="border border-border bg-bg-panel p-4">
+              <p className="font-sans text-base text-fg leading-relaxed">{meta.researchQuestion}</p>
+            </div>
+          </section>
+
+          {meta.academicFraming && (
+            <section>
+              <div className="h-section mb-2 flex items-center justify-between">
+                <span>academic framing</span>
+                <span className="font-mono text-2xs text-fg-dim normal-case">surfaced by /ask</span>
+              </div>
+              <div className="border border-border bg-bg-panel p-4">
+                <Markdown source={meta.academicFraming} />
+              </div>
+            </section>
+          )}
+
+          {(meta.degree || meta.institution) && (
+            <section className="grid grid-cols-1 md:grid-cols-3 gap-px bg-border border border-border">
+              {meta.degree && (
+                <div className="bg-bg-panel px-4 py-3">
+                  <div className="h-section">degree</div>
+                  <div className="font-mono text-xs text-fg mt-1">{meta.degree}</div>
+                </div>
+              )}
+              {meta.institution && (
+                <div className="bg-bg-panel px-4 py-3">
+                  <div className="h-section">institution</div>
+                  <div className="font-mono text-xs text-fg mt-1">{meta.institution}</div>
+                </div>
+              )}
+              {(meta.wordCountTargetMin || meta.wordCountTargetMax) && (
+                <div className="bg-bg-panel px-4 py-3">
+                  <div className="h-section">word count target</div>
+                  <div className="font-mono text-xs text-fg mt-1">
+                    {meta.wordCountTargetMin && meta.wordCountTargetMax
+                      ? `${meta.wordCountTargetMin.toLocaleString()} — ${meta.wordCountTargetMax.toLocaleString()}`
+                      : (meta.wordCountTargetMax ?? meta.wordCountTargetMin)?.toLocaleString()}
+                  </div>
+                </div>
+              )}
+            </section>
+          )}
+        </>
       )}
 
       <section>
