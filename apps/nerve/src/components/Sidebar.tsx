@@ -13,6 +13,7 @@ import {
   Coins,
   Cpu,
   FileText,
+  GitCommit,
   Gavel,
   GraduationCap,
   LayoutDashboard,
@@ -45,6 +46,7 @@ export interface SidebarCounts {
   sections?: number;
   brand?: number;
   legal?: number;
+  changelog?: number;
 }
 
 export function Sidebar({ counts }: { counts: SidebarCounts }) {
@@ -68,6 +70,12 @@ export function Sidebar({ counts }: { counts: SidebarCounts }) {
         { href: "/product", label: "Product & System", icon: Cpu, count: counts.prompts },
         { href: "/demos", label: "Demo Library", icon: Boxes, count: counts.demos },
         { href: "/leads", label: "Lead Intelligence", icon: Briefcase, count: counts.leads },
+      ],
+    },
+    {
+      label: "build",
+      items: [
+        { href: "/changelog", label: "Changelog", icon: GitCommit, count: counts.changelog },
       ],
     },
     {

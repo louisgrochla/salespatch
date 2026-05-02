@@ -195,6 +195,19 @@ export async function resolveSource(
           url: `/dissertation/calendar/${sourceId}`, date: r.deadline,
         };
       }
+      case "ChangelogEntry": {
+        const r = await prisma.changelogEntry.findUnique({
+          where: { id: sourceId },
+          select: { project: true, projectType: true, sessionSummary: true, sessionDate: true },
+        });
+        if (!r) return empty(sourceType, sourceId);
+        return {
+          sourceType, sourceId, exists: true,
+          title: `${r.projectType} · ${r.project}`,
+          hint: r.sessionSummary.slice(0, 120),
+          url: `/changelog/${sourceId}`, date: r.sessionDate,
+        };
+      }
     }
   } catch {
     // Lookup failure → treat as unresolved.
@@ -213,6 +226,7 @@ export function sectionPathFor(sourceType: string): string {
     case "PhaseBoundary": case "EvidenceLog":
     case "SupervisorMeeting": case "AcademicCalendarItem": return "research";
     case "PromptLibraryEntry": return "product";
+    case "ChangelogEntry": return "changelog";
     default: return "other";
   }
 }

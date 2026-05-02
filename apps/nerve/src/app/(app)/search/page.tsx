@@ -15,7 +15,7 @@ const SOURCE_TYPES = [
   "DemoRecord", "LeadRecord", "LiteratureEntry", "DissertationSection",
   "DissertationMeta", "MethodologyDoc", "PhaseBoundary",
   "PromptLibraryEntry", "EvidenceLog", "SupervisorMeeting",
-  "AcademicCalendarItem",
+  "AcademicCalendarItem", "ChangelogEntry",
 ];
 
 interface SearchParams {

@@ -643,6 +643,48 @@ model ChatMessage {
   @@index([createdAt])
 }
 
+// ─── changelog (Claude Code session log) ─────────────────────────────────
+//
+// Each row is one development session, posted by the `nerve-log` slash
+// command from Claude Code. Becomes both operational history and
+// dissertation methodology evidence. See /api/ingest/changelog.
+
+enum ChangelogProjectType {
+  nerve
+  salespatch
+  ios_app
+  sl_mas_pipeline
+  spit_out
+  other
+}
+
+model ChangelogEntry {
+  id                     String               @id @default(cuid())
+  project                String
+  sessionSummary         String
+  whatChanged            String
+  why                    String
+  decisionsMade          String
+  problemsEncountered    String
+  currentState           String
+  whatsNext              String
+  filesModified          String[]             @default([])
+  sessionDate            DateTime
+  sessionDurationMinutes Int?
+  tags                   String[]             @default([])
+  retrospectiveNote      String?
+  projectType            ChangelogProjectType
+  phaseLabel             String
+  createdAt              DateTime             @default(now())
+  updatedAt              DateTime             @updatedAt
+
+  @@index([sessionDate])
+  @@index([project])
+  @@index([projectType])
+  @@index([phaseLabel])
+  @@index([tags], type: Gin)
+}
+
 // ─── webhook ingestion log (operational visibility for failures) ─────────
 
 enum IngestStatus {
