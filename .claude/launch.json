@@ -18,6 +18,12 @@
       "runtimeExecutable": "npm",
       "runtimeArgs": ["--prefix", "apps/sales-dashboard", "run", "dev"],
       "port": 4300
+    },
+    {
+      "name": "nerve",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["--prefix", "apps/nerve", "run", "dev"],
+      "port": 4400
     }
   ]
 }

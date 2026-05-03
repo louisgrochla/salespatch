@@ -249,6 +249,86 @@ struct LeadStatusResponse: Decodable {
     let commission_amount_pence: Int?       // canonical, in pence
 }
 
+// MARK: — Post-pitch questionnaire
+
+extension APIClient {
+    /// Body of POST /leads/:id/pitch. All field names match the
+    /// mobile-api SQLite columns and the NERVE PitchLog snake_case.
+    /// Optionals omitted from the JSON when nil.
+    struct PitchPayload: Encodable {
+        let outcome: String
+        let pitch_duration_seconds: Int?
+        let demo_version: String?
+        let decision_maker_present: Bool?
+        let demo_shown: Bool?
+        let interest_level: String?
+        let consent_to_record: Bool
+        let demo_reaction: String?
+        let agreed_price: Double?
+        let payment_method: String?
+        let best_followup_time: String?
+        let agreed_next_step: String?
+        let objections: [String]?
+        let gut_feel_close_pct: Int?
+        let first_response_phrase: String?
+        let competitor_mentioned: String?
+        let notes: String?
+        let gps_lat: Double?
+        let gps_lng: Double?
+        let pitched_at: String
+    }
+
+    private struct PitchResponse: Decodable {
+        let ok: Bool
+        let pitch_id: String
+        let pitch_attempt_number: Int
+        let forwarded: Bool
+        let nerve_pitch_id: String?
+        let quality_flag: String?
+        let forward_error: String?
+    }
+
+    /// POSTs the post-pitch questionnaire to the sales-dashboard
+    /// (salespatch.co.uk in prod). The dashboard auths the SP, fetches
+    /// lead context, HMAC-signs and forwards to NERVE, returning the
+    /// NERVE pitch id + quality flag. `forwarded: false` only when the
+    /// NERVE forward failed — the local Supabase pitch_attempts row
+    /// still persists for retry.
+    ///
+    /// Hits dashboardBaseURL explicitly (NOT defaultBaseURL) because the
+    /// pitch route lives in apps/sales-dashboard, deployed to
+    /// salespatch.co.uk. Same Bearer token format works on both hosts
+    /// because they share SD_SECRET.
+    func recordPitch(assignmentId: String, payload: PitchPayload) async throws -> PostPitchResult {
+        guard let url = URL(string: dashboardBaseURL + "/api/leads/\(assignmentId)/pitch") else {
+            throw URLError(.badURL)
+        }
+        var req = URLRequest(url: url)
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        if let tok = token {
+            req.setValue("Bearer \(tok)", forHTTPHeaderField: "Authorization")
+        }
+        req.httpBody = try JSONEncoder().encode(payload)
+
+        let (data, response) = try await URLSession.shared.data(for: req)
+        guard let http = response as? HTTPURLResponse else { throw URLError(.badServerResponse) }
+        if !(200..<300).contains(http.statusCode) {
+            let msg = (try? decoder.decode(APIError.self, from: data))?.error ?? "HTTP \(http.statusCode)"
+            throw SalesFlowError.server(msg)
+        }
+        let res = try decoder.decode(PitchResponse.self, from: data)
+        return PostPitchResult(
+            pitchId: res.pitch_id,
+            pitchAttemptNumber: res.pitch_attempt_number,
+            forwarded: res.forwarded,
+            nervePitchId: res.nerve_pitch_id,
+            qualityFlag: res.quality_flag,
+            forwardError: res.forward_error
+        )
+    }
+}
+
 extension APIClient {
     /// Slim status poll — used during the QR sheet to detect the sold
     /// transition. Hits the sales-dashboard so it sees the latest webhook

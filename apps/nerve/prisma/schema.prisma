@@ -1,0 +1,794 @@
+// NERVE — founder intranet for SL-MAS.
+// Single Postgres database (Vercel Postgres / Neon) with pgvector enabled.
+//
+// Conventions:
+//  - Every table has id (cuid), createdAt, updatedAt, phaseLabel.
+//  - phaseLabel is the dissertation phase that was active when the row was
+//    created (denormalised from PhaseBoundary for query speed).
+//  - Markdown text fields are plain TEXT — rendered client-side.
+//  - Vector embeddings live in a single polymorphic Embedding table keyed
+//    by sourceType + sourceId. Single-table search wins over per-source
+//    UNION ALL at scale.
+//  - Version-history tables append-only. Parent rows hold the current value;
+//    history rows record every prior value with timestamp.
+
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
+}
+
+datasource db {
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+  directUrl  = env("DIRECT_URL")
+  extensions = [vector]
+}
+
+// ─── auth ────────────────────────────────────────────────────────────────
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+// ─── phase boundaries (dissertation methodology timeline) ────────────────
+
+model PhaseBoundary {
+  id                      String    @id @default(cuid())
+  name                    String    @unique
+  startDate               DateTime
+  endDate                 DateTime?
+  operationalDescription  String
+  createdAt               DateTime  @default(now())
+  updatedAt               DateTime  @updatedAt
+
+  @@index([startDate])
+}
+
+// ─── sales intelligence ──────────────────────────────────────────────────
+
+enum PitchOutcome {
+  closed             // legacy alias for closed_now (kept for back-compat)
+  rejected
+  follow_up
+  closed_now
+  closed_followup
+  not_pitched
+}
+
+enum InterestLevel {
+  cold
+  warm
+  hot
+}
+
+enum DemoReaction {
+  loved
+  liked
+  neutral
+  unimpressed
+}
+
+enum PaymentMethod {
+  paid_now
+  will_pay_followup
+}
+
+enum FollowupTime {
+  tomorrow
+  this_week
+  next_week
+  next_month
+}
+
+enum AgreedNextStep {
+  sp_will_call
+  customer_will_call
+  sent_link
+  scheduled_meeting
+}
+
+enum PitchQualityFlag {
+  ok
+  excluded
+}
+
+model PitchLog {
+  id                       String           @id @default(cuid())
+  date                     DateTime
+  businessName             String
+  businessType             String?
+  sector                   String?
+  location                 String?
+  leadSource               String?
+  demoVersion              String?
+  outcome                  PitchOutcome
+  contractorId             String?
+  pitchDuration            Int?             // seconds, auto from iOS timer
+  pitchAttemptNumber       Int              @default(1)
+  // Questionnaire — required fields
+  decisionMakerPresent     Boolean?
+  demoShown                Boolean?
+  interestLevel            InterestLevel?
+  consentToRecord          Boolean          @default(false)
+  // Questionnaire — conditional fields
+  demoReaction             DemoReaction?
+  agreedPrice              Decimal?         @db.Decimal(10, 2)
+  paymentMethod            PaymentMethod?
+  bestFollowupTime         FollowupTime?
+  agreedNextStep           AgreedNextStep?
+  // Questionnaire — optional gold
+  gutFeelClosePct          Int?             // 0-100
+  firstResponsePhrase      String?
+  competitorMentioned      String?
+  // Auto-captured location
+  gpsLat                   Float?
+  gpsLng                   Float?
+  // Quality control — derived server-side at ingest time. Dissertation
+  // queries scope to qualityFlag=ok; ops queries see everything.
+  qualityFlag              PitchQualityFlag @default(ok)
+  // Legacy / housekeeping
+  consentFlag              Boolean          @default(false) // pre-questionnaire field; kept for back-compat
+  notes                    String?
+  supabasePitchId          String?          @unique // idempotency key for webhook
+  source                   String           @default("manual") // manual | webhook | mobile-api
+  phaseLabel               String
+  createdAt                DateTime         @default(now())
+  updatedAt                DateTime         @updatedAt
+
+  objections               PitchObjection[]
+
+  @@index([date])
+  @@index([phaseLabel])
+  @@index([sector])
+  @@index([outcome])
+  @@index([businessType])
+  @@index([contractorId])
+  @@index([leadSource])
+  @@index([demoVersion])
+  @@index([qualityFlag])
+  @@index([decisionMakerPresent])
+  @@index([interestLevel])
+}
+
+model ObjectionTag {
+  id        String           @id @default(cuid())
+  name      String           @unique
+  createdAt DateTime         @default(now())
+  pitches   PitchObjection[]
+}
+
+model PitchObjection {
+  pitchId    String
+  objectionId String
+  pitch      PitchLog     @relation(fields: [pitchId], references: [id], onDelete: Cascade)
+  objection  ObjectionTag @relation(fields: [objectionId], references: [id], onDelete: Cascade)
+
+  @@id([pitchId, objectionId])
+  @@index([objectionId])
+}
+
+// ─── operations log (4 sub-types into 1 table for unified timeline view) ─
+
+enum OperationsLogType {
+  weekly
+  decision
+  failure
+  iteration
+}
+
+model OperationsLog {
+  id            String            @id @default(cuid())
+  date          DateTime
+  type          OperationsLogType
+  // weekly: body. decision: decision/reasoning/outcome. failure:
+  // whatFailed/why/whatChanged. iteration: whatChanged/beforeState/afterState.
+  body          String?
+  decision      String?
+  reasoning     String?
+  outcome       String?
+  whatFailed    String?
+  why           String?
+  whatChanged   String?
+  beforeState   String?
+  afterState    String?
+  tags          String[]          @default([])
+  phaseLabel    String
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+
+  @@index([date])
+  @@index([type])
+  @@index([phaseLabel])
+}
+
+// ─── financial tracker ───────────────────────────────────────────────────
+
+enum CostCategory {
+  infrastructure
+  compute
+  tools
+  misc
+}
+
+model RevenueEntry {
+  id            String   @id @default(cuid())
+  date          DateTime
+  dealReference String?
+  amount        Decimal  @db.Decimal(12, 2)
+  notes         String?
+  phaseLabel    String
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([date])
+  @@index([phaseLabel])
+}
+
+model CostEntry {
+  id         String       @id @default(cuid())
+  date       DateTime
+  category   CostCategory
+  amount     Decimal      @db.Decimal(12, 2)
+  notes      String?
+  phaseLabel String
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime     @updatedAt
+
+  @@index([date])
+  @@index([phaseLabel])
+  @@index([category])
+}
+
+// ─── product & system ────────────────────────────────────────────────────
+
+model ArchitectureDocument {
+  id         String   @id @default(cuid())
+  title      String
+  body       String   // markdown
+  version    String
+  date       DateTime
+  tags       String[] @default([])
+  phaseLabel String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+model SystemChangelog {
+  id          String   @id @default(cuid())
+  date        DateTime
+  version     String
+  whatChanged String
+  why         String?
+  phaseLabel  String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([date])
+}
+
+model PromptLibraryEntry {
+  id               String           @id @default(cuid())
+  name             String           @unique
+  fullText         String           // current value
+  model            String
+  versionNumber    Int              @default(1)
+  performanceNotes String?
+  tags             String[]         @default([])
+  phaseLabel       String
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  versions         PromptVersion[]
+}
+
+model PromptVersion {
+  id               String             @id @default(cuid())
+  promptId         String
+  fullText         String
+  model            String
+  versionNumber    Int
+  performanceNotes String?
+  createdAt        DateTime           @default(now())
+
+  prompt           PromptLibraryEntry @relation(fields: [promptId], references: [id], onDelete: Cascade)
+
+  @@unique([promptId, versionNumber])
+  @@index([promptId])
+}
+
+model InfrastructureNote {
+  id          String   @id @default(cuid())
+  serviceName String
+  purpose     String
+  configNotes String?
+  date        DateTime
+  phaseLabel  String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model PipelineDoc {
+  id               String   @id @default(cuid())
+  name             String
+  description      String
+  version          String
+  performanceNotes String?
+  phaseLabel       String
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+}
+
+model ModelDoc {
+  id              String   @id @default(cuid())
+  name            String
+  purpose         String
+  trainingDetails String?
+  costPerCycle    Decimal? @db.Decimal(10, 4)
+  phaseLabel      String
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+// ─── demo library ────────────────────────────────────────────────────────
+
+model DemoRecord {
+  id                String   @id @default(cuid())
+  businessName      String
+  sector            String?
+  url               String?
+  fileReference     String?
+  dateBuilt         DateTime
+  templateVersion   String?
+  conversionOutcome String?  // closed | rejected | follow_up | unpitched
+  notes             String?
+  phaseLabel        String
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@index([dateBuilt])
+  @@index([templateVersion])
+}
+
+// ─── lead intelligence ───────────────────────────────────────────────────
+
+enum ContactedStatus {
+  not_contacted
+  contacted
+  pitched
+  closed
+  rejected
+}
+
+model LeadRecord {
+  id              String          @id @default(cuid())
+  name            String
+  type            String?
+  sector          String?
+  location        String?
+  contactedStatus ContactedStatus @default(not_contacted)
+  sourceMethod    String?
+  doNotContact    Boolean         @default(false)
+  notes           String?
+  phaseLabel      String
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  @@index([sourceMethod])
+  @@index([contactedStatus])
+  @@index([sector])
+}
+
+// ─── research project ────────────────────────────────────────────────────
+
+enum DissertationStatus {
+  not_started
+  draft
+  in_progress
+  complete
+}
+
+enum LiteraturePosition {
+  supports
+  challenges
+  contextualises
+}
+
+// Single-row table — there is one dissertation. Use id = "main".
+model DissertationMeta {
+  id                          String   @id @default("main")
+  workingTitle                String
+  researchQuestion            String
+  supervisor                  String?
+  submissionDeadline          DateTime?
+  submissionDeadlineNote      String?  // free text when the deadline isn't yet known
+  overallStatus               DissertationStatus @default(in_progress)
+  degree                      String?  // e.g. "BA (Hons) Digital Marketing and Business Analytics"
+  institution                 String?  // e.g. "Robert Gordon University, Aberdeen"
+  wordCountTargetMin          Int?
+  wordCountTargetMax          Int?
+  // The academic framing paragraph — describes the study to a supervisor in
+  // the right register. Surfaced by /ask in Stage 5 whenever the dissertation
+  // topic or framing is queried.
+  academicFraming             String?
+  // Markdown bullet lists of how this study connects to each half of the
+  // degree.
+  degreeRelevanceMarketing    String?
+  degreeRelevanceAnalytics    String?
+  phaseLabel                  String
+  createdAt                   DateTime @default(now())
+  updatedAt                   DateTime @updatedAt
+
+  workingTitleVersions        WorkingTitleVersion[]
+  researchQuestionVersions    ResearchQuestionVersion[]
+}
+
+model WorkingTitleVersion {
+  id                String           @id @default(cuid())
+  dissertationId    String
+  value             String
+  createdAt         DateTime         @default(now())
+
+  dissertation      DissertationMeta @relation(fields: [dissertationId], references: [id], onDelete: Cascade)
+
+  @@index([dissertationId])
+}
+
+model ResearchQuestionVersion {
+  id                String           @id @default(cuid())
+  dissertationId    String
+  value             String
+  createdAt         DateTime         @default(now())
+
+  dissertation      DissertationMeta @relation(fields: [dissertationId], references: [id], onDelete: Cascade)
+
+  @@index([dissertationId])
+}
+
+model LiteratureEntry {
+  id            String                          @id @default(cuid())
+  title         String
+  authors       String
+  year          Int?
+  url           String?
+  doi           String?
+  abstract      String?
+  themeTags     String[]                        @default([])
+  personalNotes String?
+  position      LiteraturePosition?
+  phaseLabel    String
+  createdAt     DateTime                        @default(now())
+  updatedAt     DateTime                        @updatedAt
+
+  sectionLinks  DissertationSectionLiterature[]
+
+  @@index([year])
+  @@index([themeTags], type: Gin)
+}
+
+model DissertationSection {
+  id                  String                          @id @default(cuid())
+  chapter             String                          @unique
+  content             String                          @default("")
+  status              DissertationStatus              @default(not_started)
+  wordCountTarget     Int?
+  wordCount           Int                             @default(0)
+  supervisorFeedback  String?
+  phaseLabel          String
+  createdAt           DateTime                        @default(now())
+  updatedAt           DateTime                        @updatedAt
+
+  versions            DissertationSectionVersion[]
+  literatureLinks     DissertationSectionLiterature[]
+  evidenceItems       EvidenceLog[]
+  calendarItems       AcademicCalendarItem[]
+}
+
+model DissertationSectionVersion {
+  id            String              @id @default(cuid())
+  sectionId     String
+  content       String
+  wordCount     Int
+  createdAt     DateTime            @default(now())
+
+  section       DissertationSection @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+
+  @@index([sectionId])
+}
+
+model DissertationSectionLiterature {
+  sectionId    String
+  literatureId String
+  section      DissertationSection @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  literature   LiteratureEntry     @relation(fields: [literatureId], references: [id], onDelete: Cascade)
+
+  @@id([sectionId, literatureId])
+  @@index([literatureId])
+}
+
+model MethodologyDoc {
+  id                       String   @id @default(cuid())
+  phaseName                String   @unique
+  formalDescription        String
+  mixedMethodsJustification String?
+  sampleSizeNotes          String?
+  statisticalApproach      String?
+  gdprHandling             String?
+  nerveAsInfrastructure    String?
+  phaseLabel               String
+  createdAt                DateTime @default(now())
+  updatedAt                DateTime @updatedAt
+}
+
+// Polymorphic — sourceType refers to a model name (e.g. "PitchLog").
+model EvidenceLog {
+  id                    String              @id @default(cuid())
+  sourceType            String
+  sourceId              String
+  dissertationSectionId String?
+  annotation            String
+  phaseLabel            String
+  createdAt             DateTime            @default(now())
+  updatedAt             DateTime            @updatedAt
+
+  dissertationSection   DissertationSection? @relation(fields: [dissertationSectionId], references: [id], onDelete: SetNull)
+
+  @@index([sourceType, sourceId])
+  @@index([dissertationSectionId])
+}
+
+model SupervisorMeeting {
+  id              String   @id @default(cuid())
+  date            DateTime
+  notes           String?
+  feedback        String?
+  agreedActions   String?
+  followUpStatus  String?
+  phaseLabel      String
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([date])
+}
+
+model AcademicCalendarItem {
+  id                    String              @id @default(cuid())
+  milestone             String
+  deadline              DateTime
+  status                String              @default("pending")
+  dissertationSectionId String?
+  phaseLabel            String
+  createdAt             DateTime            @default(now())
+  updatedAt             DateTime            @updatedAt
+
+  dissertationSection   DissertationSection? @relation(fields: [dissertationSectionId], references: [id], onDelete: SetNull)
+
+  @@index([deadline])
+}
+
+// ─── knowledge base ──────────────────────────────────────────────────────
+
+model BrandDocument {
+  id         String   @id @default(cuid())
+  title      String
+  body       String
+  phaseLabel String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+model ProcessGuide {
+  id          String   @id @default(cuid())
+  name        String
+  steps       String   // markdown
+  lastUpdated DateTime
+  phaseLabel  String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model GlossaryEntry {
+  id         String   @id @default(cuid())
+  term       String   @unique
+  definition String
+  context    String?
+  phaseLabel String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+model ExternalResource {
+  id         String   @id @default(cuid())
+  toolName   String
+  url        String
+  purpose    String
+  notes      String?
+  phaseLabel String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+// ─── legal & compliance ──────────────────────────────────────────────────
+
+model LegalDocument {
+  id            String   @id @default(cuid())
+  type          String
+  title         String
+  version       String
+  date          DateTime
+  content       String?
+  fileReference String?
+  phaseLabel    String
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model GdprRecord {
+  id               String   @id @default(cuid())
+  dataType         String
+  collectionMethod String
+  retentionPeriod  String
+  legalBasis       String
+  phaseLabel       String
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+}
+
+model ContractorAgreementVersion {
+  id         String   @id @default(cuid())
+  version    String   @unique
+  content    String
+  date       DateTime
+  phaseLabel String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+model CompaniesHouseRecord {
+  id          String   @id @default(cuid())
+  filingType  String
+  description String
+  date        DateTime
+  reference   String?
+  phaseLabel  String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model IpDocument {
+  id          String   @id @default(cuid())
+  type        String   // trademark | patent | copyright | trade_secret | other
+  title       String
+  description String?
+  date        DateTime
+  reference   String?
+  phaseLabel  String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+// ─── /ask conversation history ──────────────────────────────────────────
+//
+// Each /ask query persists alongside the retrieved sources and Claude's
+// response. The conversation log is itself dissertation evidence —
+// "I asked the system X on date Y" is citable.
+
+model ChatSession {
+  id          String        @id @default(cuid())
+  title       String?
+  phaseLabel  String
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  messages    ChatMessage[]
+
+  @@index([createdAt])
+}
+
+model ChatMessage {
+  id           String      @id @default(cuid())
+  sessionId    String
+  // "user" | "assistant" | "system" — the system message is built fresh
+  // per turn from current vault state, never persisted as a row.
+  role         String
+  content      String
+  // Sources retrieved for THIS turn — array of
+  // { sourceType, sourceId, title, excerpt, distance, sectionPath }.
+  sources      Json?
+  model        String?
+  inputTokens  Int?
+  outputTokens Int?
+  createdAt    DateTime    @default(now())
+
+  session      ChatSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId])
+  @@index([createdAt])
+}
+
+// ─── changelog (Claude Code session log) ─────────────────────────────────
+//
+// Each row is one development session, posted by the `nerve-log` slash
+// command from Claude Code. Becomes both operational history and
+// dissertation methodology evidence. See /api/ingest/changelog.
+
+enum ChangelogProjectType {
+  nerve
+  salespatch
+  ios_app
+  sl_mas_pipeline
+  spit_out
+  other
+}
+
+model ChangelogEntry {
+  id                     String               @id @default(cuid())
+  project                String
+  sessionSummary         String
+  whatChanged            String
+  why                    String
+  decisionsMade          String
+  problemsEncountered    String
+  currentState           String
+  whatsNext              String
+  filesModified          String[]             @default([])
+  sessionDate            DateTime
+  sessionDurationMinutes Int?
+  tags                   String[]             @default([])
+  retrospectiveNote      String?
+  projectType            ChangelogProjectType
+  phaseLabel             String
+  createdAt              DateTime             @default(now())
+  updatedAt              DateTime             @updatedAt
+
+  @@index([sessionDate])
+  @@index([project])
+  @@index([projectType])
+  @@index([phaseLabel])
+  @@index([tags], type: Gin)
+}
+
+// ─── webhook ingestion log (operational visibility for failures) ─────────
+
+enum IngestStatus {
+  ok
+  failed
+}
+
+model WebhookIngestion {
+  id           String       @id @default(cuid())
+  endpoint     String
+  status       IngestStatus
+  errorMessage String?
+  payloadHash  String?
+  createdAt    DateTime     @default(now())
+
+  @@index([createdAt])
+  @@index([status])
+}
+
+// ─── embeddings (single polymorphic table) ───────────────────────────────
+//
+// Vector column is declared with Unsupported because Prisma does not have
+// a native vector type. The migration SQL adds the actual vector(1536)
+// column and the ivfflat index. All vector reads/writes happen via raw
+// queries in src/lib/embeddings.ts.
+
+model Embedding {
+  id          String                       @id @default(cuid())
+  sourceType  String                       // model name, e.g. "PitchLog"
+  sourceId    String
+  chunkText   String
+  chunkIndex  Int                          @default(0)
+  metadata    Json
+  embedding   Unsupported("vector(1536)")?
+  phaseLabel  String
+  createdAt   DateTime                     @default(now())
+
+  @@index([sourceType, sourceId])
+  @@index([phaseLabel])
+  @@index([sourceType])
+}

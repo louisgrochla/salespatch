@@ -99,6 +99,57 @@ function initSchema() {
     CREATE INDEX IF NOT EXISTS idx_visit_sessions_assignment ON visit_sessions(assignment_id);
     CREATE INDEX IF NOT EXISTS idx_lead_photos_assignment ON lead_photos(assignment_id);
     CREATE INDEX IF NOT EXISTS idx_sync_journal_user ON sync_journal(user_id, synced_at);
+
+    -- Post-pitch questionnaire — every salesperson visit that ended with
+    -- any meaningful interaction is recorded here. Forwarded to NERVE
+    -- /api/ingest/pitch on insert; on forward failure the row stays
+    -- local and forward_error is populated for retry.
+    CREATE TABLE IF NOT EXISTS pitches (
+      id                       TEXT PRIMARY KEY,
+      lead_id                  TEXT NOT NULL,
+      assignment_id            TEXT,
+      user_id                  TEXT NOT NULL,
+      -- core
+      outcome                  TEXT NOT NULL,
+      pitch_duration_seconds   INTEGER,
+      pitch_attempt_number     INTEGER DEFAULT 1,
+      demo_version             TEXT,
+      -- required questionnaire
+      decision_maker_present   INTEGER,
+      demo_shown               INTEGER,
+      interest_level           TEXT,
+      consent_to_record        INTEGER NOT NULL DEFAULT 0,
+      -- conditional
+      demo_reaction            TEXT,
+      agreed_price             REAL,
+      payment_method           TEXT,
+      best_followup_time       TEXT,
+      agreed_next_step         TEXT,
+      objections_json          TEXT,
+      -- optional gold
+      gut_feel_close_pct       INTEGER,
+      first_response_phrase    TEXT,
+      competitor_mentioned     TEXT,
+      notes                    TEXT,
+      -- auto-captured
+      gps_lat                  REAL,
+      gps_lng                  REAL,
+      -- denormalised lead context for NERVE forwarding
+      business_name            TEXT,
+      business_type            TEXT,
+      sector                   TEXT,
+      location                 TEXT,
+      -- timestamps + forwarding
+      pitched_at               TEXT NOT NULL,
+      created_at               TEXT NOT NULL,
+      forwarded_to_nerve_at    TEXT,
+      forward_error            TEXT
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_pitches_user ON pitches(user_id);
+    CREATE INDEX IF NOT EXISTS idx_pitches_lead ON pitches(lead_id);
+    CREATE INDEX IF NOT EXISTS idx_pitches_assignment ON pitches(assignment_id);
+    CREATE INDEX IF NOT EXISTS idx_pitches_unforwarded ON pitches(forwarded_to_nerve_at);
   `);
 
   // Add contractor_number column if not present
