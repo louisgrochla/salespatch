@@ -1162,6 +1162,12 @@ struct LeadDetailView: View {
         let lng = locationManager.location?.coordinate.longitude ?? 0
         Task { try? await APIClient.shared.postVisit(id: id, action: "end", lat: lat, lng: lng) }
         locationManager.stopUpdating()
+
+        // Auto-fire the post-pitch questionnaire — visit end IS the
+        // signal that a pitch happened. The questionnaire's first chip
+        // ("not pitched") covers the "didn't actually pitch" case so
+        // there's no separate skip flow needed.
+        showPostPitch = true
     }
 
     /// Fetches the detail payload from /api/leads/:id and merges the rich

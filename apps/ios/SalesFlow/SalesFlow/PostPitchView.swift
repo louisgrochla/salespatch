@@ -101,7 +101,7 @@ struct PostPitchView: View {
                     .disabled(submitting)
             }
             Text(businessName)
-                .font(Brand.Font.serifMedium(22))
+                .font(Brand.Font.display(22, weight: .medium))
                 .foregroundStyle(Brand.cream)
             HStack(spacing: 6) {
                 stageDot(0); stageDot(1); stageDot(2)
@@ -153,7 +153,7 @@ struct PostPitchView: View {
             VStack(alignment: .leading, spacing: 8) {
                 Toggle(isOn: $consentToRecord) {
                     Text("Consent to record (required for research data)")
-                        .font(Brand.Font.sans(13))
+                        .font(Brand.Font.body(13))
                         .foregroundStyle(Brand.cream)
                 }
                 .tint(Brand.cream)
@@ -426,7 +426,7 @@ struct PostPitchView: View {
     private func ynRow(label: String, value: Binding<Bool?>) -> some View {
         HStack {
             Text(label)
-                .font(Brand.Font.sans(13))
+                .font(Brand.Font.body(13))
                 .foregroundStyle(Brand.cream)
             Spacer()
             HStack(spacing: 8) {
