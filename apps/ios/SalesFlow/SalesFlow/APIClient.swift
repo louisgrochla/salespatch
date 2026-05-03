@@ -23,15 +23,17 @@ final class APIClient {
         UserDefaults.standard.string(forKey: "apiBaseURL") ?? defaultBaseURL
     }
 
-    // Sales-dashboard (Next.js) base URL — different host from mobile-api.
-    // Used for customer-facing payment endpoints (`/api/payments/*`) which
-    // live in the dashboard app. Same Bearer token (HMAC over SD_SECRET) works
-    // on both hosts.
-    #if targetEnvironment(simulator)
-    private let dashboardBaseURL = "http://localhost:4300"
-    #else
-    private let dashboardBaseURL = "https://salespatch.co.uk"
-    #endif
+    // Sales-dashboard (Next.js) base URL — different host from the leads API.
+    // Used for /api/payments/* and /api/leads/:id/pitch (the post-pitch
+    // questionnaire). Same Bearer token (HMAC over SD_SECRET) works on both
+    // hosts.
+    //
+    // Always hits prod by default. Override at launch via the
+    // "dashboardBaseURL" UserDefaults key for local dev (e.g. when running
+    // sales-dashboard on http://localhost:4300).
+    private var dashboardBaseURL: String {
+        UserDefaults.standard.string(forKey: "dashboardBaseURL") ?? "https://salespatch.co.uk"
+    }
 
     var token: String?
 
