@@ -3,19 +3,17 @@ import CoreLocation
 
 // MARK: — PostPitchView
 //
-// Three-stage post-pitch questionnaire. Visual language follows
-// DESIGN_NOTES.md (Theme tokens, card surfaces, accent on selected
-// states). Designed for one-handed thumb use in the field — every
-// tap target ≥ 44pt, vertical stacks instead of cramped horizontal
-// chip rows.
+// Editorial dark + signal-gold post-pitch questionnaire. Visual
+// language matches the rest of the app — Brand tokens (cream on ink,
+// mono eyebrows like "/ OUTCOME", gold accent, capsule chips, card
+// surfaces with Brand.line borders). 3-stage flow:
 //
-// Stage 1 — required (5 inputs, ~15s)
-// Stage 2 — conditional (only branches relevant to the chosen outcome)
-// Stage 3 — optional (notes, gut-feel slider, first response, competitor)
+//   Stage 1 — required (~15s): outcome, decision-maker, demo, interest, consent
+//   Stage 2 — conditional: branches relevant to the chosen outcome
+//   Stage 3 — optional: notes, gut-feel slider, first response, competitor
 //
-// On submit the payload is enqueued to PitchQueue (SwiftData) and the
-// sheet dismisses immediately. Network call runs in the background
-// and retries on app foreground.
+// On submit the payload is enqueued to PitchQueue and the sheet
+// dismisses immediately. Network call runs in the background.
 
 struct PostPitchView: View {
     let assignmentId: String
@@ -54,86 +52,95 @@ struct PostPitchView: View {
     @State private var errorMessage: String? = nil
 
     var body: some View {
-        NavigationStack {
-            ZStack {
-                Theme.background.ignoresSafeArea()
+        ZStack {
+            Brand.ink.ignoresSafeArea()
 
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 16) {
-                        header
-
-                        Group {
-                            if stage == 0 { stage1Required }
-                            else if stage == 1 { stage2Conditional }
-                            else if stage == 2 { stage3Optional }
-                        }
-
-                        if let errorMessage {
-                            Text(errorMessage)
-                                .font(.system(size: 13))
-                                .foregroundStyle(Theme.statusRejected)
-                                .padding(.top, 4)
-                        }
+            ScrollView {
+                VStack(alignment: .leading, spacing: 20) {
+                    header
+                    progressDots
+                    Group {
+                        if stage == 0 { stage1Required }
+                        else if stage == 1 { stage2Conditional }
+                        else if stage == 2 { stage3Optional }
                     }
-                    .padding(.horizontal, 24)
-                    .padding(.top, 8)
-                    .padding(.bottom, 120)
+                    if let errorMessage {
+                        Text(errorMessage)
+                            .font(Brand.Font.mono(11))
+                            .foregroundStyle(Brand.err)
+                            .padding(.top, 4)
+                    }
                 }
+                .padding(.horizontal, 20)
+                .padding(.top, 16)
+                .padding(.bottom, 130)
             }
-            .toolbar(.hidden, for: .navigationBar)
-            .overlay(alignment: .bottom) { stickyBar }
         }
         .interactiveDismissDisabled(stage > 0)
+        .overlay(alignment: .bottom) { stickyBar }
     }
 
     // ── Header
 
     private var header: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("POST-PITCH")
-                        .font(.system(size: 11, weight: .semibold))
-                        .tracking(1.6)
-                        .foregroundStyle(Theme.textMuted)
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(alignment: .top) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("/ POST-PITCH")
+                        .font(Brand.Font.mono(Brand.Font.eyebrow, weight: .medium))
+                        .tracking(Brand.Tracking.eyebrow)
+                        .foregroundStyle(Brand.signal)
                     Text(businessName)
-                        .font(.system(size: 24, weight: .semibold))
-                        .foregroundStyle(Theme.textPrimary)
+                        .font(Brand.Font.display(28, weight: .medium))
+                        .tracking(Brand.Tracking.display)
+                        .foregroundStyle(Brand.cream)
+                        .lineLimit(2)
                 }
-                Spacer()
-                Button("Cancel") { dismiss() }
-                    .font(.system(size: 15))
-                    .foregroundStyle(Theme.textSecondary)
+                Spacer(minLength: 0)
+                Button {
+                    BrandHaptics.tap()
+                    dismiss()
+                } label: {
+                    Text("Cancel")
+                        .font(Brand.Font.mono(Brand.Font.meta))
+                        .tracking(Brand.Tracking.meta)
+                        .foregroundStyle(Brand.creamMuted)
+                }
             }
 
             HStack(spacing: 8) {
-                ForEach(0..<3, id: \.self) { i in
-                    Capsule()
-                        .fill(i <= stage ? Theme.accent : Theme.border)
-                        .frame(height: 3)
+                Text(stageEyebrow)
+                    .font(Brand.Font.mono(Brand.Font.eyebrowSm, weight: .medium))
+                    .tracking(Brand.Tracking.eyebrow)
+                    .foregroundStyle(Brand.creamMuted)
+                if let dur = currentDurationLabel {
+                    Text("·")
+                        .foregroundStyle(Brand.creamMuted)
+                    Text(dur)
+                        .font(Brand.Font.mono(Brand.Font.meta).monospacedDigit())
+                        .foregroundStyle(Brand.creamDim)
                 }
+                Spacer()
             }
             .padding(.top, 4)
+        }
+    }
 
-            HStack(spacing: 12) {
-                Text(stageTitle)
-                    .font(.system(size: 13))
-                    .foregroundStyle(Theme.textSecondary)
-                Spacer()
-                if let dur = currentDurationLabel {
-                    Label(dur, systemImage: "timer")
-                        .font(.system(size: 12))
-                        .foregroundStyle(Theme.textMuted)
-                }
+    private var progressDots: some View {
+        HStack(spacing: 6) {
+            ForEach(0..<3, id: \.self) { i in
+                RoundedRectangle(cornerRadius: 1)
+                    .fill(i <= stage ? Brand.signal : Brand.line)
+                    .frame(height: 2)
             }
         }
     }
 
-    private var stageTitle: String {
+    private var stageEyebrow: String {
         switch stage {
-        case 0: return "Stage 1 of 3 · the essentials"
-        case 1: return "Stage 2 of 3 · context"
-        case 2: return "Stage 3 of 3 · texture (all optional)"
+        case 0: return "STAGE 1 / 3 · ESSENTIALS"
+        case 1: return "STAGE 2 / 3 · CONTEXT"
+        case 2: return "STAGE 3 / 3 · OPTIONAL"
         default: return ""
         }
     }
@@ -141,46 +148,40 @@ struct PostPitchView: View {
     private var currentDurationLabel: String? {
         guard let start = pitchStartedAt else { return nil }
         let s = Int(Date().timeIntervalSince(start))
-        return formatSeconds(s)
-    }
-
-    private func formatSeconds(_ s: Int) -> String {
-        let m = s / 60, r = s % 60
+        let m = s / 60
+        let r = s % 60
         return m == 0 ? "\(s)s" : "\(m)m \(r)s"
     }
 
     // ── Stage 1: required
 
     private var stage1Required: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: 14) {
             outcomeCard
-            yesNoCard(label: "Decision-maker present?", value: $decisionMakerPresent)
-            yesNoCard(label: "Demo shown?", value: $demoShown)
+            yesNoCard(eyebrow: "/ DECISION-MAKER", question: "Were you speaking to the decision-maker?", value: $decisionMakerPresent)
+            yesNoCard(eyebrow: "/ DEMO SHOWN", question: "Did they actually see the demo?", value: $demoShown)
             interestCard
             consentCard
         }
     }
 
     private var stage1Complete: Bool {
-        outcome != nil
-            && decisionMakerPresent != nil
-            && demoShown != nil
-            && interestLevel != nil
+        outcome != nil && decisionMakerPresent != nil && demoShown != nil && interestLevel != nil
     }
 
     private var outcomeCard: some View {
-        sectionCard(label: "Outcome", required: true) {
+        sectionCard(eyebrow: "/ OUTCOME", required: true) {
             VStack(spacing: 8) {
-                outcomeRow(.closedNow, title: "Closed now", subtitle: "Paid in full today", icon: "checkmark.circle.fill", tint: Theme.statusSold)
-                outcomeRow(.closedFollowup, title: "Closed (follow-up)", subtitle: "Yes — payment after pitch", icon: "checkmark.circle", tint: Theme.statusSold)
-                outcomeRow(.followUp, title: "Follow up", subtitle: "Interested, more chat needed", icon: "arrow.uturn.right", tint: Theme.statusPitched)
-                outcomeRow(.rejected, title: "Rejected", subtitle: "Said no", icon: "xmark.circle", tint: Theme.statusRejected)
-                outcomeRow(.notPitched, title: "Not pitched", subtitle: "Couldn't pitch — wrong contact, closed, etc.", icon: "minus.circle", tint: Theme.textMuted)
+                outcomeRow(.closedNow, title: "Closed now", subtitle: "Paid in full today", icon: "sterlingsign.circle.fill")
+                outcomeRow(.closedFollowup, title: "Closed (follow-up)", subtitle: "Yes — payment after pitch", icon: "checkmark.seal.fill")
+                outcomeRow(.followUp, title: "Follow up", subtitle: "Interested, more chat needed", icon: "arrow.uturn.right.circle")
+                outcomeRow(.rejected, title: "Rejected", subtitle: "Said no", icon: "xmark.circle")
+                outcomeRow(.notPitched, title: "Not pitched", subtitle: "Wrong contact / closed / no time", icon: "minus.circle")
             }
         }
     }
 
-    private func outcomeRow(_ value: PitchOutcome, title: String, subtitle: String, icon: String, tint: Color) -> some View {
+    private func outcomeRow(_ value: PitchOutcome, title: String, subtitle: String, icon: String) -> some View {
         let selected = outcome == value
         return Button {
             BrandHaptics.tap()
@@ -188,135 +189,180 @@ struct PostPitchView: View {
         } label: {
             HStack(spacing: 12) {
                 Image(systemName: icon)
-                    .font(.system(size: 18, weight: .medium))
-                    .foregroundStyle(selected ? .white : tint)
+                    .font(.system(size: 16, weight: .medium))
+                    .foregroundStyle(selected ? Brand.signal : Brand.creamDim)
                     .frame(width: 36, height: 36)
-                    .background(selected ? tint : tint.opacity(0.12))
-                    .clipShape(RoundedRectangle(cornerRadius: 10))
+                    .background(
+                        RoundedRectangle(cornerRadius: 9)
+                            .fill(selected ? Brand.signalSoft : Brand.bgCard)
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 9)
+                            .strokeBorder(selected ? Brand.signalBorder : Brand.line, lineWidth: 1)
+                    )
                 VStack(alignment: .leading, spacing: 2) {
                     Text(title)
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundStyle(Theme.textPrimary)
+                        .font(Brand.Font.body(15, weight: .medium))
+                        .foregroundStyle(Brand.cream)
                     Text(subtitle)
-                        .font(.system(size: 13))
-                        .foregroundStyle(Theme.textSecondary)
-                        .lineLimit(2)
+                        .font(Brand.Font.mono(Brand.Font.meta))
+                        .foregroundStyle(Brand.creamMuted)
                 }
                 Spacer(minLength: 0)
                 if selected {
                     Image(systemName: "checkmark")
-                        .font(.system(size: 14, weight: .bold))
-                        .foregroundStyle(Theme.accent)
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundStyle(Brand.signal)
                 }
             }
-            .padding(12)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
             .background(
                 RoundedRectangle(cornerRadius: 12)
-                    .fill(Theme.surfaceElevated)
+                    .fill(selected ? Brand.signalSoft : Brand.bgCard)
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 12)
-                    .strokeBorder(selected ? Theme.accent : Theme.border, lineWidth: selected ? 1.5 : 1)
+                    .strokeBorder(selected ? Brand.signalBorder : Brand.line, lineWidth: 1)
             )
         }
         .buttonStyle(.plain)
     }
 
-    private func yesNoCard(label: String, value: Binding<Bool?>) -> some View {
-        sectionCard(label: label, required: true) {
-            HStack(spacing: 8) {
-                segmentedButton(title: "Yes", icon: "checkmark", selected: value.wrappedValue == true) {
+    private func yesNoCard(eyebrow: String, question: String, value: Binding<Bool?>) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 6) {
+                Text(eyebrow)
+                    .font(Brand.Font.mono(Brand.Font.eyebrow, weight: .medium))
+                    .tracking(Brand.Tracking.eyebrow)
+                    .foregroundStyle(Brand.signal)
+                Text("·").foregroundStyle(Brand.creamMuted)
+                Text("REQUIRED")
+                    .font(Brand.Font.mono(9.5))
+                    .tracking(Brand.Tracking.eyebrow)
+                    .foregroundStyle(Brand.creamMuted)
+            }
+            Text(question)
+                .font(Brand.Font.body(14))
+                .foregroundStyle(Brand.creamDim)
+            HStack(spacing: 10) {
+                yesNoPill(title: "Yes", icon: "checkmark", selected: value.wrappedValue == true) {
                     value.wrappedValue = true
                 }
-                segmentedButton(title: "No", icon: "xmark", selected: value.wrappedValue == false) {
+                yesNoPill(title: "No", icon: "xmark", selected: value.wrappedValue == false) {
                     value.wrappedValue = false
                 }
             }
         }
+        .padding(16)
+        .background(
+            RoundedRectangle(cornerRadius: Brand.Radius.card)
+                .fill(Brand.bgStrong)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: Brand.Radius.card)
+                .strokeBorder(Brand.line, lineWidth: 1)
+        )
     }
 
-    private func segmentedButton(title: String, icon: String, selected: Bool, action: @escaping () -> Void) -> some View {
-        Button(action: { BrandHaptics.tap(); action() }) {
+    private func yesNoPill(title: String, icon: String, selected: Bool, action: @escaping () -> Void) -> some View {
+        Button {
+            BrandHaptics.tap()
+            action()
+        } label: {
             HStack(spacing: 6) {
-                Image(systemName: icon).font(.system(size: 13, weight: .semibold))
-                Text(title).font(.system(size: 15, weight: .semibold))
+                Image(systemName: icon)
+                    .font(.system(size: 12, weight: .semibold))
+                Text(title)
+                    .font(Brand.Font.body(15, weight: .medium))
             }
             .frame(maxWidth: .infinity)
-            .frame(height: 44)
-            .foregroundStyle(selected ? Color.white : Theme.textPrimary)
-            .background(selected ? Theme.accent : Theme.surfaceElevated)
-            .overlay(
-                RoundedRectangle(cornerRadius: 10)
-                    .strokeBorder(selected ? Color.clear : Theme.border, lineWidth: 1)
+            .frame(height: 46)
+            .foregroundStyle(selected ? Brand.ink : Brand.cream)
+            .background(
+                Capsule().fill(selected ? Brand.cream : Brand.bgCard)
             )
-            .clipShape(RoundedRectangle(cornerRadius: 10))
+            .overlay(
+                Capsule().strokeBorder(selected ? Color.clear : Brand.line, lineWidth: 1)
+            )
         }
         .buttonStyle(.plain)
     }
 
     private var interestCard: some View {
-        sectionCard(label: "Interest level", required: true) {
-            HStack(spacing: 8) {
-                interestButton(.cold, "Cold", "snowflake")
-                interestButton(.warm, "Warm", "thermometer.medium")
-                interestButton(.hot, "Hot", "flame.fill")
+        sectionCard(eyebrow: "/ INTEREST LEVEL", required: true) {
+            HStack(spacing: 10) {
+                interestPill(.cold, "Cold", "snowflake")
+                interestPill(.warm, "Warm", "thermometer.medium")
+                interestPill(.hot, "Hot", "flame.fill")
             }
         }
     }
 
-    private func interestButton(_ value: InterestLevel, _ title: String, _ icon: String) -> some View {
+    private func interestPill(_ value: InterestLevel, _ title: String, _ icon: String) -> some View {
         let selected = interestLevel == value
         return Button {
             BrandHaptics.tap()
             interestLevel = value
         } label: {
-            VStack(spacing: 4) {
+            VStack(spacing: 6) {
                 Image(systemName: icon).font(.system(size: 16, weight: .medium))
-                Text(title).font(.system(size: 13, weight: .semibold))
+                Text(title)
+                    .font(Brand.Font.mono(11, weight: .medium))
+                    .tracking(Brand.Tracking.meta)
             }
             .frame(maxWidth: .infinity)
-            .frame(height: 56)
-            .foregroundStyle(selected ? Color.white : Theme.textPrimary)
-            .background(selected ? Theme.accent : Theme.surfaceElevated)
-            .overlay(
-                RoundedRectangle(cornerRadius: 10)
-                    .strokeBorder(selected ? Color.clear : Theme.border, lineWidth: 1)
+            .frame(height: 64)
+            .foregroundStyle(selected ? Brand.ink : Brand.cream)
+            .background(
+                RoundedRectangle(cornerRadius: 12).fill(selected ? Brand.cream : Brand.bgCard)
             )
-            .clipShape(RoundedRectangle(cornerRadius: 10))
+            .overlay(
+                RoundedRectangle(cornerRadius: 12).strokeBorder(selected ? Color.clear : Brand.line, lineWidth: 1)
+            )
         }
         .buttonStyle(.plain)
     }
 
     private var consentCard: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 6) {
+                Text("/ CONSENT")
+                    .font(Brand.Font.mono(Brand.Font.eyebrow, weight: .medium))
+                    .tracking(Brand.Tracking.eyebrow)
+                    .foregroundStyle(Brand.signal)
+                Text("·").foregroundStyle(Brand.creamMuted)
+                Text("REQUIRED FOR DISSERTATION")
+                    .font(Brand.Font.mono(9.5))
+                    .tracking(Brand.Tracking.eyebrow)
+                    .foregroundStyle(Brand.creamMuted)
+            }
+
             HStack(alignment: .top, spacing: 12) {
-                Image(systemName: "checkmark.shield.fill")
-                    .font(.system(size: 18, weight: .medium))
-                    .foregroundStyle(Color(hex: "#5B7B9D"))
-                    .frame(width: 36, height: 36)
-                    .background(Color(hex: "#5B7B9D").opacity(0.12))
-                    .clipShape(RoundedRectangle(cornerRadius: 10))
-                VStack(alignment: .leading, spacing: 3) {
+                VStack(alignment: .leading, spacing: 4) {
                     Text("Consent to record")
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundStyle(Theme.textPrimary)
-                    Text("Required for dissertation analysis. Without it the pitch saves but is excluded from research.")
-                        .font(.system(size: 12.5))
-                        .foregroundStyle(Theme.textSecondary)
+                        .font(Brand.Font.body(15, weight: .medium))
+                        .foregroundStyle(Brand.cream)
+                    Text("Without consent the pitch saves but is excluded from research data.")
+                        .font(Brand.Font.body(13))
+                        .foregroundStyle(Brand.creamMuted)
                         .fixedSize(horizontal: false, vertical: true)
                 }
-                Spacer(minLength: 0)
+                Spacer(minLength: 8)
                 Toggle("", isOn: $consentToRecord)
                     .labelsHidden()
-                    .tint(Theme.accent)
+                    .tint(Brand.signal)
             }
+            .padding(.top, 12)
         }
-        .padding(14)
-        .background(Theme.surface)
-        .clipShape(RoundedRectangle(cornerRadius: 14))
+        .padding(16)
+        .background(
+            RoundedRectangle(cornerRadius: Brand.Radius.card)
+                .fill(consentToRecord ? Brand.signalSoft : Brand.bgStrong)
+        )
         .overlay(
-            RoundedRectangle(cornerRadius: 14)
-                .strokeBorder(Theme.border, lineWidth: 1)
+            RoundedRectangle(cornerRadius: Brand.Radius.card)
+                .strokeBorder(consentToRecord ? Brand.signalBorder : Brand.line, lineWidth: 1)
         )
     }
 
@@ -324,20 +370,20 @@ struct PostPitchView: View {
 
     @ViewBuilder
     private var stage2Conditional: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: 14) {
             if demoShown == true {
-                sectionCard(label: "Demo reaction") {
+                sectionCard(eyebrow: "/ DEMO REACTION") {
                     VStack(spacing: 8) {
-                        demoReactionRow(.loved, "Loved it", "heart.fill", Theme.statusSold)
-                        demoReactionRow(.liked, "Liked it", "hand.thumbsup.fill", Theme.accent)
-                        demoReactionRow(.neutral, "Neutral", "minus.circle", Theme.textMuted)
-                        demoReactionRow(.unimpressed, "Unimpressed", "hand.thumbsdown", Theme.statusRejected)
+                        demoReactionRow(.loved, "Loved it", "heart.fill")
+                        demoReactionRow(.liked, "Liked it", "hand.thumbsup.fill")
+                        demoReactionRow(.neutral, "Neutral", "minus.circle")
+                        demoReactionRow(.unimpressed, "Unimpressed", "hand.thumbsdown")
                     }
                 }
             }
 
             if outcome == .rejected || outcome == .followUp {
-                sectionCard(label: "Objections", subtitle: "Tap all that apply") {
+                sectionCard(eyebrow: "/ OBJECTIONS", subtitle: "Tap all that apply") {
                     LazyVGrid(columns: [GridItem(.flexible(), spacing: 8), GridItem(.flexible(), spacing: 8)], spacing: 8) {
                         ForEach(ObjectionTag.allCases, id: \.self) { tag in
                             objectionChip(tag)
@@ -346,42 +392,45 @@ struct PostPitchView: View {
                     if objections.contains(.other) {
                         TextField("What else?", text: $objectionOther)
                             .textFieldStyle(.plain)
+                            .font(Brand.Font.body(14))
+                            .foregroundStyle(Brand.cream)
                             .padding(12)
-                            .background(Theme.surfaceElevated)
-                            .clipShape(RoundedRectangle(cornerRadius: 10))
-                            .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Theme.border, lineWidth: 1))
+                            .background(Brand.bgCard)
+                            .clipShape(RoundedRectangle(cornerRadius: Brand.Radius.input))
+                            .overlay(RoundedRectangle(cornerRadius: Brand.Radius.input).strokeBorder(Brand.line, lineWidth: 1))
                             .padding(.top, 8)
                     }
                 }
             }
 
             if outcome == .closedNow || outcome == .closedFollowup {
-                sectionCard(label: "Agreed price") {
-                    HStack(spacing: 4) {
+                sectionCard(eyebrow: "/ AGREED PRICE") {
+                    HStack(spacing: 6) {
                         Text("£")
-                            .font(.system(size: 18, weight: .medium))
-                            .foregroundStyle(Theme.textSecondary)
+                            .font(Brand.Font.display(20, weight: .medium))
+                            .foregroundStyle(Brand.creamDim)
                         TextField("350", text: $agreedPrice)
                             .keyboardType(.decimalPad)
-                            .font(.system(size: 18, weight: .medium))
-                            .foregroundStyle(Theme.textPrimary)
+                            .font(Brand.Font.display(20, weight: .medium).monospacedDigit())
+                            .foregroundStyle(Brand.cream)
                     }
-                    .padding(14)
-                    .background(Theme.surfaceElevated)
-                    .clipShape(RoundedRectangle(cornerRadius: 10))
-                    .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Theme.border, lineWidth: 1))
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 12)
+                    .background(Brand.bgCard)
+                    .clipShape(RoundedRectangle(cornerRadius: Brand.Radius.input))
+                    .overlay(RoundedRectangle(cornerRadius: Brand.Radius.input).strokeBorder(Brand.line, lineWidth: 1))
                 }
 
-                sectionCard(label: "Payment") {
-                    HStack(spacing: 8) {
-                        segmentedButton(title: "Paid now", icon: "creditcard.fill", selected: paymentMethod == .paidNow) { paymentMethod = .paidNow }
-                        segmentedButton(title: "Pay later", icon: "calendar", selected: paymentMethod == .willPayFollowup) { paymentMethod = .willPayFollowup }
+                sectionCard(eyebrow: "/ PAYMENT") {
+                    HStack(spacing: 10) {
+                        yesNoPill(title: "Paid now", icon: "creditcard.fill", selected: paymentMethod == .paidNow) { paymentMethod = .paidNow }
+                        yesNoPill(title: "Pay later", icon: "calendar", selected: paymentMethod == .willPayFollowup) { paymentMethod = .willPayFollowup }
                     }
                 }
             }
 
             if outcome == .followUp || outcome == .closedFollowup {
-                sectionCard(label: "Follow up when") {
+                sectionCard(eyebrow: "/ FOLLOW UP WHEN") {
                     LazyVGrid(columns: [GridItem(.flexible(), spacing: 8), GridItem(.flexible(), spacing: 8)], spacing: 8) {
                         followupChip(.tomorrow, "Tomorrow")
                         followupChip(.thisWeek, "This week")
@@ -389,7 +438,7 @@ struct PostPitchView: View {
                         followupChip(.nextMonth, "Next month")
                     }
                 }
-                sectionCard(label: "Next step") {
+                sectionCard(eyebrow: "/ NEXT STEP") {
                     VStack(spacing: 8) {
                         nextStepRow(.spWillCall, "I'll call them", "phone.arrow.up.right")
                         nextStepRow(.customerWillCall, "They'll call me", "phone.arrow.down.left")
@@ -416,25 +465,24 @@ struct PostPitchView: View {
     private var emptyStageCard: some View {
         HStack(spacing: 12) {
             Image(systemName: "checkmark.circle.fill")
-                .font(.system(size: 20))
-                .foregroundStyle(Theme.statusSold)
+                .font(.system(size: 18, weight: .medium))
+                .foregroundStyle(Brand.signal)
             VStack(alignment: .leading, spacing: 2) {
-                Text("Nothing else needed")
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(Theme.textPrimary)
-                Text("Tap Next to add optional notes, or Submit to ship.")
-                    .font(.system(size: 13))
-                    .foregroundStyle(Theme.textSecondary)
+                Text("No extra context needed")
+                    .font(Brand.Font.body(14, weight: .medium))
+                    .foregroundStyle(Brand.cream)
+                Text("Tap Next to add optional notes — or Submit to ship.")
+                    .font(Brand.Font.mono(Brand.Font.meta))
+                    .foregroundStyle(Brand.creamMuted)
             }
             Spacer(minLength: 0)
         }
-        .padding(14)
-        .background(Theme.surface)
-        .clipShape(RoundedRectangle(cornerRadius: 14))
-        .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(Theme.border, lineWidth: 1))
+        .padding(16)
+        .background(RoundedRectangle(cornerRadius: Brand.Radius.card).fill(Brand.bgStrong))
+        .overlay(RoundedRectangle(cornerRadius: Brand.Radius.card).strokeBorder(Brand.line, lineWidth: 1))
     }
 
-    private func demoReactionRow(_ value: DemoReaction, _ title: String, _ icon: String, _ tint: Color) -> some View {
+    private func demoReactionRow(_ value: DemoReaction, _ title: String, _ icon: String) -> some View {
         let selected = demoReaction == value
         return Button {
             BrandHaptics.tap()
@@ -442,29 +490,23 @@ struct PostPitchView: View {
         } label: {
             HStack(spacing: 12) {
                 Image(systemName: icon)
-                    .font(.system(size: 16, weight: .medium))
-                    .foregroundStyle(selected ? .white : tint)
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundStyle(selected ? Brand.signal : Brand.creamDim)
                     .frame(width: 32, height: 32)
-                    .background(selected ? tint : tint.opacity(0.12))
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                    .background(RoundedRectangle(cornerRadius: 8).fill(selected ? Brand.signalSoft : Brand.bgCard))
+                    .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(selected ? Brand.signalBorder : Brand.line, lineWidth: 1))
                 Text(title)
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(Theme.textPrimary)
+                    .font(Brand.Font.body(15, weight: .medium))
+                    .foregroundStyle(Brand.cream)
                 Spacer()
                 if selected {
-                    Image(systemName: "checkmark")
-                        .font(.system(size: 14, weight: .bold))
-                        .foregroundStyle(Theme.accent)
+                    Image(systemName: "checkmark").font(.system(size: 13, weight: .bold)).foregroundStyle(Brand.signal)
                 }
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 10)
-            .background(Theme.surfaceElevated)
-            .overlay(
-                RoundedRectangle(cornerRadius: 10)
-                    .strokeBorder(selected ? Theme.accent : Theme.border, lineWidth: selected ? 1.5 : 1)
-            )
-            .clipShape(RoundedRectangle(cornerRadius: 10))
+            .background(RoundedRectangle(cornerRadius: 12).fill(selected ? Brand.signalSoft : Brand.bgCard))
+            .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(selected ? Brand.signalBorder : Brand.line, lineWidth: 1))
         }
         .buttonStyle(.plain)
     }
@@ -476,16 +518,16 @@ struct PostPitchView: View {
             if selected { objections.remove(tag) } else { objections.insert(tag) }
         } label: {
             Text(tag.label)
-                .font(.system(size: 13, weight: .medium))
+                .font(Brand.Font.body(13, weight: .medium))
                 .frame(maxWidth: .infinity)
-                .padding(.vertical, 10)
-                .foregroundStyle(selected ? .white : Theme.textPrimary)
-                .background(selected ? Theme.accent : Theme.surfaceElevated)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 10)
-                        .strokeBorder(selected ? Color.clear : Theme.border, lineWidth: 1)
+                .padding(.vertical, 12)
+                .foregroundStyle(selected ? Brand.ink : Brand.cream)
+                .background(
+                    RoundedRectangle(cornerRadius: 10).fill(selected ? Brand.cream : Brand.bgCard)
                 )
-                .clipShape(RoundedRectangle(cornerRadius: 10))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 10).strokeBorder(selected ? Color.clear : Brand.line, lineWidth: 1)
+                )
         }
         .buttonStyle(.plain)
     }
@@ -497,16 +539,16 @@ struct PostPitchView: View {
             bestFollowupTime = value
         } label: {
             Text(title)
-                .font(.system(size: 14, weight: .semibold))
+                .font(Brand.Font.body(14, weight: .medium))
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 12)
-                .foregroundStyle(selected ? .white : Theme.textPrimary)
-                .background(selected ? Theme.accent : Theme.surfaceElevated)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 10)
-                        .strokeBorder(selected ? Color.clear : Theme.border, lineWidth: 1)
+                .foregroundStyle(selected ? Brand.ink : Brand.cream)
+                .background(
+                    RoundedRectangle(cornerRadius: 10).fill(selected ? Brand.cream : Brand.bgCard)
                 )
-                .clipShape(RoundedRectangle(cornerRadius: 10))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 10).strokeBorder(selected ? Color.clear : Brand.line, lineWidth: 1)
+                )
         }
         .buttonStyle(.plain)
     }
@@ -519,29 +561,23 @@ struct PostPitchView: View {
         } label: {
             HStack(spacing: 12) {
                 Image(systemName: icon)
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundStyle(selected ? .white : Theme.accent)
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(selected ? Brand.signal : Brand.creamDim)
                     .frame(width: 32, height: 32)
-                    .background(selected ? Theme.accent : Theme.accent.opacity(0.12))
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                    .background(RoundedRectangle(cornerRadius: 8).fill(selected ? Brand.signalSoft : Brand.bgCard))
+                    .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(selected ? Brand.signalBorder : Brand.line, lineWidth: 1))
                 Text(title)
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(Theme.textPrimary)
+                    .font(Brand.Font.body(15, weight: .medium))
+                    .foregroundStyle(Brand.cream)
                 Spacer()
                 if selected {
-                    Image(systemName: "checkmark")
-                        .font(.system(size: 14, weight: .bold))
-                        .foregroundStyle(Theme.accent)
+                    Image(systemName: "checkmark").font(.system(size: 13, weight: .bold)).foregroundStyle(Brand.signal)
                 }
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 10)
-            .background(Theme.surfaceElevated)
-            .overlay(
-                RoundedRectangle(cornerRadius: 10)
-                    .strokeBorder(selected ? Theme.accent : Theme.border, lineWidth: selected ? 1.5 : 1)
-            )
-            .clipShape(RoundedRectangle(cornerRadius: 10))
+            .background(RoundedRectangle(cornerRadius: 12).fill(selected ? Brand.signalSoft : Brand.bgCard))
+            .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(selected ? Brand.signalBorder : Brand.line, lineWidth: 1))
         }
         .buttonStyle(.plain)
     }
@@ -549,53 +585,57 @@ struct PostPitchView: View {
     // ── Stage 3: optional gold
 
     private var stage3Optional: some View {
-        VStack(spacing: 12) {
-            sectionCard(label: "Notes", subtitle: "Anything notable in one sentence") {
+        VStack(spacing: 14) {
+            sectionCard(eyebrow: "/ NOTES", subtitle: "Anything notable in one sentence") {
                 TextField("e.g. owner was distracted", text: $notes, axis: .vertical)
                     .lineLimit(2...4)
+                    .font(Brand.Font.body(14))
+                    .foregroundStyle(Brand.cream)
                     .padding(12)
-                    .background(Theme.surfaceElevated)
-                    .clipShape(RoundedRectangle(cornerRadius: 10))
-                    .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Theme.border, lineWidth: 1))
-                    .foregroundStyle(Theme.textPrimary)
+                    .background(Brand.bgCard)
+                    .clipShape(RoundedRectangle(cornerRadius: Brand.Radius.input))
+                    .overlay(RoundedRectangle(cornerRadius: Brand.Radius.input).strokeBorder(Brand.line, lineWidth: 1))
             }
 
-            sectionCard(
-                label: "Gut-feel close probability",
-                subtitle: "Calibrates over time. Pick where you'd bet."
-            ) {
-                VStack(spacing: 10) {
-                    HStack {
-                        Text("0%").font(.system(size: 11)).foregroundStyle(Theme.textMuted)
+            sectionCard(eyebrow: "/ GUT-FEEL CLOSE", subtitle: "Where would you bet right now?") {
+                VStack(spacing: 12) {
+                    HStack(alignment: .firstTextBaseline) {
+                        Text("0%")
+                            .font(Brand.Font.mono(10))
+                            .foregroundStyle(Brand.creamMuted)
                         Spacer()
                         Text("\(Int(gutFeelClosePct))%")
-                            .font(.system(size: 22, weight: .semibold))
-                            .foregroundStyle(Theme.accent)
-                            .monospacedDigit()
+                            .font(Brand.Font.display(34, weight: .medium).monospacedDigit())
+                            .tracking(-0.5)
+                            .foregroundStyle(Brand.signal)
                         Spacer()
-                        Text("100%").font(.system(size: 11)).foregroundStyle(Theme.textMuted)
+                        Text("100%")
+                            .font(Brand.Font.mono(10))
+                            .foregroundStyle(Brand.creamMuted)
                     }
                     Slider(value: $gutFeelClosePct, in: 0...100, step: 1)
-                        .tint(Theme.accent)
+                        .tint(Brand.signal)
                 }
             }
 
-            sectionCard(label: "First response", subtitle: "What did they say first?") {
+            sectionCard(eyebrow: "/ FIRST RESPONSE", subtitle: "What did they say first?") {
                 TextField("\"oh we already have someone\"", text: $firstResponsePhrase)
+                    .font(Brand.Font.body(14))
+                    .foregroundStyle(Brand.cream)
                     .padding(12)
-                    .background(Theme.surfaceElevated)
-                    .clipShape(RoundedRectangle(cornerRadius: 10))
-                    .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Theme.border, lineWidth: 1))
-                    .foregroundStyle(Theme.textPrimary)
+                    .background(Brand.bgCard)
+                    .clipShape(RoundedRectangle(cornerRadius: Brand.Radius.input))
+                    .overlay(RoundedRectangle(cornerRadius: Brand.Radius.input).strokeBorder(Brand.line, lineWidth: 1))
             }
 
-            sectionCard(label: "Competitor mentioned", subtitle: "Wix, Square, my nephew…") {
+            sectionCard(eyebrow: "/ COMPETITOR", subtitle: "Wix, Square, the nephew…") {
                 TextField("Optional", text: $competitorMentioned)
+                    .font(Brand.Font.body(14))
+                    .foregroundStyle(Brand.cream)
                     .padding(12)
-                    .background(Theme.surfaceElevated)
-                    .clipShape(RoundedRectangle(cornerRadius: 10))
-                    .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Theme.border, lineWidth: 1))
-                    .foregroundStyle(Theme.textPrimary)
+                    .background(Brand.bgCard)
+                    .clipShape(RoundedRectangle(cornerRadius: Brand.Radius.input))
+                    .overlay(RoundedRectangle(cornerRadius: Brand.Radius.input).strokeBorder(Brand.line, lineWidth: 1))
             }
         }
     }
@@ -605,53 +645,66 @@ struct PostPitchView: View {
     @ViewBuilder
     private var stickyBar: some View {
         VStack(spacing: 0) {
-            Rectangle().fill(Theme.border).frame(height: 1)
+            Rectangle().fill(Brand.line).frame(height: 1)
             HStack(spacing: 10) {
                 if stage > 0 {
-                    Button("Back") {
+                    Button {
                         BrandHaptics.tap()
                         stage -= 1
+                    } label: {
+                        Text("Back")
+                            .font(Brand.Font.mono(11, weight: .medium))
+                            .tracking(Brand.Tracking.eyebrow)
+                            .foregroundStyle(Brand.cream)
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 50)
+                            .background(Capsule().fill(Brand.bgCard))
+                            .overlay(Capsule().strokeBorder(Brand.line, lineWidth: 1))
                     }
-                    .frame(height: 50)
-                    .frame(maxWidth: .infinity)
-                    .foregroundStyle(Theme.textPrimary)
-                    .background(Theme.surfaceElevated)
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
-                    .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Theme.border, lineWidth: 1))
+                    .buttonStyle(.plain)
                 }
 
                 if stage < 2 {
-                    Button(stage == 0 ? "Next" : (stage2HasAnyContent ? "Next" : "Skip")) {
+                    Button {
                         BrandHaptics.tap()
                         stage += 1
+                    } label: {
+                        Text(stage == 0 ? "Next" : (stage2HasAnyContent ? "Next" : "Skip"))
+                            .font(Brand.Font.body(15, weight: .semibold))
+                            .foregroundStyle(stage == 0 && !stage1Complete ? Brand.creamMuted : Brand.ink)
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 50)
+                            .background(Capsule().fill(stage == 0 && !stage1Complete ? Brand.bgCard : Brand.cream))
                     }
-                    .frame(height: 50)
-                    .frame(maxWidth: .infinity)
-                    .foregroundStyle(.white)
-                    .font(.system(size: 16, weight: .semibold))
-                    .background(stage == 0 && !stage1Complete ? Theme.textMuted : Theme.accent)
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                    .buttonStyle(.plain)
                     .disabled(stage == 0 && !stage1Complete)
                 } else {
                     Button {
                         submit()
                     } label: {
                         HStack(spacing: 6) {
-                            Image(systemName: "paperplane.fill").font(.system(size: 14))
-                            Text("Submit pitch").font(.system(size: 16, weight: .semibold))
+                            Image(systemName: "paperplane.fill").font(.system(size: 13))
+                            Text("Submit pitch")
+                                .font(Brand.Font.body(15, weight: .semibold))
                         }
-                        .frame(height: 50)
+                        .foregroundStyle(Brand.ink)
                         .frame(maxWidth: .infinity)
-                        .foregroundStyle(.white)
-                        .background(Theme.accent)
-                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                        .frame(height: 50)
+                        .background(Capsule().fill(Brand.cream))
                     }
+                    .buttonStyle(.plain)
                 }
             }
-            .padding(.horizontal, 24)
+            .padding(.horizontal, 20)
             .padding(.top, 12)
             .padding(.bottom, 12)
-            .background(Theme.surface.opacity(0.95))
+            .background(
+                ZStack {
+                    Brand.ink.opacity(0.96)
+                    Rectangle().fill(.ultraThinMaterial).opacity(0.4)
+                }
+                .ignoresSafeArea(edges: .bottom)
+            )
         }
     }
 
@@ -659,39 +712,40 @@ struct PostPitchView: View {
 
     @ViewBuilder
     private func sectionCard<Content: View>(
-        label: String,
+        eyebrow: String,
         subtitle: String? = nil,
         required: Bool = false,
         @ViewBuilder content: () -> Content
     ) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 6) {
-                Text(label)
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(Theme.textPrimary)
+                Text(eyebrow)
+                    .font(Brand.Font.mono(Brand.Font.eyebrow, weight: .medium))
+                    .tracking(Brand.Tracking.eyebrow)
+                    .foregroundStyle(Brand.signal)
                 if required {
-                    Text("·")
-                        .foregroundStyle(Theme.textMuted)
-                    Text("required")
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(Theme.textMuted)
+                    Text("·").foregroundStyle(Brand.creamMuted)
+                    Text("REQUIRED")
+                        .font(Brand.Font.mono(9.5))
+                        .tracking(Brand.Tracking.eyebrow)
+                        .foregroundStyle(Brand.creamMuted)
                 }
                 Spacer(minLength: 0)
             }
             if let subtitle {
                 Text(subtitle)
-                    .font(.system(size: 12))
-                    .foregroundStyle(Theme.textSecondary)
-                    .padding(.top, -6)
+                    .font(Brand.Font.body(13))
+                    .foregroundStyle(Brand.creamMuted)
+                    .padding(.top, -4)
             }
             content()
         }
-        .padding(14)
-        .background(Theme.surface)
-        .clipShape(RoundedRectangle(cornerRadius: 14))
+        .padding(16)
+        .background(
+            RoundedRectangle(cornerRadius: Brand.Radius.card).fill(Brand.bgStrong)
+        )
         .overlay(
-            RoundedRectangle(cornerRadius: 14)
-                .strokeBorder(Theme.border, lineWidth: 1)
+            RoundedRectangle(cornerRadius: Brand.Radius.card).strokeBorder(Brand.line, lineWidth: 1)
         )
     }
 
