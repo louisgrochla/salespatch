@@ -302,6 +302,15 @@ extension APIClient {
     /// salespatch.co.uk. Same Bearer token format works on both hosts
     /// because they share SD_SECRET.
     func recordPitch(assignmentId: String, payload: PitchPayload) async throws -> PostPitchResult {
+        let body = try JSONEncoder().encode(payload)
+        return try await recordPitchRaw(assignmentId: assignmentId, jsonBody: body)
+    }
+
+    /// Send a previously-encoded JSON body. PitchQueue uses this so it
+    /// doesn't need to round-trip the typed payload through Decodable
+    /// (which trips the Swift compiler on cross-file extension
+    /// conformance for nested types).
+    func recordPitchRaw(assignmentId: String, jsonBody: Data) async throws -> PostPitchResult {
         guard let url = URL(string: dashboardBaseURL + "/api/leads/\(assignmentId)/pitch") else {
             throw URLError(.badURL)
         }
@@ -311,7 +320,7 @@ extension APIClient {
         if let tok = token {
             req.setValue("Bearer \(tok)", forHTTPHeaderField: "Authorization")
         }
-        req.httpBody = try JSONEncoder().encode(payload)
+        req.httpBody = jsonBody
 
         let (data, response) = try await URLSession.shared.data(for: req)
         guard let http = response as? HTTPURLResponse else { throw URLError(.badServerResponse) }

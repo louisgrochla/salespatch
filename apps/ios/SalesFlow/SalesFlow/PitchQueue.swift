@@ -115,12 +115,11 @@ final class PitchQueue: ObservableObject {
         guard let queue = try? modelContext.fetch(descriptor) else { return }
 
         for pending in queue {
-            // Decode the payload back into a typed PitchPayload.
-            guard
-                let data = pending.payloadJson.data(using: .utf8),
-                let payload = try? JSONDecoder().decode(APIClient.PitchPayload.self, from: data)
-            else {
-                // Corrupt entry — drop it rather than block the queue.
+            // Send the raw JSON we stored at enqueue time. No round-trip
+            // back through Decodable — the body is already a verbatim
+            // copy of what JSONEncoder produced from the original
+            // typed payload.
+            guard let data = pending.payloadJson.data(using: .utf8) else {
                 modelContext.delete(pending)
                 continue
             }
@@ -129,9 +128,9 @@ final class PitchQueue: ObservableObject {
             pending.retryCount += 1
 
             do {
-                _ = try await APIClient.shared.recordPitch(
+                _ = try await APIClient.shared.recordPitchRaw(
                     assignmentId: pending.assignmentId,
-                    payload: payload
+                    jsonBody: data
                 )
                 modelContext.delete(pending)
             } catch {
@@ -146,61 +145,15 @@ final class PitchQueue: ObservableObject {
 
     private func refreshCount() {
         guard let modelContext else { return }
+        // Use fetch().count rather than fetchCount() for iOS 17 compat —
+        // fetchCount is iOS 18+. The queue stays small (single SP, few
+        // pending pitches at most), so the full fetch is fine.
         let descriptor = FetchDescriptor<PendingPitch>()
-        pendingCount = (try? modelContext.fetchCount(descriptor)) ?? 0
+        pendingCount = (try? modelContext.fetch(descriptor).count) ?? 0
     }
 }
 
-// MARK: — Codable conformance for the PitchPayload
-//
-// PitchPayload is declared as `Encodable` only; we extend it to
-// `Decodable` here so the queue can round-trip it through JSON.
-
-extension APIClient.PitchPayload: Decodable {
-    public init(from decoder: Decoder) throws {
-        let c = try decoder.container(keyedBy: CodingKeys.self)
-        outcome = try c.decode(String.self, forKey: .outcome)
-        pitch_duration_seconds = try c.decodeIfPresent(Int.self, forKey: .pitch_duration_seconds)
-        demo_version = try c.decodeIfPresent(String.self, forKey: .demo_version)
-        decision_maker_present = try c.decodeIfPresent(Bool.self, forKey: .decision_maker_present)
-        demo_shown = try c.decodeIfPresent(Bool.self, forKey: .demo_shown)
-        interest_level = try c.decodeIfPresent(String.self, forKey: .interest_level)
-        consent_to_record = try c.decode(Bool.self, forKey: .consent_to_record)
-        demo_reaction = try c.decodeIfPresent(String.self, forKey: .demo_reaction)
-        agreed_price = try c.decodeIfPresent(Double.self, forKey: .agreed_price)
-        payment_method = try c.decodeIfPresent(String.self, forKey: .payment_method)
-        best_followup_time = try c.decodeIfPresent(String.self, forKey: .best_followup_time)
-        agreed_next_step = try c.decodeIfPresent(String.self, forKey: .agreed_next_step)
-        objections = try c.decodeIfPresent([String].self, forKey: .objections)
-        gut_feel_close_pct = try c.decodeIfPresent(Int.self, forKey: .gut_feel_close_pct)
-        first_response_phrase = try c.decodeIfPresent(String.self, forKey: .first_response_phrase)
-        competitor_mentioned = try c.decodeIfPresent(String.self, forKey: .competitor_mentioned)
-        notes = try c.decodeIfPresent(String.self, forKey: .notes)
-        gps_lat = try c.decodeIfPresent(Double.self, forKey: .gps_lat)
-        gps_lng = try c.decodeIfPresent(Double.self, forKey: .gps_lng)
-        pitched_at = try c.decode(String.self, forKey: .pitched_at)
-    }
-
-    private enum CodingKeys: String, CodingKey {
-        case outcome
-        case pitch_duration_seconds
-        case demo_version
-        case decision_maker_present
-        case demo_shown
-        case interest_level
-        case consent_to_record
-        case demo_reaction
-        case agreed_price
-        case payment_method
-        case best_followup_time
-        case agreed_next_step
-        case objections
-        case gut_feel_close_pct
-        case first_response_phrase
-        case competitor_mentioned
-        case notes
-        case gps_lat
-        case gps_lng
-        case pitched_at
-    }
-}
+// (No Decodable extension on PitchPayload — the queue stores the raw
+// JSON string verbatim and re-sends it via APIClient.recordPitchRaw,
+// avoiding cross-file Codable synthesis on a nested type which trips
+// the Swift compiler.)
