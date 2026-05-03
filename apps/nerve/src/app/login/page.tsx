@@ -28,7 +28,7 @@ function LoginForm() {
     e.preventDefault();
     setSubmitting(true);
     setError(null);
-    const res = await signIn("credentials", {
+    const res = await signIn("founder", {
       email,
       password,
       redirect: false,

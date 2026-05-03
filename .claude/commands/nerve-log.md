@@ -61,13 +61,38 @@ environment variables — do NOT hardcode them. Default endpoint is
 `NERVE_CHANGELOG_URL` is set, use that instead (useful for local
 testing against `http://localhost:4400/api/ingest/changelog`).
 
-Use this curl from the Bash tool:
+Use this curl from the Bash tool. The block below auto-discovers the
+secret from `apps/nerve/.env.local` if it isn't already in the shell
+environment, so the command works locally with zero shell setup. When
+deployed to prod, set `NERVE_CHANGELOG_SECRET` in the shell (or Vercel
+env for the server side).
 
 ```bash
-ENDPOINT="${NERVE_CHANGELOG_URL:-https://nerve.salespatch.co.uk/api/ingest/changelog}"
+# Discover repo root + endpoint + secret.
+REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+ENV_FILE=""
+for candidate in \
+  "$REPO_ROOT/apps/nerve/.env.local" \
+  "$REPO_ROOT/.claude/worktrees/nice-kare-edfa44/apps/nerve/.env.local"
+do
+  if [ -f "$candidate" ]; then ENV_FILE="$candidate"; break; fi
+done
+
+SECRET="$NERVE_CHANGELOG_SECRET"
+if [ -z "$SECRET" ] && [ -n "$ENV_FILE" ]; then
+  SECRET=$(grep -E '^NERVE_CHANGELOG_SECRET=' "$ENV_FILE" | head -1 | cut -d'=' -f2- | sed -E 's/^"//; s/"$//')
+fi
+ENDPOINT="${NERVE_CHANGELOG_URL:-http://localhost:4400/api/ingest/changelog}"
+
+if [ -z "$SECRET" ]; then
+  echo "ERROR: NERVE_CHANGELOG_SECRET not set in env and not found in $ENV_FILE" >&2
+  echo "Falling back to printing the entry as markdown — please save manually." >&2
+  exit 1
+fi
+
 curl -sS -X POST "$ENDPOINT" \
   -H "Content-Type: application/json" \
-  -H "x-nerve-secret: $NERVE_CHANGELOG_SECRET" \
+  -H "x-nerve-secret: $SECRET" \
   --data @- <<'JSON'
 {
   "project": "<project>",
