@@ -6,8 +6,10 @@ struct SalesFlowApp: App {
     @StateObject private var authStore = AuthStore.shared
     @StateObject private var appearanceStore = AppearanceStore.shared
 
+    @Environment(\.scenePhase) private var scenePhase
+
     var sharedModelContainer: ModelContainer = {
-        let schema = Schema([Lead.self])
+        let schema = Schema([Lead.self, PendingPitch.self])
         let config = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
         do {
             return try ModelContainer(for: schema, configurations: [config])
@@ -43,6 +45,20 @@ struct SalesFlowApp: App {
                 Button("Not Now", role: .cancel) {}
             } message: {
                 Text("Unlock SalesFlow quickly with \(BiometricManager.shared.biometricLabel) next time.")
+            }
+            .task {
+                // Bind the PitchQueue to the shared model container so any
+                // view can enqueue submissions and the background flush
+                // walks the same SwiftData store.
+                PitchQueue.shared.bind(sharedModelContainer.mainContext)
+                PitchQueue.shared.flush()
+            }
+            .onChange(of: scenePhase) { _, newPhase in
+                if newPhase == .active {
+                    // Network may have come back while the app was
+                    // backgrounded — sweep the queue.
+                    PitchQueue.shared.flush()
+                }
             }
         }
         .modelContainer(sharedModelContainer)

@@ -440,7 +440,6 @@ struct PostPitchView: View {
 
     private func submit() {
         guard let outcome else { return }
-        submitting = true
         errorMessage = nil
 
         let durationSeconds: Int? = pitchStartedAt.map { Int(Date().timeIntervalSince($0)) }
@@ -475,22 +474,29 @@ struct PostPitchView: View {
             pitched_at: ISO8601DateFormatter().string(from: pitchStartedAt ?? Date())
         )
 
-        Task {
-            do {
-                let result = try await APIClient.shared.recordPitch(assignmentId: assignmentId, payload: payload)
-                BrandHaptics.tap(.medium)
-                await MainActor.run {
-                    submitting = false
-                    onSubmitted(result)
-                    dismiss()
-                }
-            } catch {
-                await MainActor.run {
-                    submitting = false
-                    errorMessage = "Couldn't save pitch — \(error.localizedDescription). Try again?"
-                }
-            }
-        }
+        // Optimistic submit: enqueue to PitchQueue (SwiftData-backed)
+        // and dismiss immediately. PitchQueue runs the network call in
+        // the background and retries on app foreground if the network
+        // is offline. Total UI latency: ~50ms.
+        let queuedId = PitchQueue.shared.enqueue(
+            assignmentId: assignmentId,
+            businessName: businessName,
+            payload: payload
+        )
+        BrandHaptics.tap(.medium)
+
+        // Synthetic result so the parent toast still fires; the real
+        // NERVE pitch id arrives later (or never, if we stay offline).
+        let pendingResult = PostPitchResult(
+            pitchId: queuedId,
+            pitchAttemptNumber: 1,
+            forwarded: false,
+            nervePitchId: nil,
+            qualityFlag: nil,
+            forwardError: "queued",
+        )
+        onSubmitted(pendingResult)
+        dismiss()
     }
 
     private func trimmedOrNil(_ s: String) -> String? {
