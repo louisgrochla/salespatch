@@ -249,6 +249,63 @@ struct LeadStatusResponse: Decodable {
     let commission_amount_pence: Int?       // canonical, in pence
 }
 
+// MARK: — Post-pitch questionnaire
+
+extension APIClient {
+    /// Body of POST /leads/:id/pitch. All field names match the
+    /// mobile-api SQLite columns and the NERVE PitchLog snake_case.
+    /// Optionals omitted from the JSON when nil.
+    struct PitchPayload: Encodable {
+        let outcome: String
+        let pitch_duration_seconds: Int?
+        let demo_version: String?
+        let decision_maker_present: Bool?
+        let demo_shown: Bool?
+        let interest_level: String?
+        let consent_to_record: Bool
+        let demo_reaction: String?
+        let agreed_price: Double?
+        let payment_method: String?
+        let best_followup_time: String?
+        let agreed_next_step: String?
+        let objections: [String]?
+        let gut_feel_close_pct: Int?
+        let first_response_phrase: String?
+        let competitor_mentioned: String?
+        let notes: String?
+        let gps_lat: Double?
+        let gps_lng: Double?
+        let pitched_at: String
+    }
+
+    private struct PitchResponse: Decodable {
+        let ok: Bool
+        let pitch_id: String
+        let pitch_attempt_number: Int
+        let forwarded: Bool
+        let nerve_pitch_id: String?
+        let quality_flag: String?
+        let forward_error: String?
+    }
+
+    /// POSTs the post-pitch questionnaire to mobile-api, which persists
+    /// it locally and forwards to NERVE. Returns success even if the
+    /// NERVE forward fails — the row is still saved and `forwarded`
+    /// in the result indicates whether NERVE has it.
+    func recordPitch(assignmentId: String, payload: PitchPayload) async throws -> PostPitchResult {
+        let data = try await request(path: "/leads/\(assignmentId)/pitch", method: "POST", body: payload)
+        let res = try decoder.decode(PitchResponse.self, from: data)
+        return PostPitchResult(
+            pitchId: res.pitch_id,
+            pitchAttemptNumber: res.pitch_attempt_number,
+            forwarded: res.forwarded,
+            nervePitchId: res.nerve_pitch_id,
+            qualityFlag: res.quality_flag,
+            forwardError: res.forward_error
+        )
+    }
+}
+
 extension APIClient {
     /// Slim status poll — used during the QR sheet to detect the sold
     /// transition. Hits the sales-dashboard so it sees the latest webhook

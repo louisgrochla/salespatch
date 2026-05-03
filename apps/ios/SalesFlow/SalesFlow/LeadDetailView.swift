@@ -26,6 +26,8 @@ struct LeadDetailView: View {
     @State private var visitStartTime: Date?
     @State private var visitDuration: TimeInterval = 0
     @State private var visitTimer: Timer?
+    @State private var showPostPitch = false
+    @State private var pitchToast: String?
     @StateObject private var locationManager = LocationManager()
 
     private let tabs = ["Overview", "Prepare", "Pitch", "Follow Up"]
@@ -70,6 +72,25 @@ struct LeadDetailView: View {
                     businessName: lead.businessName,
                     leadAssignmentId: lead.assignmentId
                 )
+            }
+        }
+        .sheet(isPresented: $showPostPitch) {
+            PostPitchView(
+                assignmentId: lead.assignmentId,
+                businessName: lead.businessName,
+                demoVersion: lead.demoSiteDomain,
+                pitchStartedAt: visitStartTime
+            ) { result in
+                // Mobile-api maps outcome → assignment status; mirror it locally
+                // so the UI updates immediately without re-fetching.
+                if let nerveId = result.nervePitchId {
+                    pitchToast = "Pitch logged · NERVE \(nerveId.prefix(8))…"
+                } else if !result.forwarded {
+                    pitchToast = "Pitch saved locally · NERVE forward queued"
+                } else {
+                    pitchToast = "Pitch logged"
+                }
+                Task { await fetchDetail() }
             }
         }
         .confirmationDialog("Update Status", isPresented: $showStatusPicker, titleVisibility: .visible) {
@@ -957,33 +978,77 @@ struct LeadDetailView: View {
 
     @ViewBuilder
     private var stickyActionBar: some View {
-        HStack(spacing: 10) {
-            if hasPrimaryAction {
-                Button {
-                    BrandHaptics.tap()
-                    showStatusPicker = true
-                } label: {
-                    updateStatusLabel
+        VStack(spacing: 0) {
+            if let toast = pitchToast {
+                HStack(spacing: 6) {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.system(size: 11))
+                        .foregroundStyle(Brand.signal)
+                    Text(toast)
+                        .font(Brand.Font.mono(11))
+                        .foregroundStyle(Brand.cream)
+                    Spacer()
                 }
-                .buttonStyle(GhostButtonStyle(size: .sm))
-                .disabled(isUpdatingStatus)
-
-                primaryActionButton
-            } else {
-                Button {
-                    BrandHaptics.tap()
-                    showStatusPicker = true
-                } label: {
-                    updateStatusLabel
-                        .frame(maxWidth: .infinity)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 8)
+                .background(Brand.bgCard)
+                .onAppear {
+                    Task {
+                        try? await Task.sleep(nanoseconds: 4_000_000_000)
+                        await MainActor.run { pitchToast = nil }
+                    }
                 }
-                .buttonStyle(PrimaryButtonStyle(size: .sm))
-                .disabled(isUpdatingStatus)
             }
+
+            HStack(spacing: 10) {
+                if hasPrimaryAction {
+                    Button {
+                        BrandHaptics.tap()
+                        if visitActive {
+                            showPostPitch = true
+                        } else {
+                            showStatusPicker = true
+                        }
+                    } label: {
+                        if visitActive {
+                            Text("COMPLETE PITCH")
+                                .font(Brand.Font.mono(11))
+                                .tracking(Brand.Tracking.eyebrow)
+                        } else {
+                            updateStatusLabel
+                        }
+                    }
+                    .buttonStyle(GhostButtonStyle(size: .sm))
+                    .disabled(isUpdatingStatus)
+
+                    primaryActionButton
+                } else {
+                    Button {
+                        BrandHaptics.tap()
+                        if visitActive {
+                            showPostPitch = true
+                        } else {
+                            showStatusPicker = true
+                        }
+                    } label: {
+                        if visitActive {
+                            Text("COMPLETE PITCH")
+                                .font(Brand.Font.mono(11))
+                                .tracking(Brand.Tracking.eyebrow)
+                                .frame(maxWidth: .infinity)
+                        } else {
+                            updateStatusLabel
+                                .frame(maxWidth: .infinity)
+                        }
+                    }
+                    .buttonStyle(PrimaryButtonStyle(size: .sm))
+                    .disabled(isUpdatingStatus)
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 8)
+            .padding(.bottom, 0)
         }
-        .padding(.horizontal, 16)
-        .padding(.top, 8)
-        .padding(.bottom, 0)
         .background(
             ZStack {
                 Brand.ink.opacity(0.92)
