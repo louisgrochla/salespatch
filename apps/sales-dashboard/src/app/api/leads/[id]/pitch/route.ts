@@ -144,56 +144,70 @@ export async function POST(
     date: pitchedAt,
   };
 
-  // 4. HMAC-sign and forward to NERVE.
+  // 4. Persist to Supabase pitch_attempts FIRST — beta resilience: even
+  //    if NERVE is down we never lose the questionnaire payload. The
+  //    raw_payload column carries the full body for retry. nerve_pitch_id
+  //    + forwarded_at are populated below if the forward succeeds.
+  const pitchedAtTs = pitchedAt;
+  await sb.from('pitch_attempts').insert({
+    id: pitchId,
+    lead_id: assignment.lead_id,
+    user_id: auth.user_id,
+    assignment_id: params.id,
+    outcome: body.outcome,
+    raw_payload: nervePayload,
+    pitched_at: pitchedAtTs,
+  }).then(() => undefined, () => undefined);
+
+  // 5. HMAC-sign and forward to NERVE. Failures don't bubble — the
+  //    pitch_attempts row stays unforwarded for retry.
   const nerveUrl = process.env.NERVE_PITCH_URL ?? 'https://nerve.salespatch.co.uk/api/ingest/pitch';
   const nerveSecret = process.env.NERVE_PITCH_SECRET;
+
+  let nerveJson: { ok?: boolean; pitchId?: string; qualityFlag?: string; error?: string } = {};
+  let forwardOk = false;
+  let forwardError: string | null = null;
+
   if (!nerveSecret) {
-    return NextResponse.json(
-      { error: 'NERVE_PITCH_SECRET not configured on server', code: 'NERVE_NOT_CONFIGURED' },
-      { status: 503 },
-    );
+    forwardError = 'NERVE_PITCH_SECRET not configured';
+  } else {
+    const bodyJson = JSON.stringify(nervePayload);
+    const signature = crypto.createHmac('sha256', nerveSecret).update(bodyJson).digest('hex');
+    try {
+      const nerveRes = await fetch(nerveUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-supabase-signature': signature },
+        body: bodyJson,
+      });
+      nerveJson = await nerveRes.json().catch(() => ({}));
+      if (nerveRes.ok && nerveJson.pitchId && !nerveJson.error) {
+        forwardOk = true;
+      } else {
+        forwardError = nerveJson.error ?? `NERVE responded ${nerveRes.status}`;
+      }
+    } catch (e) {
+      forwardError = `NERVE unreachable: ${e instanceof Error ? e.message : String(e)}`;
+    }
   }
 
-  const bodyJson = JSON.stringify(nervePayload);
-  const signature = crypto.createHmac('sha256', nerveSecret).update(bodyJson).digest('hex');
-
-  let nerveRes: Response;
-  try {
-    nerveRes = await fetch(nerveUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-supabase-signature': signature,
-      },
-      body: bodyJson,
-    });
-  } catch (e) {
-    return NextResponse.json(
-      { error: `NERVE unreachable: ${e instanceof Error ? e.message : String(e)}`, code: 'NERVE_UNREACHABLE' },
-      { status: 502 },
-    );
+  if (forwardOk) {
+    await sb
+      .from('pitch_attempts')
+      .update({
+        nerve_pitch_id: nerveJson.pitchId,
+        quality_flag: nerveJson.qualityFlag ?? null,
+        forwarded_at: new Date().toISOString(),
+        forward_error: null,
+      })
+      .eq('id', pitchId);
+  } else {
+    await sb
+      .from('pitch_attempts')
+      .update({ forward_error: forwardError })
+      .eq('id', pitchId);
   }
 
-  const nerveJson = (await nerveRes.json().catch(() => ({}))) as {
-    ok?: boolean;
-    pitchId?: string;
-    qualityFlag?: string;
-    error?: string;
-  };
-
-  if (!nerveRes.ok || nerveJson.error || !nerveJson.pitchId) {
-    return NextResponse.json(
-      {
-        error: nerveJson.error ?? `NERVE responded ${nerveRes.status}`,
-        code: 'NERVE_REJECTED',
-        pitch_id: pitchId,
-        forwarded: false,
-      },
-      { status: 502 },
-    );
-  }
-
-  // 5. Cascade lead_assignments.status + record activity.
+  // 6. Cascade lead_assignments.status + record activity.
   const newStatus =
     body.outcome === 'closed_now' || body.outcome === 'closed_followup' ? 'sold' :
     body.outcome === 'rejected' ? 'rejected' :
@@ -221,29 +235,19 @@ export async function POST(
     created_at: new Date().toISOString(),
   });
 
-  // 6. Optional: track attempts in Supabase for analytics. Best-effort —
-  //    not critical to the response.
-  await sb.from('pitch_attempts').insert({
-    id: pitchId,
-    lead_id: assignment.lead_id,
-    user_id: auth.user_id,
-    assignment_id: params.id,
-    outcome: body.outcome,
-    nerve_pitch_id: nerveJson.pitchId,
-    quality_flag: nerveJson.qualityFlag,
-    pitched_at: pitchedAt,
-  }).select().single().then(() => undefined, () => undefined);
-
   // Flat response (no `data:` envelope) — matches iOS APIClient.PitchResponse
   // shape and the mobile-api equivalent so a single iOS decoder works
-  // against either backend.
+  // against either backend. forwarded=false is the legitimate beta-
+  // resilience case: the pitch is persisted in pitch_attempts but NERVE
+  // forward failed; iOS shows a "queued" toast.
   return NextResponse.json({
     ok: true,
     pitch_id: pitchId,
     pitch_attempt_number: pitchAttemptNumber,
-    forwarded: true,
-    nerve_pitch_id: nerveJson.pitchId,
-    quality_flag: nerveJson.qualityFlag ?? 'unknown',
+    forwarded: forwardOk,
+    nerve_pitch_id: forwardOk ? nerveJson.pitchId : null,
+    quality_flag: forwardOk ? (nerveJson.qualityFlag ?? 'unknown') : null,
+    forward_error: forwardOk ? null : forwardError,
     new_status: newStatus,
   });
 }

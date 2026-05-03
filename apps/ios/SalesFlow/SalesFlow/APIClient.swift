@@ -288,12 +288,35 @@ extension APIClient {
         let forward_error: String?
     }
 
-    /// POSTs the post-pitch questionnaire to mobile-api, which persists
-    /// it locally and forwards to NERVE. Returns success even if the
-    /// NERVE forward fails — the row is still saved and `forwarded`
-    /// in the result indicates whether NERVE has it.
+    /// POSTs the post-pitch questionnaire to the sales-dashboard
+    /// (salespatch.co.uk in prod). The dashboard auths the SP, fetches
+    /// lead context, HMAC-signs and forwards to NERVE, returning the
+    /// NERVE pitch id + quality flag. `forwarded: false` only when the
+    /// NERVE forward failed — the local Supabase pitch_attempts row
+    /// still persists for retry.
+    ///
+    /// Hits dashboardBaseURL explicitly (NOT defaultBaseURL) because the
+    /// pitch route lives in apps/sales-dashboard, deployed to
+    /// salespatch.co.uk. Same Bearer token format works on both hosts
+    /// because they share SD_SECRET.
     func recordPitch(assignmentId: String, payload: PitchPayload) async throws -> PostPitchResult {
-        let data = try await request(path: "/leads/\(assignmentId)/pitch", method: "POST", body: payload)
+        guard let url = URL(string: dashboardBaseURL + "/api/leads/\(assignmentId)/pitch") else {
+            throw URLError(.badURL)
+        }
+        var req = URLRequest(url: url)
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        if let tok = token {
+            req.setValue("Bearer \(tok)", forHTTPHeaderField: "Authorization")
+        }
+        req.httpBody = try JSONEncoder().encode(payload)
+
+        let (data, response) = try await URLSession.shared.data(for: req)
+        guard let http = response as? HTTPURLResponse else { throw URLError(.badServerResponse) }
+        if !(200..<300).contains(http.statusCode) {
+            let msg = (try? decoder.decode(APIError.self, from: data))?.error ?? "HTTP \(http.statusCode)"
+            throw SalesFlowError.server(msg)
+        }
         let res = try decoder.decode(PitchResponse.self, from: data)
         return PostPitchResult(
             pitchId: res.pitch_id,

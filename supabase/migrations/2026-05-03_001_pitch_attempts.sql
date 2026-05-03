@@ -12,6 +12,12 @@ CREATE TABLE IF NOT EXISTS pitch_attempts (
   outcome         text NOT NULL,
   nerve_pitch_id  text,
   quality_flag    text,
+  -- Full questionnaire payload preserved as JSON for retry / audit when
+  -- NERVE forward fails. Replayable via a small worker that picks up
+  -- rows where nerve_pitch_id IS NULL.
+  raw_payload     jsonb,
+  forward_error   text,
+  forwarded_at    timestamptz,
   pitched_at      timestamptz NOT NULL DEFAULT now(),
   created_at      timestamptz NOT NULL DEFAULT now()
 );
@@ -20,3 +26,6 @@ CREATE INDEX IF NOT EXISTS idx_pitch_attempts_lead         ON pitch_attempts(lea
 CREATE INDEX IF NOT EXISTS idx_pitch_attempts_user         ON pitch_attempts(user_id);
 CREATE INDEX IF NOT EXISTS idx_pitch_attempts_assignment   ON pitch_attempts(assignment_id);
 CREATE INDEX IF NOT EXISTS idx_pitch_attempts_pitched_at   ON pitch_attempts(pitched_at DESC);
+-- Partial index used by the retry worker: only rows that haven't
+-- successfully forwarded to NERVE yet.
+CREATE INDEX IF NOT EXISTS idx_pitch_attempts_unforwarded ON pitch_attempts(created_at) WHERE nerve_pitch_id IS NULL;
