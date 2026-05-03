@@ -81,13 +81,13 @@ export async function POST(
     { auth: { persistSession: false, autoRefreshToken: false } },
   );
 
-  // 1. Fetch the assignment + denormalised lead context for forwarding.
+  // 1. Fetch the assignment. Two-step query (assignment, then lead)
+  //    instead of embedded join — avoids the PostgREST FK requirement
+  //    on lead_assignments.lead_id → leads.id, which isn't always
+  //    declared in this schema.
   const { data: assignment, error: aErr } = await sb
     .from('lead_assignments')
-    .select(`
-      id, user_id, lead_id, status,
-      leads ( business_name, business_type, sector, postcode, source_method )
-    `)
+    .select('id, user_id, lead_id, status, notes')
     .eq('id', params.id)
     .maybeSingle();
 
@@ -97,7 +97,30 @@ export async function POST(
     return NextResponse.json({ error: 'Not your lead', code: 'FORBIDDEN' }, { status: 403 });
   }
 
-  const lead = (assignment.leads as unknown as Record<string, string | null> | null) ?? {};
+  // 2. Look up lead context. Fall back to assignment.notes (where the
+  //    iOS scout flow stashes JSON) when the leads table doesn't have
+  //    the row yet (lead-side data may be on Supabase OR in the
+  //    assignment's notes JSON depending on import path).
+  let lead: Record<string, string | null> = {};
+  const { data: leadRow } = await sb
+    .from('leads')
+    .select('business_name, business_type, sector, postcode, source_method')
+    .eq('id', assignment.lead_id)
+    .maybeSingle();
+  if (leadRow) {
+    lead = leadRow as Record<string, string | null>;
+  } else if (assignment.notes) {
+    try {
+      const parsed = JSON.parse(assignment.notes as string);
+      lead = {
+        business_name: parsed.business_name ?? null,
+        business_type: parsed.business_type ?? null,
+        sector: parsed.sector ?? null,
+        postcode: parsed.postcode ?? null,
+        source_method: parsed.source_method ?? null,
+      };
+    } catch { /* ignore — fall through to defaults */ }
+  }
   const businessName = (lead.business_name as string | null) ?? 'Unknown business';
 
   // 2. Compute pitch attempt # by counting prior NERVE-bound pitches.
