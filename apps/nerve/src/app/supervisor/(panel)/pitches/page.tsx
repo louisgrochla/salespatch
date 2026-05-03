@@ -20,8 +20,9 @@ interface SearchParams {
 function buildWhere(p: SearchParams): Prisma.PitchLogWhereInput {
   const where: Prisma.PitchLogWhereInput = {};
   if (p.phase) where.phaseLabel = p.phase;
-  if (p.outcome === "closed" || p.outcome === "rejected" || p.outcome === "follow_up") {
-    where.outcome = p.outcome;
+  const validOutcomes = ["closed", "rejected", "follow_up", "closed_now", "closed_followup", "not_pitched"] as const;
+  if (p.outcome && (validOutcomes as readonly string[]).includes(p.outcome)) {
+    where.outcome = p.outcome as (typeof validOutcomes)[number];
   }
   if (p.sector) where.sector = p.sector;
   if (p.after || p.before) {

@@ -13,14 +13,17 @@ export function PhasePill({ phase, className }: { phase: string; className?: str
 
 const STATUS_CLASS: Record<string, string> = {
   closed: "pill-status-closed",
+  closed_now: "pill-status-closed",
+  closed_followup: "pill-status-closed",
   rejected: "pill-status-rejected",
   follow_up: "pill-status-followup",
+  not_pitched: "pill-status-pending",
   pending: "pill-status-pending",
 };
 
 export function StatusPill({ status, className }: { status: string; className?: string }) {
   const cls = STATUS_CLASS[status] ?? "pill-status-pending";
   return (
-    <span className={cn("pill", cls, className)}>{status.replace("_", " ")}</span>
+    <span className={cn("pill", cls, className)}>{status.replace(/_/g, " ")}</span>
   );
 }

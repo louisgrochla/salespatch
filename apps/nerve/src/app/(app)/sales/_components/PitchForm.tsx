@@ -10,7 +10,7 @@ interface InitialValues {
   location?: string | null;
   leadSource?: string | null;
   demoVersion?: string | null;
-  outcome?: "closed" | "rejected" | "follow_up";
+  outcome?: "closed" | "rejected" | "follow_up" | "closed_now" | "closed_followup" | "not_pitched";
   contractorId?: string | null;
   pitchDuration?: number | null;
   consentFlag?: boolean;
@@ -64,9 +64,12 @@ export function PitchForm({
       <div className="grid grid-cols-3 gap-3">
         <Field label="outcome" required>
           <Select name="outcome" required defaultValue={initial?.outcome ?? "follow_up"}>
-            <option value="closed">closed</option>
+            <option value="closed_now">closed now</option>
+            <option value="closed_followup">closed (follow-up)</option>
+            <option value="follow_up">follow up</option>
             <option value="rejected">rejected</option>
-            <option value="follow_up">follow_up</option>
+            <option value="not_pitched">not pitched</option>
+            <option value="closed">closed (legacy)</option>
           </Select>
         </Field>
         <Field label="lead source">

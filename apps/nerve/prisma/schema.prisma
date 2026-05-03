@@ -51,32 +51,95 @@ model PhaseBoundary {
 // ─── sales intelligence ──────────────────────────────────────────────────
 
 enum PitchOutcome {
-  closed
+  closed             // legacy alias for closed_now (kept for back-compat)
   rejected
   follow_up
+  closed_now
+  closed_followup
+  not_pitched
+}
+
+enum InterestLevel {
+  cold
+  warm
+  hot
+}
+
+enum DemoReaction {
+  loved
+  liked
+  neutral
+  unimpressed
+}
+
+enum PaymentMethod {
+  paid_now
+  will_pay_followup
+}
+
+enum FollowupTime {
+  tomorrow
+  this_week
+  next_week
+  next_month
+}
+
+enum AgreedNextStep {
+  sp_will_call
+  customer_will_call
+  sent_link
+  scheduled_meeting
+}
+
+enum PitchQualityFlag {
+  ok
+  excluded
 }
 
 model PitchLog {
-  id              String       @id @default(cuid())
-  date            DateTime
-  businessName    String
-  businessType    String?
-  sector          String?
-  location        String?
-  leadSource      String?
-  demoVersion     String?
-  outcome         PitchOutcome
-  contractorId    String?
-  pitchDuration   Int?         // seconds, from iOS time tracker
-  consentFlag     Boolean      @default(false)
-  notes           String?
-  supabasePitchId String?      @unique // idempotency key for webhook
-  source          String       @default("manual") // manual | webhook
-  phaseLabel      String
-  createdAt       DateTime     @default(now())
-  updatedAt       DateTime     @updatedAt
+  id                       String           @id @default(cuid())
+  date                     DateTime
+  businessName             String
+  businessType             String?
+  sector                   String?
+  location                 String?
+  leadSource               String?
+  demoVersion              String?
+  outcome                  PitchOutcome
+  contractorId             String?
+  pitchDuration            Int?             // seconds, auto from iOS timer
+  pitchAttemptNumber       Int              @default(1)
+  // Questionnaire — required fields
+  decisionMakerPresent     Boolean?
+  demoShown                Boolean?
+  interestLevel            InterestLevel?
+  consentToRecord          Boolean          @default(false)
+  // Questionnaire — conditional fields
+  demoReaction             DemoReaction?
+  agreedPrice              Decimal?         @db.Decimal(10, 2)
+  paymentMethod            PaymentMethod?
+  bestFollowupTime         FollowupTime?
+  agreedNextStep           AgreedNextStep?
+  // Questionnaire — optional gold
+  gutFeelClosePct          Int?             // 0-100
+  firstResponsePhrase      String?
+  competitorMentioned      String?
+  // Auto-captured location
+  gpsLat                   Float?
+  gpsLng                   Float?
+  // Quality control — derived server-side at ingest time. Dissertation
+  // queries scope to qualityFlag=ok; ops queries see everything.
+  qualityFlag              PitchQualityFlag @default(ok)
+  // Legacy / housekeeping
+  consentFlag              Boolean          @default(false) // pre-questionnaire field; kept for back-compat
+  notes                    String?
+  supabasePitchId          String?          @unique // idempotency key for webhook
+  source                   String           @default("manual") // manual | webhook | mobile-api
+  phaseLabel               String
+  createdAt                DateTime         @default(now())
+  updatedAt                DateTime         @updatedAt
 
-  objections      PitchObjection[]
+  objections               PitchObjection[]
 
   @@index([date])
   @@index([phaseLabel])
@@ -86,6 +149,9 @@ model PitchLog {
   @@index([contractorId])
   @@index([leadSource])
   @@index([demoVersion])
+  @@index([qualityFlag])
+  @@index([decisionMakerPresent])
+  @@index([interestLevel])
 }
 
 model ObjectionTag {

@@ -16,7 +16,7 @@ const PitchInput = z.object({
   location: z.string().optional().transform(emptyToNull),
   leadSource: z.string().optional().transform(emptyToNull),
   demoVersion: z.string().optional().transform(emptyToNull),
-  outcome: z.enum(["closed", "rejected", "follow_up"]),
+  outcome: z.enum(["closed", "rejected", "follow_up", "closed_now", "closed_followup", "not_pitched"]),
   contractorId: z.string().optional().transform(emptyToNull),
   pitchDuration: z.string().optional().transform((v) => {
     if (!v) return null;

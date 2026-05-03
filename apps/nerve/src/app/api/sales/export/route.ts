@@ -10,8 +10,9 @@ export const dynamic = "force-dynamic";
 function buildWhere(p: URLSearchParams): Prisma.PitchLogWhereInput {
   const where: Prisma.PitchLogWhereInput = {};
   const outcome = p.get("outcome");
-  if (outcome === "closed" || outcome === "rejected" || outcome === "follow_up") {
-    where.outcome = outcome;
+  const validOutcomes = ["closed", "rejected", "follow_up", "closed_now", "closed_followup", "not_pitched"] as const;
+  if (outcome && (validOutcomes as readonly string[]).includes(outcome)) {
+    where.outcome = outcome as (typeof validOutcomes)[number];
   }
   if (p.get("phase")) where.phaseLabel = p.get("phase")!;
   if (p.get("sector")) where.sector = p.get("sector");

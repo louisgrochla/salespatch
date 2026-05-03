@@ -13,7 +13,7 @@ export interface PitchRow {
   sector: string | null;
   leadSource: string | null;
   demoVersion: string | null;
-  outcome: "closed" | "rejected" | "follow_up";
+  outcome: "closed" | "rejected" | "follow_up" | "closed_now" | "closed_followup" | "not_pitched";
   contractorId: string | null;
   pitchDuration: number | null;
   phaseLabel: string;
