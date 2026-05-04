@@ -27,7 +27,12 @@ struct LeadDetailView: View {
     @State private var visitDuration: TimeInterval = 0
     @State private var visitTimer: Timer?
     @State private var showPostPitch = false
+    /// Pitch duration captured at the moment the questionnaire opens.
+    /// Frozen so the timer at the top of the modal doesn't keep
+    /// counting while the SP fills the form.
+    @State private var frozenPitchDuration: Int?
     @State private var pitchToast: String?
+    @State private var showFollowupSheet = false
     @StateObject private var locationManager = LocationManager()
 
     private let tabs = ["Overview", "Prepare", "Pitch", "Follow Up"]
@@ -74,12 +79,25 @@ struct LeadDetailView: View {
                 )
             }
         }
+        .sheet(isPresented: $showFollowupSheet) {
+            FollowupSheet(
+                assignmentId: lead.assignmentId,
+                businessName: lead.businessName,
+                initialDate: lead.followUpAt,
+                initialNote: nil
+            ) { date, _ in
+                lead.followUpAt = date
+                try? modelContext.save()
+                pitchToast = date == nil ? "Follow-up cleared" : "Follow-up scheduled"
+            }
+        }
         .sheet(isPresented: $showPostPitch) {
             PostPitchView(
                 assignmentId: lead.assignmentId,
                 businessName: lead.businessName,
                 demoVersion: lead.demoSiteDomain,
-                pitchStartedAt: visitStartTime
+                pitchStartedAt: visitStartTime,
+                frozenDurationSeconds: frozenPitchDuration
             ) { result in
                 // The pitch lands in the local SwiftData queue first; it
                 // syncs in the background. We never block the UI on
@@ -901,35 +919,59 @@ struct LeadDetailView: View {
     private var followUpTab: some View {
         VStack(alignment: .leading, spacing: 20) {
             BrandSection(eyebrow: "Reminder") {
-                VStack(alignment: .leading, spacing: 12) {
-                    if let date = lead.followUpAt {
-                        HStack(spacing: 12) {
+                Button {
+                    BrandHaptics.tap()
+                    showFollowupSheet = true
+                } label: {
+                    HStack(spacing: 12) {
+                        if let date = lead.followUpAt {
                             Image(systemName: "calendar")
-                                .font(.system(size: 16))
+                                .font(.system(size: 18, weight: .medium))
                                 .foregroundStyle(Brand.signal)
-                                .frame(width: 22)
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text(date.formatted(date: .long, time: .omitted))
+                                .frame(width: 36, height: 36)
+                                .background(RoundedRectangle(cornerRadius: 9).fill(Brand.signalSoft))
+                                .overlay(RoundedRectangle(cornerRadius: 9).strokeBorder(Brand.signalBorder, lineWidth: 1))
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text(date.formatted(date: .long, time: .shortened))
                                     .font(Brand.Font.display(15, weight: .medium))
                                     .foregroundStyle(Brand.cream)
-                                Text(relativeDate(date).uppercased())
+                                Text(countdownLabel(date).uppercased())
+                                    .font(Brand.Font.mono(10, weight: .medium))
+                                    .tracking(Brand.Tracking.eyebrow)
+                                    .foregroundStyle(countdownColor(date))
+                            }
+                            Spacer(minLength: 0)
+                            Image(systemName: "pencil")
+                                .font(.system(size: 13, weight: .medium))
+                                .foregroundStyle(Brand.creamMuted)
+                        } else {
+                            Image(systemName: "calendar.badge.plus")
+                                .font(.system(size: 18, weight: .medium))
+                                .foregroundStyle(Brand.creamMuted)
+                                .frame(width: 36, height: 36)
+                                .background(RoundedRectangle(cornerRadius: 9).fill(Brand.bgCard))
+                                .overlay(RoundedRectangle(cornerRadius: 9).strokeBorder(Brand.line, lineWidth: 1))
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text("Schedule follow-up")
+                                    .font(Brand.Font.display(15, weight: .medium))
+                                    .foregroundStyle(Brand.cream)
+                                Text("Pick a date & time — we'll remind you")
                                     .font(Brand.Font.mono(10))
                                     .tracking(Brand.Tracking.eyebrow)
                                     .foregroundStyle(Brand.creamMuted)
                             }
-                        }
-                    } else {
-                        HStack(spacing: 10) {
-                            Image(systemName: "calendar.badge.plus")
-                                .foregroundStyle(Brand.creamMuted)
-                            Text("No follow-up scheduled")
-                                .font(Brand.Font.body(Brand.Font.bodySmall))
+                            Spacer(minLength: 0)
+                            Image(systemName: "chevron.right")
+                                .font(.system(size: 13, weight: .medium))
                                 .foregroundStyle(Brand.creamMuted)
                         }
                     }
+                    .padding(14)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(RoundedRectangle(cornerRadius: Brand.Radius.card).fill(Brand.bgStrong))
+                    .overlay(RoundedRectangle(cornerRadius: Brand.Radius.card).strokeBorder(Brand.line, lineWidth: 1))
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .brandCard()
+                .buttonStyle(.plain)
             }
 
             if let contact = lead.contactPerson {
@@ -1007,19 +1049,9 @@ struct LeadDetailView: View {
                 if hasPrimaryAction {
                     Button {
                         BrandHaptics.tap()
-                        if visitActive {
-                            showPostPitch = true
-                        } else {
-                            showStatusPicker = true
-                        }
+                        showStatusPicker = true
                     } label: {
-                        if visitActive {
-                            Text("COMPLETE PITCH")
-                                .font(Brand.Font.mono(11))
-                                .tracking(Brand.Tracking.eyebrow)
-                        } else {
-                            updateStatusLabel
-                        }
+                        updateStatusLabel
                     }
                     .buttonStyle(GhostButtonStyle(size: .sm))
                     .disabled(isUpdatingStatus)
@@ -1028,21 +1060,10 @@ struct LeadDetailView: View {
                 } else {
                     Button {
                         BrandHaptics.tap()
-                        if visitActive {
-                            showPostPitch = true
-                        } else {
-                            showStatusPicker = true
-                        }
+                        showStatusPicker = true
                     } label: {
-                        if visitActive {
-                            Text("COMPLETE PITCH")
-                                .font(Brand.Font.mono(11))
-                                .tracking(Brand.Tracking.eyebrow)
-                                .frame(maxWidth: .infinity)
-                        } else {
-                            updateStatusLabel
-                                .frame(maxWidth: .infinity)
-                        }
+                        updateStatusLabel
+                            .frame(maxWidth: .infinity)
                     }
                     .buttonStyle(PrimaryButtonStyle(size: .sm))
                     .disabled(isUpdatingStatus)
@@ -1119,7 +1140,64 @@ struct LeadDetailView: View {
         return "In \(days) days"
     }
 
+    /// Countdown label that prefers hours when the follow-up is within
+    /// today's window, days otherwise. "Overdue" when past.
+    private func countdownLabel(_ date: Date) -> String {
+        let now = Date.now
+        if date < now {
+            let dc = Calendar.current.dateComponents([.day, .hour], from: date, to: now)
+            let d = dc.day ?? 0, h = dc.hour ?? 0
+            if d > 0 { return "Overdue · \(d)d" }
+            if h > 0 { return "Overdue · \(h)h" }
+            return "Overdue"
+        }
+        let dc = Calendar.current.dateComponents([.day, .hour], from: now, to: date)
+        let d = dc.day ?? 0, h = dc.hour ?? 0
+        if d == 0 && h == 0 { return "In under an hour" }
+        if d == 0 { return "In \(h)h" }
+        if d == 1 { return "Tomorrow" }
+        return "In \(d) days"
+    }
+
+    private func countdownColor(_ date: Date) -> Color {
+        let now = Date.now
+        if date < now { return Brand.err }
+        let hours = Calendar.current.dateComponents([.hour], from: now, to: date).hour ?? 0
+        if hours <= 24 { return Brand.signal }
+        return Brand.creamMuted
+    }
+
+    /// Status values that trigger the post-pitch questionnaire.
+    /// Picking any of these opens the modal so the SP captures the rich
+    /// pitch data. Manual "visited" / "new" / "follow_up" do NOT trigger
+    /// the modal — those are simple status flips.
+    private static let questionnaireStatuses: Set<String> = ["pitched", "sold", "rejected"]
+
     private func updateStatus(_ newStatus: String) {
+        // If the new status is one that warrants the questionnaire,
+        // freeze the pitch duration NOW (before async network) so the
+        // modal shows a stable timer reading.
+        if Self.questionnaireStatuses.contains(newStatus) {
+            if let start = visitStartTime {
+                frozenPitchDuration = Int(Date().timeIntervalSince(start))
+            } else {
+                frozenPitchDuration = nil
+            }
+            // Stop the running timer if a visit is active — the visit
+            // is over either way.
+            if visitActive {
+                visitTimer?.invalidate()
+                visitTimer = nil
+                visitActive = false
+                locationManager.stopUpdating()
+            }
+            // Open the questionnaire. The submit handler cascades the
+            // status to whatever outcome the SP picked, so we don't
+            // PATCH /leads/:id/status here — the pitch route does it.
+            showPostPitch = true
+            return
+        }
+
         isUpdatingStatus = true
         let id = lead.assignmentId
         let lat = locationManager.location?.coordinate.latitude
@@ -1165,12 +1243,10 @@ struct LeadDetailView: View {
         let lng = locationManager.location?.coordinate.longitude ?? 0
         Task { try? await APIClient.shared.postVisit(id: id, action: "end", lat: lat, lng: lng) }
         locationManager.stopUpdating()
-
-        // Auto-fire the post-pitch questionnaire — visit end IS the
-        // signal that a pitch happened. The questionnaire's first chip
-        // ("not pitched") covers the "didn't actually pitch" case so
-        // there's no separate skip flow needed.
-        showPostPitch = true
+        // No auto-fire here — the questionnaire opens when the SP
+        // explicitly changes status to pitched/sold/rejected via the
+        // sticky-bar status picker. That gives them a "visited but
+        // didn't pitch" path without forcing the modal.
     }
 
     /// Fetches the detail payload from /api/leads/:id and merges the rich

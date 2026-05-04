@@ -20,6 +20,12 @@ struct PostPitchView: View {
     let businessName: String
     let demoVersion: String?
     let pitchStartedAt: Date?
+    /// Frozen duration captured by LeadDetailView at the moment the visit
+    /// ended (or status changed). When non-nil this is used verbatim as
+    /// the pitch_duration_seconds on submit, and the timer at the top
+    /// stops counting up. `nil` means the questionnaire was opened
+    /// without a tracked visit (manual status change with no timer).
+    let frozenDurationSeconds: Int?
     let onSubmitted: (PostPitchResult) -> Void
 
     @Environment(\.dismiss) private var dismiss
@@ -55,25 +61,34 @@ struct PostPitchView: View {
         ZStack {
             Brand.ink.ignoresSafeArea()
 
-            ScrollView {
-                VStack(alignment: .leading, spacing: 20) {
-                    header
-                    progressDots
-                    Group {
-                        if stage == 0 { stage1Required }
-                        else if stage == 1 { stage2Conditional }
-                        else if stage == 2 { stage3Optional }
+            ScrollViewReader { proxy in
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 20) {
+                        // Anchor — used to reset scroll position when stage advances.
+                        Color.clear.frame(height: 0).id("top")
+                        header
+                        progressDots
+                        Group {
+                            if stage == 0 { stage1Required }
+                            else if stage == 1 { stage2Conditional }
+                            else if stage == 2 { stage3Optional }
+                        }
+                        if let errorMessage {
+                            Text(errorMessage)
+                                .font(Brand.Font.mono(11))
+                                .foregroundStyle(Brand.err)
+                                .padding(.top, 4)
+                        }
                     }
-                    if let errorMessage {
-                        Text(errorMessage)
-                            .font(Brand.Font.mono(11))
-                            .foregroundStyle(Brand.err)
-                            .padding(.top, 4)
+                    .padding(.horizontal, 20)
+                    .padding(.top, 16)
+                    .padding(.bottom, 130)
+                }
+                .onChange(of: stage) { _, _ in
+                    withAnimation(.easeOut(duration: 0.25)) {
+                        proxy.scrollTo("top", anchor: .top)
                     }
                 }
-                .padding(.horizontal, 20)
-                .padding(.top, 16)
-                .padding(.bottom, 130)
             }
         }
         .interactiveDismissDisabled(stage > 0)
@@ -146,10 +161,19 @@ struct PostPitchView: View {
     }
 
     private var currentDurationLabel: String? {
+        // Prefer the frozen duration captured when the visit ended /
+        // status changed — keeps the displayed time stable while the
+        // SP fills the questionnaire. Falls back to live ticking only
+        // if no frozen value was supplied.
+        if let frozen = frozenDurationSeconds {
+            return formatDuration(frozen)
+        }
         guard let start = pitchStartedAt else { return nil }
-        let s = Int(Date().timeIntervalSince(start))
-        let m = s / 60
-        let r = s % 60
+        return formatDuration(Int(Date().timeIntervalSince(start)))
+    }
+
+    private func formatDuration(_ s: Int) -> String {
+        let m = s / 60, r = s % 60
         return m == 0 ? "\(s)s" : "\(m)m \(r)s"
     }
 
@@ -167,6 +191,34 @@ struct PostPitchView: View {
 
     private var stage1Complete: Bool {
         outcome != nil && decisionMakerPresent != nil && demoShown != nil && interestLevel != nil
+    }
+
+    /// Stage 2 mandatory fields per outcome. The Next/Submit buttons
+    /// are disabled until these are answered for the chosen branch.
+    /// Follow-up cases (rejected / follow_up / closed_followup) require
+    /// the SP to explicitly say WHEN to come back — that's the field
+    /// that makes follow-ups actually actionable.
+    private var stage2Complete: Bool {
+        guard let outcome else { return false }
+        if outcome == .rejected || outcome == .followUp {
+            // At least one objection must be picked so the SP commits to
+            // a reason. "other" requires the free-text too.
+            if objections.isEmpty { return false }
+            if objections.contains(.other),
+               objectionOther.trimmingCharacters(in: .whitespaces).isEmpty {
+                return false
+            }
+        }
+        if outcome == .followUp || outcome == .closedFollowup {
+            // Mandatory: when to follow up + agreed next step.
+            if bestFollowupTime == nil { return false }
+            if agreedNextStep == nil { return false }
+        }
+        if outcome == .closedNow || outcome == .closedFollowup {
+            // Mandatory: payment method.
+            if paymentMethod == nil { return false }
+        }
+        return true
     }
 
     private var outcomeCard: some View {
@@ -665,19 +717,20 @@ struct PostPitchView: View {
                 }
 
                 if stage < 2 {
+                    let nextDisabled = (stage == 0 && !stage1Complete) || (stage == 1 && !stage2Complete)
                     Button {
                         BrandHaptics.tap()
                         stage += 1
                     } label: {
                         Text(stage == 0 ? "Next" : (stage2HasAnyContent ? "Next" : "Skip"))
                             .font(Brand.Font.body(15, weight: .semibold))
-                            .foregroundStyle(stage == 0 && !stage1Complete ? Brand.creamMuted : Brand.ink)
+                            .foregroundStyle(nextDisabled ? Brand.creamMuted : Brand.ink)
                             .frame(maxWidth: .infinity)
                             .frame(height: 50)
-                            .background(Capsule().fill(stage == 0 && !stage1Complete ? Brand.bgCard : Brand.cream))
+                            .background(Capsule().fill(nextDisabled ? Brand.bgCard : Brand.cream))
                     }
                     .buttonStyle(.plain)
-                    .disabled(stage == 0 && !stage1Complete)
+                    .disabled(nextDisabled)
                 } else {
                     Button {
                         submit()
@@ -755,7 +808,11 @@ struct PostPitchView: View {
         guard let outcome else { return }
         errorMessage = nil
 
-        let durationSeconds: Int? = pitchStartedAt.map { Int(Date().timeIntervalSince($0)) }
+        // Use the frozen duration if we have it (visit ended / status
+        // changed while we were filling the form). Otherwise compute
+        // from the start time as a last resort.
+        let durationSeconds: Int? = frozenDurationSeconds
+            ?? pitchStartedAt.map { Int(Date().timeIntervalSince($0)) }
         let location = locationManager.location?.coordinate
         let priceValue = Double(agreedPrice.replacingOccurrences(of: ",", with: "."))
 
@@ -794,6 +851,20 @@ struct PostPitchView: View {
         )
         BrandHaptics.tap(.medium)
 
+        // If the SP picked a follow-up window, also schedule a real
+        // calendar date on the lead so the Follow Up tab shows the
+        // countdown. Best-effort — failure here doesn't block the
+        // pitch submit (the queue already has the pitch payload).
+        if let bestFollowupTime, let followupDate = followupTimeToDate(bestFollowupTime) {
+            Task {
+                try? await APIClient.shared.scheduleFollowup(
+                    assignmentId: assignmentId,
+                    at: followupDate,
+                    note: trimmedOrNil(notes) ?? "Follow up after pitch"
+                )
+            }
+        }
+
         let pendingResult = PostPitchResult(
             pitchId: queuedId,
             pitchAttemptNumber: 1,
@@ -809,6 +880,25 @@ struct PostPitchView: View {
     private func trimmedOrNil(_ s: String) -> String? {
         let t = s.trimmingCharacters(in: .whitespacesAndNewlines)
         return t.isEmpty ? nil : t
+    }
+
+    /// Convert the relative-time chip into a concrete date so the
+    /// Follow Up tab can show a real countdown. Pinned to 10am local
+    /// time on the target day — a sensible default for a callback.
+    private func followupTimeToDate(_ when: FollowupTime) -> Date? {
+        let cal = Calendar.current
+        let days: Int
+        switch when {
+        case .tomorrow:  days = 1
+        case .thisWeek:  days = 3
+        case .nextWeek:  days = 7
+        case .nextMonth: days = 30
+        }
+        guard let target = cal.date(byAdding: .day, value: days, to: .now) else { return nil }
+        var comps = cal.dateComponents([.year, .month, .day], from: target)
+        comps.hour = 10
+        comps.minute = 0
+        return cal.date(from: comps)
     }
 }
 

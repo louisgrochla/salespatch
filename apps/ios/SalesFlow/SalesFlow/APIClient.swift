@@ -306,6 +306,33 @@ extension APIClient {
         return try await recordPitchRaw(assignmentId: assignmentId, jsonBody: body)
     }
 
+    /// Schedule (or clear) a follow-up reminder on a lead assignment.
+    /// `at: nil` clears any existing follow-up. Hits the
+    /// sales-dashboard PATCH /api/leads/:id/followup route.
+    func scheduleFollowup(assignmentId: String, at: Date?, note: String?) async throws {
+        struct Body: Encodable {
+            let follow_up_at: String?
+            let follow_up_note: String?
+        }
+        let iso = at.map { ISO8601DateFormatter().string(from: $0) }
+        guard let url = URL(string: dashboardBaseURL + "/api/leads/\(assignmentId)/followup") else {
+            throw URLError(.badURL)
+        }
+        var req = URLRequest(url: url)
+        req.httpMethod = "PATCH"
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        if let tok = token {
+            req.setValue("Bearer \(tok)", forHTTPHeaderField: "Authorization")
+        }
+        req.httpBody = try JSONEncoder().encode(Body(follow_up_at: iso, follow_up_note: note))
+        let (data, response) = try await URLSession.shared.data(for: req)
+        guard let http = response as? HTTPURLResponse else { throw URLError(.badServerResponse) }
+        if !(200..<300).contains(http.statusCode) {
+            let msg = (try? decoder.decode(APIError.self, from: data))?.error ?? "HTTP \(http.statusCode)"
+            throw SalesFlowError.server(msg)
+        }
+    }
+
     /// Send a previously-encoded JSON body. PitchQueue uses this so it
     /// doesn't need to round-trip the typed payload through Decodable
     /// (which trips the Swift compiler on cross-file extension
