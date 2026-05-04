@@ -43,8 +43,18 @@ async function loadDashboard() {
       loadRecentActivity(),
     ]);
 
-    const closedCount = pitchOutcomes.find((o) => o.outcome === "closed")?._count._all ?? 0;
-    const closeRate = pitchCount > 0 ? closedCount / pitchCount : 0;
+    // Sum every "closed" variant (legacy `closed`, `closed_now`,
+    // `closed_followup`) so the dashboard headline rate isn't broken
+    // by the new richer outcomes.
+    const closedCount = pitchOutcomes
+      .filter((o) => o.outcome === "closed" || o.outcome === "closed_now" || o.outcome === "closed_followup")
+      .reduce((sum, o) => sum + o._count._all, 0);
+    // Exclude not_pitched rows from the conversion denominator —
+    // they're visits that didn't end in a pitch, so including them
+    // would deflate the rate.
+    const notPitchedCount = pitchOutcomes.find((o) => o.outcome === "not_pitched")?._count._all ?? 0;
+    const pitchedCount = pitchCount - notPitchedCount;
+    const closeRate = pitchedCount > 0 ? closedCount / pitchedCount : 0;
     const revenue = Number(revenueTotal._sum.amount ?? 0);
     const cost = Number(costTotal._sum.amount ?? 0);
     const cac = closedCount > 0 ? cost / closedCount : 0;
