@@ -1,6 +1,7 @@
 import Foundation
 import Combine
 import Security
+import SwiftData
 
 // MARK: — AuthStore  (Observable singleton)
 final class AuthStore: ObservableObject {
@@ -15,6 +16,11 @@ final class AuthStore: ObservableObject {
     private let userKey  = "salesflow_user"
     private let pinKey   = "salesflow_user_pin"
     private let biometricKey = "salesflow_biometric_enabled"
+    /// Tracks which user the local SwiftData store last belonged to. When
+    /// a different user signs in (or the same device gets handed over) we
+    /// must wipe the store — otherwise SP A's leads + follow-ups bleed
+    /// into SP B's session.
+    private let lastUserIdKey = "salesflow_last_user_id"
 
     // Keychain-backed token property
     var token: String? {
@@ -98,6 +104,45 @@ final class AuthStore: ObservableObject {
         currentUser = user
         if let user, let data = try? JSONEncoder().encode(user) {
             UserDefaults.standard.set(data, forKey: userKey)
+        }
+    }
+
+    /// Wipe every locally-cached row that belongs to a previous user
+    /// session. Call this on sign-in (only if the user actually changed)
+    /// and on sign-out. Touches: Lead (assigned leads + cached
+    /// statuses), PendingPitch (offline pitch queue).
+    ///
+    /// Best-effort — failure here doesn't block the auth flow but means
+    /// stale rows linger until the next call. The next login attempt
+    /// will retry.
+    @MainActor
+    static func clearLocalSession(in context: ModelContext) {
+        do {
+            try context.delete(model: Lead.self)
+            try context.delete(model: PendingPitch.self)
+            try context.save()
+        } catch {
+            #if DEBUG
+            print("[AuthStore] clearLocalSession failed: \(error.localizedDescription)")
+            #endif
+        }
+    }
+
+    /// Compare the freshly-logged-in user with the previous session's
+    /// user. If different (or first login on this device), wipe the
+    /// local SwiftData store so the new user doesn't see the previous
+    /// SP's leads.
+    @MainActor
+    func handleUserChange(in context: ModelContext) {
+        let newUserId = currentUser?.id
+        let prevUserId = UserDefaults.standard.string(forKey: lastUserIdKey)
+        if newUserId != prevUserId {
+            Self.clearLocalSession(in: context)
+        }
+        if let newUserId {
+            UserDefaults.standard.set(newUserId, forKey: lastUserIdKey)
+        } else {
+            UserDefaults.standard.removeObject(forKey: lastUserIdKey)
         }
     }
 
