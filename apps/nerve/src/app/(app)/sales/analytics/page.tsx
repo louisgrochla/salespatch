@@ -8,7 +8,18 @@ export const dynamic = "force-dynamic";
 const SAMPLE_SIZE_WARN = 10;
 const SAMPLE_SIZE_GOOD = 30;
 
-type GroupRow = { key: string; closed: number; rejected: number; followUp: number; total: number };
+type GroupRow = {
+  key: string;
+  closed: number;        // closed_now + closed_followup + legacy closed
+  rejected: number;
+  followUp: number;
+  notPitched: number;    // visits that ended without a pitch
+  total: number;         // every PitchLog row keyed under this group
+  /// Pitches actually delivered (excludes not_pitched). Used as the
+  /// denominator for close-rate so "didn't get to pitch" doesn't dilute
+  /// the conversion math.
+  pitched: number;
+};
 
 function groupBucket(
   rows: Array<{ key: string | null; outcome: string; n: number }>,
@@ -16,10 +27,19 @@ function groupBucket(
   const map = new Map<string, GroupRow>();
   for (const r of rows) {
     const key = r.key ?? "—";
-    const b = map.get(key) ?? { key, closed: 0, rejected: 0, followUp: 0, total: 0 };
-    if (r.outcome === "closed") b.closed += r.n;
-    else if (r.outcome === "rejected") b.rejected += r.n;
-    else if (r.outcome === "follow_up") b.followUp += r.n;
+    const b = map.get(key) ?? { key, closed: 0, rejected: 0, followUp: 0, notPitched: 0, total: 0, pitched: 0 };
+    if (r.outcome === "closed" || r.outcome === "closed_now" || r.outcome === "closed_followup") {
+      b.closed += r.n;
+      b.pitched += r.n;
+    } else if (r.outcome === "rejected") {
+      b.rejected += r.n;
+      b.pitched += r.n;
+    } else if (r.outcome === "follow_up") {
+      b.followUp += r.n;
+      b.pitched += r.n;
+    } else if (r.outcome === "not_pitched") {
+      b.notPitched += r.n;
+    }
     b.total += r.n;
     map.set(key, b);
   }
@@ -105,17 +125,21 @@ function ConversionGroup({
             <tr>
               <th className="w-1/4">{title.replace("conversion by ", "")}</th>
               <th className="text-right">n</th>
+              <th className="text-right">pitched</th>
               <th className="text-right">closed</th>
               <th className="text-right">rejected</th>
               <th className="text-right">follow up</th>
+              <th className="text-right">no pitch</th>
               <th className="text-right">close rate</th>
               <th className="w-1/4">distribution</th>
             </tr>
           </thead>
           <tbody>
             {rows.map((r) => {
-              const closeRate = r.total > 0 ? r.closed / r.total : 0;
-              const conf = sampleConfidence(r.total);
+              // close rate uses pitched as denominator so "couldn't
+              // pitch" rows don't artificially deflate conversion.
+              const closeRate = r.pitched > 0 ? r.closed / r.pitched : 0;
+              const conf = sampleConfidence(r.pitched);
               return (
                 <tr key={r.key}>
                   <td>{keyRender ? keyRender(r.key) : r.key}</td>
@@ -129,12 +153,14 @@ function ConversionGroup({
                       {r.total}
                     </span>
                   </td>
+                  <td className="text-right text-fg">{r.pitched}</td>
                   <td className="text-right text-status-closed">{r.closed}</td>
                   <td className="text-right text-status-rejected">{r.rejected}</td>
                   <td className="text-right text-status-followup">{r.followUp}</td>
+                  <td className="text-right text-fg-dim">{r.notPitched}</td>
                   <td className="text-right">{(closeRate * 100).toFixed(1)}%</td>
                   <td>
-                    <DistroBar closed={r.closed} rejected={r.rejected} followUp={r.followUp} total={r.total} />
+                    <DistroBar closed={r.closed} rejected={r.rejected} followUp={r.followUp} total={r.pitched} />
                   </td>
                 </tr>
               );
