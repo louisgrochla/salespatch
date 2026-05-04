@@ -32,6 +32,16 @@ struct PostPitchView: View {
     @StateObject private var locationManager = LocationManager()
 
     @State private var stage: Int = 0
+    /// Gate answer: did the SP actually deliver a pitch?
+    /// nil → gate screen still shown
+    /// true → full questionnaire (3 stages)
+    /// false → fast why-not-pitched flow + auto-follow-up
+    @State private var pitchDelivered: Bool? = nil
+
+    // Why-not-pitched (used when pitchDelivered == false)
+    @State private var notPitchedReason: NotPitchedReason? = nil
+    @State private var notPitchedOther: String = ""
+    @State private var autoFollowup: Bool = true
 
     // Stage 1
     @State private var outcome: PitchOutcome? = nil
@@ -64,14 +74,27 @@ struct PostPitchView: View {
             ScrollViewReader { proxy in
                 ScrollView {
                     VStack(alignment: .leading, spacing: 20) {
-                        // Anchor — used to reset scroll position when stage advances.
+                        // Anchor — used to reset scroll position on view change.
                         Color.clear.frame(height: 0).id("top")
                         header
-                        progressDots
+                        // Gate first: "did you actually pitch?" Only show
+                        // progress dots once they've answered yes (entered
+                        // the multi-stage flow).
+                        if pitchDelivered == true {
+                            progressDots
+                        }
                         Group {
-                            if stage == 0 { stage1Required }
-                            else if stage == 1 { stage2Conditional }
-                            else if stage == 2 { stage3Optional }
+                            if pitchDelivered == nil {
+                                gateScreen
+                            } else if pitchDelivered == false {
+                                notPitchedScreen
+                            } else if stage == 0 {
+                                stage1Required
+                            } else if stage == 1 {
+                                stage2Conditional
+                            } else if stage == 2 {
+                                stage3Optional
+                            }
                         }
                         if let errorMessage {
                             Text(errorMessage)
@@ -89,9 +112,14 @@ struct PostPitchView: View {
                         proxy.scrollTo("top", anchor: .top)
                     }
                 }
+                .onChange(of: pitchDelivered) { _, _ in
+                    withAnimation(.easeOut(duration: 0.25)) {
+                        proxy.scrollTo("top", anchor: .top)
+                    }
+                }
             }
         }
-        .interactiveDismissDisabled(stage > 0)
+        .interactiveDismissDisabled(stage > 0 || pitchDelivered != nil)
         .overlay(alignment: .bottom) { stickyBar }
     }
 
@@ -152,6 +180,8 @@ struct PostPitchView: View {
     }
 
     private var stageEyebrow: String {
+        if pitchDelivered == nil { return "" }
+        if pitchDelivered == false { return "DIDN'T PITCH · LOG WHY" }
         switch stage {
         case 0: return "STAGE 1 / 3 · ESSENTIALS"
         case 1: return "STAGE 2 / 3 · CONTEXT"
@@ -699,10 +729,15 @@ struct PostPitchView: View {
         VStack(spacing: 0) {
             Rectangle().fill(Brand.line).frame(height: 1)
             HStack(spacing: 10) {
-                if stage > 0 {
+                // Gate screen: no buttons here — the two big tap-targets
+                // ARE the action. Hide the sticky bar entirely.
+                if pitchDelivered == nil {
+                    EmptyView()
+                } else if pitchDelivered == false {
+                    // Not-pitched flow: Back to gate + Submit.
                     Button {
                         BrandHaptics.tap()
-                        stage -= 1
+                        pitchDelivered = nil
                     } label: {
                         Text("Back")
                             .font(Brand.Font.mono(11, weight: .medium))
@@ -714,38 +749,89 @@ struct PostPitchView: View {
                             .overlay(Capsule().strokeBorder(Brand.line, lineWidth: 1))
                     }
                     .buttonStyle(.plain)
-                }
 
-                if stage < 2 {
-                    let nextDisabled = (stage == 0 && !stage1Complete) || (stage == 1 && !stage2Complete)
                     Button {
-                        BrandHaptics.tap()
-                        stage += 1
-                    } label: {
-                        Text(stage == 0 ? "Next" : (stage2HasAnyContent ? "Next" : "Skip"))
-                            .font(Brand.Font.body(15, weight: .semibold))
-                            .foregroundStyle(nextDisabled ? Brand.creamMuted : Brand.ink)
-                            .frame(maxWidth: .infinity)
-                            .frame(height: 50)
-                            .background(Capsule().fill(nextDisabled ? Brand.bgCard : Brand.cream))
-                    }
-                    .buttonStyle(.plain)
-                    .disabled(nextDisabled)
-                } else {
-                    Button {
-                        submit()
+                        submitNotPitched()
                     } label: {
                         HStack(spacing: 6) {
                             Image(systemName: "paperplane.fill").font(.system(size: 13))
-                            Text("Submit pitch")
+                            Text("Log visit")
                                 .font(Brand.Font.body(15, weight: .semibold))
                         }
-                        .foregroundStyle(Brand.ink)
+                        .foregroundStyle(notPitchedComplete ? Brand.ink : Brand.creamMuted)
                         .frame(maxWidth: .infinity)
                         .frame(height: 50)
-                        .background(Capsule().fill(Brand.cream))
+                        .background(Capsule().fill(notPitchedComplete ? Brand.cream : Brand.bgCard))
                     }
                     .buttonStyle(.plain)
+                    .disabled(!notPitchedComplete)
+                } else {
+                    // Full questionnaire (pitchDelivered == true).
+                    if stage > 0 {
+                        Button {
+                            BrandHaptics.tap()
+                            stage -= 1
+                        } label: {
+                            Text("Back")
+                                .font(Brand.Font.mono(11, weight: .medium))
+                                .tracking(Brand.Tracking.eyebrow)
+                                .foregroundStyle(Brand.cream)
+                                .frame(maxWidth: .infinity)
+                                .frame(height: 50)
+                                .background(Capsule().fill(Brand.bgCard))
+                                .overlay(Capsule().strokeBorder(Brand.line, lineWidth: 1))
+                        }
+                        .buttonStyle(.plain)
+                    } else {
+                        // Stage 0 with the gate already answered: Back
+                        // returns to the gate.
+                        Button {
+                            BrandHaptics.tap()
+                            pitchDelivered = nil
+                        } label: {
+                            Text("Back")
+                                .font(Brand.Font.mono(11, weight: .medium))
+                                .tracking(Brand.Tracking.eyebrow)
+                                .foregroundStyle(Brand.cream)
+                                .frame(maxWidth: .infinity)
+                                .frame(height: 50)
+                                .background(Capsule().fill(Brand.bgCard))
+                                .overlay(Capsule().strokeBorder(Brand.line, lineWidth: 1))
+                        }
+                        .buttonStyle(.plain)
+                    }
+
+                    if stage < 2 {
+                        let nextDisabled = (stage == 0 && !stage1Complete) || (stage == 1 && !stage2Complete)
+                        Button {
+                            BrandHaptics.tap()
+                            stage += 1
+                        } label: {
+                            Text(stage == 0 ? "Next" : (stage2HasAnyContent ? "Next" : "Skip"))
+                                .font(Brand.Font.body(15, weight: .semibold))
+                                .foregroundStyle(nextDisabled ? Brand.creamMuted : Brand.ink)
+                                .frame(maxWidth: .infinity)
+                                .frame(height: 50)
+                                .background(Capsule().fill(nextDisabled ? Brand.bgCard : Brand.cream))
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(nextDisabled)
+                    } else {
+                        Button {
+                            submit()
+                        } label: {
+                            HStack(spacing: 6) {
+                                Image(systemName: "paperplane.fill").font(.system(size: 13))
+                                Text("Submit pitch")
+                                    .font(Brand.Font.body(15, weight: .semibold))
+                            }
+                            .foregroundStyle(Brand.ink)
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 50)
+                            .background(Capsule().fill(Brand.cream))
+                        }
+                        .buttonStyle(.plain)
+                    }
                 }
             }
             .padding(.horizontal, 20)
@@ -802,7 +888,189 @@ struct PostPitchView: View {
         )
     }
 
-    // ── Submit
+    // ── Gate: "Did you manage to pitch?"
+
+    private var gateScreen: some View {
+        VStack(spacing: 14) {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Did you manage to pitch?")
+                    .font(Brand.Font.display(20, weight: .medium))
+                    .foregroundStyle(Brand.cream)
+                Text("If yes, we'll capture the rich detail. If no, we'll log it quickly and put a follow-up on your calendar.")
+                    .font(Brand.Font.body(14))
+                    .foregroundStyle(Brand.creamMuted)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(16)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(RoundedRectangle(cornerRadius: Brand.Radius.card).fill(Brand.bgStrong))
+            .overlay(RoundedRectangle(cornerRadius: Brand.Radius.card).strokeBorder(Brand.line, lineWidth: 1))
+
+            gateButton(
+                title: "Yes, I pitched",
+                subtitle: "Closed, follow-up, or rejected — capture the detail",
+                icon: "checkmark.circle.fill",
+                accent: true
+            ) {
+                BrandHaptics.tap(.medium)
+                pitchDelivered = true
+            }
+
+            gateButton(
+                title: "No, didn't pitch",
+                subtitle: "Wrong contact, shop closed, ran out of time",
+                icon: "minus.circle",
+                accent: false
+            ) {
+                BrandHaptics.tap()
+                pitchDelivered = false
+            }
+        }
+    }
+
+    private func gateButton(
+        title: String,
+        subtitle: String,
+        icon: String,
+        accent: Bool,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            HStack(spacing: 14) {
+                Image(systemName: icon)
+                    .font(.system(size: 22, weight: .medium))
+                    .foregroundStyle(accent ? Brand.signal : Brand.creamDim)
+                    .frame(width: 48, height: 48)
+                    .background(
+                        RoundedRectangle(cornerRadius: 12).fill(accent ? Brand.signalSoft : Brand.bgCard)
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12).strokeBorder(accent ? Brand.signalBorder : Brand.line, lineWidth: 1)
+                    )
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(title)
+                        .font(Brand.Font.body(17, weight: .semibold))
+                        .foregroundStyle(Brand.cream)
+                    Text(subtitle)
+                        .font(Brand.Font.body(13))
+                        .foregroundStyle(Brand.creamMuted)
+                        .multilineTextAlignment(.leading)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer(minLength: 0)
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundStyle(Brand.creamMuted)
+            }
+            .padding(16)
+            .background(RoundedRectangle(cornerRadius: Brand.Radius.card).fill(Brand.bgStrong))
+            .overlay(
+                RoundedRectangle(cornerRadius: Brand.Radius.card)
+                    .strokeBorder(accent ? Brand.signalBorder : Brand.line, lineWidth: 1)
+            )
+        }
+        .buttonStyle(.plain)
+    }
+
+    // ── Not pitched: simple why + auto-follow-up
+
+    private var notPitchedScreen: some View {
+        VStack(spacing: 14) {
+            sectionCard(eyebrow: "/ WHY NOT", required: true) {
+                VStack(spacing: 8) {
+                    notPitchedRow(.wrongPerson, "Wrong contact", "Decision-maker wasn't there", "person.fill.questionmark")
+                    notPitchedRow(.shopClosed, "Shop was closed", "Or out of business", "lock.fill")
+                    notPitchedRow(.tooBusy, "They were too busy", "Customers in / mid-task", "clock.fill")
+                    notPitchedRow(.wrongTime, "Wrong time of day", "Try again later or another day", "calendar")
+                    notPitchedRow(.notReady, "I wasn't ready", "Need more prep on this lead", "exclamationmark.triangle")
+                    notPitchedRow(.other, "Something else", "Tell us what", "text.bubble")
+                }
+                if notPitchedReason == .other {
+                    TextField("What happened?", text: $notPitchedOther, axis: .vertical)
+                        .lineLimit(2...4)
+                        .font(Brand.Font.body(14))
+                        .foregroundStyle(Brand.cream)
+                        .padding(12)
+                        .background(Brand.bgCard)
+                        .clipShape(RoundedRectangle(cornerRadius: Brand.Radius.input))
+                        .overlay(RoundedRectangle(cornerRadius: Brand.Radius.input).strokeBorder(Brand.line, lineWidth: 1))
+                        .padding(.top, 8)
+                }
+            }
+
+            VStack(alignment: .leading, spacing: 0) {
+                HStack(spacing: 6) {
+                    Text("/ AUTO FOLLOW-UP")
+                        .font(Brand.Font.mono(Brand.Font.eyebrow, weight: .medium))
+                        .tracking(Brand.Tracking.eyebrow)
+                        .foregroundStyle(Brand.signal)
+                }
+                HStack(alignment: .top, spacing: 12) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Schedule a follow-up")
+                            .font(Brand.Font.body(15, weight: .medium))
+                            .foregroundStyle(Brand.cream)
+                        Text(autoFollowup ? "Tomorrow at 10am — we'll remind you to come back." : "No reminder will be set. You can add one manually later.")
+                            .font(Brand.Font.body(13))
+                            .foregroundStyle(Brand.creamMuted)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    Spacer(minLength: 8)
+                    Toggle("", isOn: $autoFollowup)
+                        .labelsHidden()
+                        .tint(Brand.signal)
+                }
+                .padding(.top, 12)
+            }
+            .padding(16)
+            .background(RoundedRectangle(cornerRadius: Brand.Radius.card).fill(autoFollowup ? Brand.signalSoft : Brand.bgStrong))
+            .overlay(RoundedRectangle(cornerRadius: Brand.Radius.card).strokeBorder(autoFollowup ? Brand.signalBorder : Brand.line, lineWidth: 1))
+        }
+    }
+
+    private func notPitchedRow(_ value: NotPitchedReason, _ title: String, _ subtitle: String, _ icon: String) -> some View {
+        let selected = notPitchedReason == value
+        return Button {
+            BrandHaptics.tap()
+            notPitchedReason = value
+        } label: {
+            HStack(spacing: 12) {
+                Image(systemName: icon)
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundStyle(selected ? Brand.signal : Brand.creamDim)
+                    .frame(width: 32, height: 32)
+                    .background(RoundedRectangle(cornerRadius: 8).fill(selected ? Brand.signalSoft : Brand.bgCard))
+                    .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(selected ? Brand.signalBorder : Brand.line, lineWidth: 1))
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title)
+                        .font(Brand.Font.body(15, weight: .medium))
+                        .foregroundStyle(Brand.cream)
+                    Text(subtitle)
+                        .font(Brand.Font.mono(Brand.Font.meta))
+                        .foregroundStyle(Brand.creamMuted)
+                }
+                Spacer(minLength: 0)
+                if selected {
+                    Image(systemName: "checkmark").font(.system(size: 13, weight: .bold)).foregroundStyle(Brand.signal)
+                }
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
+            .background(RoundedRectangle(cornerRadius: 12).fill(selected ? Brand.signalSoft : Brand.bgCard))
+            .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(selected ? Brand.signalBorder : Brand.line, lineWidth: 1))
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var notPitchedComplete: Bool {
+        guard let reason = notPitchedReason else { return false }
+        if reason == .other && notPitchedOther.trimmingCharacters(in: .whitespaces).isEmpty {
+            return false
+        }
+        return true
+    }
+
+    // ── Submit (full questionnaire branch)
 
     private func submit() {
         guard let outcome else { return }
@@ -877,6 +1145,88 @@ struct PostPitchView: View {
         dismiss()
     }
 
+    /// Submit path for the "didn't pitch" branch — short, one chip + an
+    /// auto-follow-up toggle. Outcome is forced to .notPitched and the
+    /// reason becomes the lone objection.
+    private func submitNotPitched() {
+        guard let reason = notPitchedReason else { return }
+
+        let durationSeconds: Int? = frozenDurationSeconds
+            ?? pitchStartedAt.map { Int(Date().timeIntervalSince($0)) }
+        let location = locationManager.location?.coordinate
+
+        // Pack the reason into the objections array so NERVE has the
+        // structured why. "other" carries the free text after the colon.
+        var reasons: [String] = []
+        if reason == .other {
+            let trimmed = notPitchedOther.trimmingCharacters(in: .whitespacesAndNewlines)
+            reasons.append("other:" + trimmed)
+        } else {
+            reasons.append(reason.rawValue)
+        }
+
+        let payload = APIClient.PitchPayload(
+            outcome: PitchOutcome.notPitched.rawValue,
+            pitch_duration_seconds: durationSeconds,
+            demo_version: demoVersion,
+            decision_maker_present: reason == .wrongPerson ? false : nil,
+            demo_shown: false,
+            interest_level: nil,
+            consent_to_record: false, // nothing was recorded
+            demo_reaction: nil,
+            agreed_price: nil,
+            payment_method: nil,
+            best_followup_time: autoFollowup ? FollowupTime.tomorrow.rawValue : nil,
+            agreed_next_step: autoFollowup ? AgreedNextStep.spWillCall.rawValue : nil,
+            objections: reasons,
+            gut_feel_close_pct: nil,
+            first_response_phrase: nil,
+            competitor_mentioned: nil,
+            notes: "Did not pitch — \(reason.label)",
+            gps_lat: location?.latitude,
+            gps_lng: location?.longitude,
+            pitched_at: ISO8601DateFormatter().string(from: pitchStartedAt ?? Date())
+        )
+
+        let queuedId = PitchQueue.shared.enqueue(
+            assignmentId: assignmentId,
+            businessName: businessName,
+            payload: payload
+        )
+        BrandHaptics.tap(.medium)
+
+        if autoFollowup {
+            // Tomorrow 10am, with a note explaining why.
+            let cal = Calendar.current
+            if let target = cal.date(byAdding: .day, value: 1, to: .now) {
+                var comps = cal.dateComponents([.year, .month, .day], from: target)
+                comps.hour = 10
+                comps.minute = 0
+                if let date = cal.date(from: comps) {
+                    let note = "Couldn't pitch — \(reason.label.lowercased()). Try again."
+                    Task {
+                        try? await APIClient.shared.scheduleFollowup(
+                            assignmentId: assignmentId,
+                            at: date,
+                            note: note
+                        )
+                    }
+                }
+            }
+        }
+
+        let pendingResult = PostPitchResult(
+            pitchId: queuedId,
+            pitchAttemptNumber: 1,
+            forwarded: false,
+            nervePitchId: nil,
+            qualityFlag: nil,
+            forwardError: "queued"
+        )
+        onSubmitted(pendingResult)
+        dismiss()
+    }
+
     private func trimmedOrNil(_ s: String) -> String? {
         let t = s.trimmingCharacters(in: .whitespacesAndNewlines)
         return t.isEmpty ? nil : t
@@ -903,6 +1253,29 @@ struct PostPitchView: View {
 }
 
 // MARK: — Enums
+
+/// Why a visit ended without a pitch. Maps into the objections array
+/// on the not_pitched payload so NERVE can stratify rejections vs
+/// "wrong contact" vs "shop closed" cleanly.
+enum NotPitchedReason: String, CaseIterable {
+    case wrongPerson  = "wrong_person"
+    case shopClosed   = "shop_closed"
+    case tooBusy      = "too_busy"
+    case wrongTime    = "wrong_time"
+    case notReady     = "not_ready"
+    case other        = "other"
+
+    var label: String {
+        switch self {
+        case .wrongPerson: return "Wrong contact"
+        case .shopClosed:  return "Shop closed"
+        case .tooBusy:     return "They were too busy"
+        case .wrongTime:   return "Wrong time of day"
+        case .notReady:    return "I wasn't ready"
+        case .other:       return "Something else"
+        }
+    }
+}
 
 enum PitchOutcome: String, CaseIterable {
     case closedNow       = "closed_now"
