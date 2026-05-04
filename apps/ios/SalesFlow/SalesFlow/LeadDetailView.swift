@@ -53,6 +53,27 @@ struct LeadDetailView: View {
                     default: EmptyView()
                     }
                 }
+                .transition(.opacity.combined(with: .move(edge: .trailing)))
+                .id(selectedTab) // forces transition on tab change
+                // Horizontal swipe between tabs. simultaneousGesture so
+                // the parent ScrollView still owns vertical scroll.
+                // High horizontal-vs-vertical ratio prevents accidental
+                // swipes during normal scrolling.
+                .simultaneousGesture(
+                    DragGesture(minimumDistance: 30)
+                        .onEnded { value in
+                            let h = value.translation.width
+                            let v = abs(value.translation.height)
+                            guard abs(h) > 60, abs(h) > v * 1.8 else { return }
+                            if h < 0, selectedTab < tabs.count - 1 {
+                                withAnimation(.easeInOut(duration: 0.22)) { selectedTab += 1 }
+                                BrandHaptics.tap()
+                            } else if h > 0, selectedTab > 0 {
+                                withAnimation(.easeInOut(duration: 0.22)) { selectedTab -= 1 }
+                                BrandHaptics.tap()
+                            }
+                        }
+                )
             }
             .padding(.horizontal, 20)
             .padding(.top, 4)
