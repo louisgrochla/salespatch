@@ -54,7 +54,7 @@ struct PostPitchView: View {
     @State private var demoReaction: DemoReaction? = nil
     @State private var objections: Set<ObjectionTag> = []
     @State private var objectionOther: String = ""
-    @State private var agreedPrice: String = "350"
+    @State private var agreedPrice: String = "299"
     @State private var paymentMethod: PaymentMethod? = nil
     @State private var bestFollowupTime: FollowupTime? = nil
     @State private var agreedNextStep: AgreedNextStep? = nil
@@ -491,7 +491,7 @@ struct PostPitchView: View {
                         Text("£")
                             .font(Brand.Font.display(20, weight: .medium))
                             .foregroundStyle(Brand.creamDim)
-                        TextField("350", text: $agreedPrice)
+                        TextField("299", text: $agreedPrice)
                             .keyboardType(.decimalPad)
                             .font(Brand.Font.display(20, weight: .medium).monospacedDigit())
                             .foregroundStyle(Brand.cream)

@@ -179,7 +179,7 @@ export default function CustomerDemoPage() {
 
                 <div className="bg-slate-50 rounded-xl p-5 mb-6">
                   <div className="flex items-baseline gap-3 mb-2">
-                    <span className="text-[36px] font-semibold text-slate-900">£350</span>
+                    <span className="text-[36px] font-semibold text-slate-900">£299</span>
                     <span className="text-[15px] text-slate-500">one-time</span>
                   </div>
                   <div className="text-[13px] text-slate-600">
@@ -290,7 +290,7 @@ export default function CustomerDemoPage() {
                 <div className="space-y-4 mb-6">
                   <div className="flex justify-between items-center py-3 border-b border-slate-100">
                     <span className="text-[13px] text-slate-600">Website for {demo.business_name}</span>
-                    <span className="text-[15px] font-semibold text-slate-900">£350</span>
+                    <span className="text-[15px] font-semibold text-slate-900">£299</span>
                   </div>
 
                   <div className="bg-slate-50 rounded-lg p-4">

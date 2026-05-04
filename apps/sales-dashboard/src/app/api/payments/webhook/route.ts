@@ -210,10 +210,13 @@ async function handleCheckoutCompleted(
     .update({ status: 'completed', completed_at: nowIso })
     .eq('stripe_session_id', session.id);
 
-  // Log Stripe fee estimate for cost tracking.
+  // Log Stripe fee estimate for cost tracking. Failure here is
+  // non-critical — the lead is already flipped to sold + commission
+  // written; we just lose the cost-ledger entry. Log loudly so ops
+  // can spot a missing cost_log table or RLS issue.
   const amountPaid = session.amount_total ?? 0;
   const stripeFeeEstimate = Math.round(amountPaid * 0.014) + 20; // 1.4% + 20p UK card
-  await supabase.from('cost_log').insert({
+  const { error: costErr } = await supabase.from('cost_log').insert({
     service: 'stripe',
     amount_gbp: stripeFeeEstimate / 100,
     description: `Checkout ${session.id} — assignment ${leadAssignmentId}`,
@@ -224,6 +227,9 @@ async function handleCheckoutCompleted(
       salesperson_id: salespersonId,
     },
   });
+  if (costErr) {
+    console.warn(`[payments/webhook] cost_log insert failed (non-fatal): ${costErr.message}`);
+  }
 
   // Spin up the £25/mo subscription with a 30-day trial. Customer's card was
   // saved off-session at checkout, so the subscription's first charge lands
@@ -255,7 +261,7 @@ async function createMonthlySubscription(args: {
   const priceId = getStripeHostingPriceId();
   if (!priceId) {
     console.warn(
-      `[payments/webhook] STRIPE_HOSTING_PRICE_ID unset — skipping subscription for assignment ${args.leadAssignmentId}. The £350 is captured; ops must manually attach the £25/mo subscription.`,
+      `[payments/webhook] STRIPE_HOSTING_PRICE_ID unset — skipping subscription for assignment ${args.leadAssignmentId}. The setup fee is captured; ops must manually attach the £25/mo subscription.`,
     );
     return;
   }
@@ -278,7 +284,7 @@ async function createMonthlySubscription(args: {
     );
   } catch (err) {
     const message = err instanceof Error ? err.message : 'subscription create failed';
-    // Don't fail the whole webhook — the £350 is captured. Log loudly so ops
+    // Don't fail the whole webhook — the setup fee is captured. Log loudly so ops
     // can manually create the subscription if this happens.
     console.error(
       `[payments/webhook] FAILED to create subscription for assignment ${args.leadAssignmentId} (customer ${args.customerId}): ${message}`,
@@ -339,7 +345,7 @@ async function handleInvoicePaid(
   const customerId = typeof invoice.customer === 'string' ? invoice.customer : invoice.customer?.id ?? null;
 
   // Used for tracking £25/mo recurring revenue. No lead-status change.
-  await supabase.from('cost_log').insert({
+  const { error: invoiceCostErr } = await supabase.from('cost_log').insert({
     service: 'stripe-invoice',
     amount_gbp: (invoice.amount_paid ?? 0) / 100,
     description: `Invoice ${invoice.id} paid (subscription ${subscriptionId ?? 'n/a'})`,
@@ -349,4 +355,7 @@ async function handleInvoicePaid(
       customer_id: customerId,
     },
   });
+  if (invoiceCostErr) {
+    console.warn(`[payments/webhook] invoice cost_log insert failed: ${invoiceCostErr.message}`);
+  }
 }

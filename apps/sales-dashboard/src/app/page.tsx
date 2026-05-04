@@ -60,7 +60,7 @@ export default function LandingPage() {
   const [tlActive, setTlActive] = useState(0);
   const [tlFill, setTlFill] = useState(0);
   const [claimed, setClaimed] = useState<number | null>(null);
-  const [walletBal, setWalletBal] = useState(350);
+  const [walletBal, setWalletBal] = useState(299);
 
   const [sDays, setSDays] = useState(4);
   const [sClaims, setSClaims] = useState(12);
@@ -159,7 +159,7 @@ export default function LandingPage() {
       const tick = window.setInterval(() => {
         v += 5;
         setWalletBal(v);
-        if (v >= 350) clearInterval(tick);
+        if (v >= 299) clearInterval(tick);
       }, 30);
     }
   };
@@ -192,7 +192,7 @@ export default function LandingPage() {
           const tick = window.setInterval(() => {
             v += 5;
             setWalletBal(v);
-            if (v >= 350) clearInterval(tick);
+            if (v >= 299) clearInterval(tick);
           }, 30);
         }
         return next;
@@ -345,7 +345,7 @@ export default function LandingPage() {
           </div>
           <div className="ribbon-cell">
             <div className="n">
-              <span className="acc">£</span>350
+              <span className="acc">£</span>299
             </div>
             <div className="l">Client upfront · one time</div>
           </div>
@@ -607,7 +607,7 @@ export default function LandingPage() {
             <p>They didn&apos;t brief an agency. They didn&apos;t pick a template. They saw a site that was already theirs, and said yes.</p>
             <div className="kv">
               <span>Upfront</span>
-              <b>£350 · ~£27.50/mo</b>
+              <b>£299 · £25/mo</b>
             </div>
           </div>
           <div className="side">

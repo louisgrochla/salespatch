@@ -672,7 +672,7 @@ export default function AdminUserDetailPage() {
           <Card padding="lg">
             <Eyebrow accent>Commission</Eyebrow>
             <p className="text-[13px] mb-4" style={{ color: CREAM_DIM, lineHeight: 1.55 }}>
-              Flat amount paid to this contractor per confirmed sale (£350 setup
+              Flat amount paid to this contractor per confirmed sale (£299 setup
               charge). Applied at the moment Stripe confirms payment — never on
               QR scan.
             </p>

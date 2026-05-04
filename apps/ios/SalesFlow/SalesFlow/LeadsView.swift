@@ -493,7 +493,7 @@ private struct LeadRowPress: ButtonStyle {
 
 extension Stats {
     static let seeded = Stats(queue: 8, visited: 3, pitched: 2, sold: 1, rejected: nil,
-                              earned: 350, visitsToday: nil, salesToday: nil,
+                              earned: 299, visitsToday: nil, salesToday: nil,
                               visitsThisWeek: nil, salesThisWeek: nil, totalCommission: nil)
 }
 

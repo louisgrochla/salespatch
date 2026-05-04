@@ -395,7 +395,7 @@ export default function AdminLeadsPage() {
           <Input label="Hook (≤18 words)" value={hook} onChange={(e) => setHook(e.target.value)} placeholder="Amy runs monthly book clubs that fill up — every booking goes through DMs and she turns people away." />
           <Textarea label="Opener — exact first line at the door (≤30 words)" value={opener} onChange={(e) => setOpener(e.target.value)} rows={2} placeholder="Hi, is Amy in? I'm Kevin. I noticed Fable's got 5.0 from 60 reviews and I thought you'd want to see something we built." />
           <Textarea label="Demo moments (one per line, ≤14 words each)" value={demoMoments} onChange={(e) => setDemoMoments(e.target.value)} rows={3} placeholder={'Tap Events — show Amy she can take book-club bookings here.\nScroll to hours — point out the Sunday discrepancy.\nTap Buy Gift Cards — live on their custom domain.'} />
-          <Textarea label="Close script (≤40 words)" value={closeScript} onChange={(e) => setCloseScript(e.target.value)} rows={2} placeholder="It's £350 and we can have it live by Friday. I can take a card number now or come back Thursday — which works?" />
+          <Textarea label="Close script (≤40 words)" value={closeScript} onChange={(e) => setCloseScript(e.target.value)} rows={2} placeholder="It's £299 and we can have it live by Friday. I can take a card number now or come back Thursday — which works?" />
           <Textarea label="Next-visit reason (≤25 words)" value={nextVisitReason} onChange={(e) => setNextVisitReason(e.target.value)} rows={2} placeholder="Fine. Can I drop back Thursday — by then I'll have the live search-ranking numbers for 'bookshop Aberdeen' to show you." />
 
           <div
@@ -650,12 +650,12 @@ export default function AdminLeadsPage() {
   // sales brief — these fields drive the closer
   "hook": "One-sentence sharpest reason. ≤18 words.",
   "opener": "Exact first line at the door. ≤30 words.",
-  "pain_points": ["3–5 concrete problems a £350 site fixes"],
+  "pain_points": ["3–5 concrete problems a £299 site fixes"],
   "demo_moments": ["Tap Events — show book-club bookings"],
   "specific_objections": [
     { "objection": "Instagram works fine", "response": "Fair. How many DMs…" }
   ],
-  "close_script": "It's £350 and we can have it live by Friday…",
+  "close_script": "It's £299 and we can have it live by Friday…",
   "next_visit_reason": "Drop back Thursday — I'll have search-ranking numbers.",
 
   // structured content
@@ -737,7 +737,7 @@ export default function AdminLeadsPage() {
   );
 }
 
-const HANDOFF_PROMPT = `You are a senior B2B sales strategist specialising in website sales to UK small & independent businesses. You've been handed research on a single local business. Your job is to turn that research into a tactical pitch brief that a door-to-door salesperson will use on their phone to close a £350 website sale.
+const HANDOFF_PROMPT = `You are a senior B2B sales strategist specialising in website sales to UK small & independent businesses. You've been handed research on a single local business. Your job is to turn that research into a tactical pitch brief that a door-to-door salesperson will use on their phone to close a £299 website sale.
 
 Your output is a single JSON object — nothing else. No preamble, no markdown fences, no commentary. Just the JSON, ready for me to paste into the admin upload.
 
@@ -805,7 +805,7 @@ OUTPUT SHAPE (return ALL keys; use null for unknowns)
   //        goes through DMs and she turns people away."
   "hook": "",
 
-  // PAIN POINTS — 3 to 5 concrete problems a £350 site fixes for THIS
+  // PAIN POINTS — 3 to 5 concrete problems a £299 site fixes for THIS
   // business. Each one ≤ 16 words. Name a behaviour, not an abstraction.
   // BAD:  "Poor online visibility"
   // GOOD: "Lunch queue turns walk-ins away; no way to pre-order."
@@ -855,7 +855,7 @@ OUTPUT SHAPE (return ALL keys; use null for unknowns)
   // CLOSE — the exact ask. ≤ 40 words. Ask for the sale directly. Name
   // the price. Offer one concrete next step. No "think about it".
   // BAD:  "Would you be interested in hearing more?"
-  // GOOD: "It's £350 and we can have it live by Friday. I can take a
+  // GOOD: "It's £299 and we can have it live by Friday. I can take a
   //        card number now or come back Thursday — which works?"
   "close_script": "",
 
