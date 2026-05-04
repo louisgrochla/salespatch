@@ -22,16 +22,28 @@ struct LeadsView: View {
     @State private var showSearch = false
     @State private var showLeaderboard = false
 
-    private let filters = ["all", "new", "visited", "pitched", "rejected"]
+    private let filters = ["all", "new", "visited", "pitched", "sold", "rejected"]
 
+    /// All leads (no longer filters out sold). Sold leads stay in the
+    /// list as a record of the SP's wins so they can be tapped into
+    /// for the questionnaire detail, payout status, follow-ups, etc.
     private var activeLeads: [Lead] {
-        leads.filter { $0.status.lowercased() != "sold" }
+        leads
     }
 
     private var filteredLeads: [Lead] {
         var result = activeLeads
         if selectedFilter != "all" {
-            result = result.filter { $0.status.lowercased() == selectedFilter }
+            // Treat closed_now / closed_followup as "sold" for filter
+            // purposes — same business meaning to the SP.
+            let target = selectedFilter
+            result = result.filter { lead in
+                let s = lead.status.lowercased()
+                if target == "sold" {
+                    return s == "sold" || s == "closed_now" || s == "closed_followup"
+                }
+                return s == target
+            }
         }
         if !searchText.isEmpty {
             let q = searchText.lowercased()
@@ -166,7 +178,13 @@ struct LeadsView: View {
     private var counts: [String: Int] {
         var map = ["all": activeLeads.count]
         for f in filters where f != "all" {
-            map[f] = leads.filter { $0.status.lowercased() == f }.count
+            map[f] = leads.filter { lead in
+                let s = lead.status.lowercased()
+                if f == "sold" {
+                    return s == "sold" || s == "closed_now" || s == "closed_followup"
+                }
+                return s == f
+            }.count
         }
         return map
     }

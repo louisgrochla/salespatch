@@ -11,7 +11,23 @@ struct PayoutsView: View {
     @Query private var leads: [Lead]
     @State private var stats: Stats = .empty
 
-    private var soldLeads: [Lead] { leads.filter { $0.status == "sold" } }
+    /// All leads the SP claimed as a sale (status sold / closed_now /
+    /// closed_followup). These are CLAIMED, not necessarily verified.
+    private var claimedSoldLeads: [Lead] {
+        leads.filter { lead in
+            let s = lead.status.lowercased()
+            return s == "sold" || s == "closed_now" || s == "closed_followup"
+        }
+    }
+    /// Confirmed = sale claimed AND payment lands (paidAt set by the
+    /// Stripe webhook → server → next /leads fetch).
+    private var confirmedLeads: [Lead] {
+        claimedSoldLeads.filter { $0.paidAt != nil }
+    }
+    /// Projected = SP claimed sold but money hasn't been verified.
+    private var projectedLeads: [Lead] {
+        claimedSoldLeads.filter { $0.paidAt == nil }
+    }
     private var pitchedLeads: [Lead] { leads.filter { $0.status == "pitched" } }
 
     // Source of truth = the user's commission_amount_pence on sales_users,
@@ -21,8 +37,15 @@ struct PayoutsView: View {
         Double((authStore.currentUser?.commissionAmountPence ?? 15000)) / 100
     }
     private var commissionDisplay: String { "£\(Int(commissionPounds))" }
-    private var totalEarned: Double { Double(soldLeads.count) * commissionPounds }
-    private var potentialEarned: Double { Double(pitchedLeads.count) * commissionPounds }
+    /// Banked = sum of actual payment commissions (paidAt set). Only
+    /// money that's actually been verified counts toward "earned".
+    private var totalEarned: Double {
+        confirmedLeads.reduce(0) { sum, lead in
+            sum + Double(lead.commissionAmountPence ?? Int(commissionPounds * 100)) / 100
+        }
+    }
+    private var projectedAmount: Double { Double(projectedLeads.count) * commissionPounds }
+    private var pipelineAmount: Double { Double(pitchedLeads.count) * commissionPounds }
 
     var body: some View {
         NavigationStack {
@@ -32,7 +55,8 @@ struct PayoutsView: View {
                     ribbon
                     nextPayoutSection
                     commissionSection
-                    if !soldLeads.isEmpty { confirmedSection }
+                    if !confirmedLeads.isEmpty { confirmedSection }
+                    if !projectedLeads.isEmpty { projectedSection }
                     if !pitchedLeads.isEmpty { pipelineSection }
                 }
                 .padding(.horizontal, 20)
@@ -55,24 +79,32 @@ struct PayoutsView: View {
             eyebrow: "Earnings",
             title: "£\(Int(totalEarned))",
             accent: totalEarned > 0 ? "banked." : nil,
-            sub: soldLeads.isEmpty ? "No confirmed sales yet." : "\(soldLeads.count) confirmed · £\(Int(potentialEarned)) in pipeline",
+            sub: heroSubtitle,
             size: Brand.Font.displayXL
         ) {
             PageMeta("Friday payout", nextFridayString)
         }
     }
 
+    private var heroSubtitle: String {
+        var parts: [String] = []
+        if !confirmedLeads.isEmpty { parts.append("\(confirmedLeads.count) confirmed") }
+        if !projectedLeads.isEmpty { parts.append("£\(Int(projectedAmount)) projected") }
+        if !pitchedLeads.isEmpty { parts.append("£\(Int(pipelineAmount)) pipeline") }
+        return parts.isEmpty ? "No sales yet — go pitch." : parts.joined(separator: " · ")
+    }
+
     // ───────────── Metric ribbon ─────────────
 
     private var ribbon: some View {
         MetricRibbon {
-            StatCell(label: "Sold",     value: "\(soldLeads.count)",    accent: true)
+            StatCell(label: "Confirmed", value: "\(confirmedLeads.count)", accent: true)
             StatDivider()
-            StatCell(label: "Pitched",  value: "\(pitchedLeads.count)")
+            StatCell(label: "Projected", value: "\(projectedLeads.count)")
             StatDivider()
-            StatCell(label: "Per sale", value: commissionDisplay)
+            StatCell(label: "Per sale",  value: commissionDisplay)
             StatDivider()
-            StatCell(label: "Payout",   value: "Fri")
+            StatCell(label: "Payout",    value: "Fri")
         }
     }
 
@@ -100,8 +132,8 @@ struct PayoutsView: View {
                     Text("£\(Int(totalEarned))")
                         .font(Brand.Font.display(24, weight: .medium).monospacedDigit())
                         .tracking(Brand.Tracking.display)
-                        .foregroundStyle(soldLeads.isEmpty ? Brand.creamDim : Brand.cream)
-                    Text(soldLeads.isEmpty ? "NO SALES" : "\(soldLeads.count) CONFIRMED")
+                        .foregroundStyle(confirmedLeads.isEmpty ? Brand.creamDim : Brand.cream)
+                    Text(confirmedLeads.isEmpty ? "NOTHING CONFIRMED" : "\(confirmedLeads.count) CONFIRMED")
                         .font(Brand.Font.mono(10))
                         .tracking(Brand.Tracking.eyebrow)
                         .foregroundStyle(Brand.creamMuted)
@@ -142,17 +174,31 @@ struct PayoutsView: View {
     // ───────────── Confirmed sales ─────────────
 
     private var confirmedSection: some View {
-        BrandSection(eyebrow: "Confirmed sales", title: nil) {
+        BrandSection(eyebrow: "Confirmed · payment verified") {
             VStack(spacing: 8) {
-                ForEach(soldLeads) { lead in
+                ForEach(confirmedLeads) { lead in
                     SaleRow(lead: lead, amount: commissionDisplay, highlight: true)
                 }
             }
         }
     }
 
+    /// Projected sales — SP claimed sold but no payment lands yet.
+    /// Surfaced separately so the SP knows the money isn't banked yet,
+    /// and to keep the dissertation's "what counts as a sale" boundary
+    /// auditable.
+    private var projectedSection: some View {
+        BrandSection(eyebrow: "Projected · awaiting payment") {
+            VStack(spacing: 8) {
+                ForEach(projectedLeads) { lead in
+                    SaleRow(lead: lead, amount: commissionDisplay, highlight: false)
+                }
+            }
+        }
+    }
+
     private var pipelineSection: some View {
-        BrandSection(eyebrow: "Pipeline · potential £\(Int(potentialEarned))") {
+        BrandSection(eyebrow: "Pipeline · pitched, not closed") {
             VStack(spacing: 8) {
                 ForEach(pitchedLeads) { lead in
                     SaleRow(lead: lead, amount: commissionDisplay, highlight: false)

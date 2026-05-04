@@ -48,6 +48,13 @@ final class Lead {
     var pendingLat: Double?
     var pendingLng: Double?
 
+    // Payment confirmation. Set when the customer's Stripe payment
+    // actually lands (via webhook → server → next /leads fetch).
+    // While nil for a sold/closed lead the sale is "projected" — the
+    // SP claimed it but money hasn't been verified.
+    var paidAt: Date?
+    var commissionAmountPence: Int?
+
     init(
         assignmentId: String,
         leadId: String = "",
