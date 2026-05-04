@@ -63,6 +63,8 @@ export async function GET(
     visited_at: row.visited_at,
     pitched_at: row.pitched_at,
     sold_at: row.sold_at,
+    paid_at: row.paid_at,
+    commission_amount_pence: row.commission_amount_pence,
     follow_up_at: row.follow_up_at,
     follow_up_note: row.follow_up_note,
     contact_name: row.contact_name,

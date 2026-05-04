@@ -216,6 +216,12 @@ struct LeadDTO: Decodable {
     let followUpAt: String?
     let contactPerson: String?
     let contactRole: String?
+    let soldAt: String?
+    /// Set by the Stripe webhook on payment.completed. iOS uses this
+    /// to flip a sold lead from "Projected" to "Confirmed" in the
+    /// Payouts view.
+    let paidAt: String?
+    let commissionAmountPence: Int?
     let openingHours: [String]?
     let services: [String]?
     let trustBadges: [String]?
@@ -252,6 +258,9 @@ struct LeadDTO: Decodable {
         case followUpAt      = "follow_up_at"
         case contactPerson   = "contact_name"
         case contactRole     = "contact_role"
+        case soldAt          = "sold_at"
+        case paidAt          = "paid_at"
+        case commissionAmountPence = "commission_amount_pence"
         case openingHours    = "opening_hours"
         case services
         case trustBadges     = "trust_badges"
@@ -279,7 +288,7 @@ struct LeadDTO: Decodable {
         if let raw = followUpAt {
             followUpDate = ISO8601DateFormatter().date(from: raw)
         }
-        return Lead(
+        let lead = Lead(
             assignmentId: id,
             leadId: leadId,
             businessName: businessName ?? "Unknown business",
@@ -310,6 +319,14 @@ struct LeadDTO: Decodable {
             nextVisitReason: nextVisitReason,
             painPointsExtended: painPointsExtended
         )
+        // Payment confirmation. paidAt is the strict "money landed"
+        // stamp written by the Stripe webhook; the iOS Payouts view
+        // uses it to split Projected vs Confirmed.
+        if let raw = paidAt {
+            lead.paidAt = ISO8601DateFormatter().date(from: raw)
+        }
+        lead.commissionAmountPence = commissionAmountPence
+        return lead
     }
 }
 

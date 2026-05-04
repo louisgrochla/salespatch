@@ -20,10 +20,12 @@ export interface LeadAssignmentRow {
   visited_at: string | null;
   pitched_at: string | null;
   sold_at: string | null;
+  paid_at: string | null;        // Stripe webhook stamps when money lands
   rejected_at: string | null;
   rejection_reason: string | null;
   notes: string | null;          // JSON blob with business details
   commission_amount: number | null;
+  commission_amount_pence: number | null;
   follow_up_at: string | null;
   follow_up_note: string | null;
   contact_name: string | null;

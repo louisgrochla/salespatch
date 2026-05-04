@@ -45,6 +45,9 @@ function rowToCard(r: LeadAssignmentRow): LeadCard {
     contact_role: r.contact_role,
     visited_at: r.visited_at,
     pitched_at: r.pitched_at,
+    sold_at: r.sold_at,
+    paid_at: r.paid_at,
+    commission_amount_pence: r.commission_amount_pence,
   };
 }
 
