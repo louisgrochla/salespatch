@@ -1167,11 +1167,16 @@ struct LeadDetailView: View {
         return Brand.creamMuted
     }
 
-    /// Status values that trigger the post-pitch questionnaire.
-    /// Picking any of these opens the modal so the SP captures the rich
-    /// pitch data. Manual "visited" / "new" / "follow_up" do NOT trigger
-    /// the modal — those are simple status flips.
-    private static let questionnaireStatuses: Set<String> = ["pitched", "sold", "rejected"]
+    /// Every status the picker offers triggers the questionnaire — the
+    /// questionnaire is the single source of truth for capturing what
+    /// happened on a visit. Its outcome chips cover the full status
+    /// space:
+    ///   - closed_now / closed_followup → sold
+    ///   - follow_up                    → pitched
+    ///   - rejected                     → rejected
+    ///   - not_pitched                  → visited (or stays where it was)
+    /// Picking "new" resets without a questionnaire (rare — used to undo).
+    private static let questionnaireStatuses: Set<String> = ["visited", "pitched", "sold", "rejected"]
 
     private func updateStatus(_ newStatus: String) {
         // If the new status is one that warrants the questionnaire,
