@@ -52,6 +52,10 @@ struct SalesFlowApp: App {
                 // walks the same SwiftData store.
                 PitchQueue.shared.bind(sharedModelContainer.mainContext)
                 PitchQueue.shared.flush()
+                // First-launch reconciliation — if the saved session
+                // belongs to a different user than what's persisted in
+                // SwiftData, wipe stale data before fetching fresh.
+                authStore.handleUserChange(in: sharedModelContainer.mainContext)
             }
             .onChange(of: scenePhase) { _, newPhase in
                 if newPhase == .active {
@@ -59,6 +63,12 @@ struct SalesFlowApp: App {
                     // backgrounded — sweep the queue.
                     PitchQueue.shared.flush()
                 }
+            }
+            .onChange(of: authStore.currentUser?.id) { _, _ in
+                // Whenever the logged-in user changes (login, logout,
+                // device hand-off, account swap), wipe local rows that
+                // belonged to the previous session.
+                authStore.handleUserChange(in: sharedModelContainer.mainContext)
             }
         }
         .modelContainer(sharedModelContainer)
