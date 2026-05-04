@@ -3,21 +3,17 @@ import CoreLocation
 
 // MARK: — PostPitchView
 //
-// Three-stage post-pitch questionnaire shown after the salesperson
-// taps "Complete pitch" on a lead detail view. Designed to be quick:
-// rejections take ~15 seconds, closes ~45 seconds. Anything the phone
-// already knows (GPS, demo version, duration) is auto-captured rather
-// than asked.
+// Editorial dark + signal-gold post-pitch questionnaire. Visual
+// language matches the rest of the app — Brand tokens (cream on ink,
+// mono eyebrows like "/ OUTCOME", gold accent, capsule chips, card
+// surfaces with Brand.line borders). 3-stage flow:
 //
-// Stage 1 — required (5 chips): outcome, decision-maker, demo shown,
-// interest level, consent.
-// Stage 2 — conditional: shows only branches relevant to the chosen
-// outcome (objections, demo reaction, agreed price, follow-up time…).
-// Stage 3 — optional gold (dismissable): notes, gut-feel, first
-// response phrase, competitor.
+//   Stage 1 — required (~15s): outcome, decision-maker, demo, interest, consent
+//   Stage 2 — conditional: branches relevant to the chosen outcome
+//   Stage 3 — optional: notes, gut-feel slider, first response, competitor
 //
-// On submit POSTs to /leads/:id/pitch via APIClient.recordPitch.
-// The mobile-api persists the row locally and forwards to NERVE.
+// On submit the payload is enqueued to PitchQueue and the sheet
+// dismisses immediately. Network call runs in the background.
 
 struct PostPitchView: View {
     let assignmentId: String
@@ -29,17 +25,16 @@ struct PostPitchView: View {
     @Environment(\.dismiss) private var dismiss
     @StateObject private var locationManager = LocationManager()
 
-    // Stage progression — start at 0, advance via "Next".
     @State private var stage: Int = 0
 
-    // ── Stage 1 (required)
+    // Stage 1
     @State private var outcome: PitchOutcome? = nil
     @State private var decisionMakerPresent: Bool? = nil
     @State private var demoShown: Bool? = nil
     @State private var interestLevel: InterestLevel? = nil
     @State private var consentToRecord: Bool = false
 
-    // ── Stage 2 (conditional)
+    // Stage 2
     @State private var demoReaction: DemoReaction? = nil
     @State private var objections: Set<ObjectionTag> = []
     @State private var objectionOther: String = ""
@@ -48,122 +43,125 @@ struct PostPitchView: View {
     @State private var bestFollowupTime: FollowupTime? = nil
     @State private var agreedNextStep: AgreedNextStep? = nil
 
-    // ── Stage 3 (optional)
+    // Stage 3
     @State private var notes: String = ""
     @State private var gutFeelClosePct: Double = 50
     @State private var firstResponsePhrase: String = ""
     @State private var competitorMentioned: String = ""
 
-    // ── Submission state
-    @State private var submitting = false
     @State private var errorMessage: String? = nil
 
     var body: some View {
-        NavigationStack {
+        ZStack {
+            Brand.ink.ignoresSafeArea()
+
             ScrollView {
-                VStack(alignment: .leading, spacing: 24) {
+                VStack(alignment: .leading, spacing: 20) {
                     header
-
-                    if stage == 0 { stage1Required }
-                    if stage == 1 { stage2Conditional }
-                    if stage == 2 { stage3Optional }
-
+                    progressDots
+                    Group {
+                        if stage == 0 { stage1Required }
+                        else if stage == 1 { stage2Conditional }
+                        else if stage == 2 { stage3Optional }
+                    }
                     if let errorMessage {
                         Text(errorMessage)
                             .font(Brand.Font.mono(11))
-                            .foregroundStyle(Color(hex: "#C0392B"))
+                            .foregroundStyle(Brand.err)
                             .padding(.top, 4)
                     }
                 }
-                .padding(20)
-                .padding(.bottom, 100)
+                .padding(.horizontal, 20)
+                .padding(.top, 16)
+                .padding(.bottom, 130)
             }
-            .background(Brand.ink.ignoresSafeArea())
-            .toolbar(.hidden, for: .navigationBar)
-            .overlay(alignment: .bottom) { stickyBar }
         }
-        .interactiveDismissDisabled(stage > 0 || submitting)
+        .interactiveDismissDisabled(stage > 0)
+        .overlay(alignment: .bottom) { stickyBar }
     }
 
     // ── Header
 
     private var header: some View {
         VStack(alignment: .leading, spacing: 6) {
-            HStack {
-                Text("/ POST-PITCH")
-                    .font(Brand.Font.mono(10))
-                    .tracking(Brand.Tracking.eyebrow)
-                    .foregroundStyle(Brand.creamMuted)
-                Spacer()
-                Button("Cancel") { dismiss() }
-                    .font(Brand.Font.mono(11))
-                    .foregroundStyle(Brand.creamMuted)
-                    .disabled(submitting)
-            }
-            Text(businessName)
-                .font(Brand.Font.display(22, weight: .medium))
-                .foregroundStyle(Brand.cream)
-            HStack(spacing: 6) {
-                stageDot(0); stageDot(1); stageDot(2)
-                Spacer()
-                if let dur = currentDurationLabel {
-                    Text(dur)
-                        .font(Brand.Font.mono(10))
+            HStack(alignment: .top) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("/ POST-PITCH")
+                        .font(Brand.Font.mono(Brand.Font.eyebrow, weight: .medium))
+                        .tracking(Brand.Tracking.eyebrow)
+                        .foregroundStyle(Brand.signal)
+                    Text(businessName)
+                        .font(Brand.Font.display(28, weight: .medium))
+                        .tracking(Brand.Tracking.display)
+                        .foregroundStyle(Brand.cream)
+                        .lineLimit(2)
+                }
+                Spacer(minLength: 0)
+                Button {
+                    BrandHaptics.tap()
+                    dismiss()
+                } label: {
+                    Text("Cancel")
+                        .font(Brand.Font.mono(Brand.Font.meta))
+                        .tracking(Brand.Tracking.meta)
                         .foregroundStyle(Brand.creamMuted)
                 }
             }
-            .padding(.top, 8)
+
+            HStack(spacing: 8) {
+                Text(stageEyebrow)
+                    .font(Brand.Font.mono(Brand.Font.eyebrowSm, weight: .medium))
+                    .tracking(Brand.Tracking.eyebrow)
+                    .foregroundStyle(Brand.creamMuted)
+                if let dur = currentDurationLabel {
+                    Text("·")
+                        .foregroundStyle(Brand.creamMuted)
+                    Text(dur)
+                        .font(Brand.Font.mono(Brand.Font.meta).monospacedDigit())
+                        .foregroundStyle(Brand.creamDim)
+                }
+                Spacer()
+            }
+            .padding(.top, 4)
         }
     }
 
-    @ViewBuilder
-    private func stageDot(_ i: Int) -> some View {
-        Circle()
-            .fill(i <= stage ? Brand.cream : Brand.line)
-            .frame(width: 6, height: 6)
+    private var progressDots: some View {
+        HStack(spacing: 6) {
+            ForEach(0..<3, id: \.self) { i in
+                RoundedRectangle(cornerRadius: 1)
+                    .fill(i <= stage ? Brand.signal : Brand.line)
+                    .frame(height: 2)
+            }
+        }
+    }
+
+    private var stageEyebrow: String {
+        switch stage {
+        case 0: return "STAGE 1 / 3 · ESSENTIALS"
+        case 1: return "STAGE 2 / 3 · CONTEXT"
+        case 2: return "STAGE 3 / 3 · OPTIONAL"
+        default: return ""
+        }
     }
 
     private var currentDurationLabel: String? {
         guard let start = pitchStartedAt else { return nil }
         let s = Int(Date().timeIntervalSince(start))
-        return "\(s)s pitch"
+        let m = s / 60
+        let r = s % 60
+        return m == 0 ? "\(s)s" : "\(m)m \(r)s"
     }
 
     // ── Stage 1: required
 
     private var stage1Required: some View {
-        VStack(alignment: .leading, spacing: 20) {
-            chipGroup(label: "Outcome (required)") {
-                outcomeChip(.closedNow,        "closed now")
-                outcomeChip(.closedFollowup,   "closed (follow-up)")
-                outcomeChip(.followUp,         "follow up")
-                outcomeChip(.rejected,         "rejected")
-                outcomeChip(.notPitched,       "not pitched")
-            }
-
-            ynRow(label: "Decision-maker present?", value: $decisionMakerPresent)
-            ynRow(label: "Demo shown?",             value: $demoShown)
-
-            chipGroup(label: "Interest level") {
-                interestChip(.cold, "cold")
-                interestChip(.warm, "warm")
-                interestChip(.hot,  "hot")
-            }
-
-            VStack(alignment: .leading, spacing: 8) {
-                Toggle(isOn: $consentToRecord) {
-                    Text("Consent to record (required for research data)")
-                        .font(Brand.Font.body(13))
-                        .foregroundStyle(Brand.cream)
-                }
-                .tint(Brand.cream)
-                Text("Without consent the pitch saves but is excluded from dissertation analysis.")
-                    .font(Brand.Font.mono(10))
-                    .foregroundStyle(Brand.creamMuted)
-            }
-            .padding(12)
-            .background(Brand.bgCard)
-            .clipShape(RoundedRectangle(cornerRadius: 12))
+        VStack(spacing: 14) {
+            outcomeCard
+            yesNoCard(eyebrow: "/ DECISION-MAKER", question: "Were you speaking to the decision-maker?", value: $decisionMakerPresent)
+            yesNoCard(eyebrow: "/ DEMO SHOWN", question: "Did they actually see the demo?", value: $demoShown)
+            interestCard
+            consentCard
         }
     }
 
@@ -171,276 +169,590 @@ struct PostPitchView: View {
         outcome != nil && decisionMakerPresent != nil && demoShown != nil && interestLevel != nil
     }
 
+    private var outcomeCard: some View {
+        sectionCard(eyebrow: "/ OUTCOME", required: true) {
+            VStack(spacing: 8) {
+                outcomeRow(.closedNow, title: "Closed now", subtitle: "Paid in full today", icon: "sterlingsign.circle.fill")
+                outcomeRow(.closedFollowup, title: "Closed (follow-up)", subtitle: "Yes — payment after pitch", icon: "checkmark.seal.fill")
+                outcomeRow(.followUp, title: "Follow up", subtitle: "Interested, more chat needed", icon: "arrow.uturn.right.circle")
+                outcomeRow(.rejected, title: "Rejected", subtitle: "Said no", icon: "xmark.circle")
+                outcomeRow(.notPitched, title: "Not pitched", subtitle: "Wrong contact / closed / no time", icon: "minus.circle")
+            }
+        }
+    }
+
+    private func outcomeRow(_ value: PitchOutcome, title: String, subtitle: String, icon: String) -> some View {
+        let selected = outcome == value
+        return Button {
+            BrandHaptics.tap()
+            outcome = value
+        } label: {
+            HStack(spacing: 12) {
+                Image(systemName: icon)
+                    .font(.system(size: 16, weight: .medium))
+                    .foregroundStyle(selected ? Brand.signal : Brand.creamDim)
+                    .frame(width: 36, height: 36)
+                    .background(
+                        RoundedRectangle(cornerRadius: 9)
+                            .fill(selected ? Brand.signalSoft : Brand.bgCard)
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 9)
+                            .strokeBorder(selected ? Brand.signalBorder : Brand.line, lineWidth: 1)
+                    )
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title)
+                        .font(Brand.Font.body(15, weight: .medium))
+                        .foregroundStyle(Brand.cream)
+                    Text(subtitle)
+                        .font(Brand.Font.mono(Brand.Font.meta))
+                        .foregroundStyle(Brand.creamMuted)
+                }
+                Spacer(minLength: 0)
+                if selected {
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundStyle(Brand.signal)
+                }
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
+            .background(
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(selected ? Brand.signalSoft : Brand.bgCard)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 12)
+                    .strokeBorder(selected ? Brand.signalBorder : Brand.line, lineWidth: 1)
+            )
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func yesNoCard(eyebrow: String, question: String, value: Binding<Bool?>) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 6) {
+                Text(eyebrow)
+                    .font(Brand.Font.mono(Brand.Font.eyebrow, weight: .medium))
+                    .tracking(Brand.Tracking.eyebrow)
+                    .foregroundStyle(Brand.signal)
+                Text("·").foregroundStyle(Brand.creamMuted)
+                Text("REQUIRED")
+                    .font(Brand.Font.mono(9.5))
+                    .tracking(Brand.Tracking.eyebrow)
+                    .foregroundStyle(Brand.creamMuted)
+            }
+            Text(question)
+                .font(Brand.Font.body(14))
+                .foregroundStyle(Brand.creamDim)
+            HStack(spacing: 10) {
+                yesNoPill(title: "Yes", icon: "checkmark", selected: value.wrappedValue == true) {
+                    value.wrappedValue = true
+                }
+                yesNoPill(title: "No", icon: "xmark", selected: value.wrappedValue == false) {
+                    value.wrappedValue = false
+                }
+            }
+        }
+        .padding(16)
+        .background(
+            RoundedRectangle(cornerRadius: Brand.Radius.card)
+                .fill(Brand.bgStrong)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: Brand.Radius.card)
+                .strokeBorder(Brand.line, lineWidth: 1)
+        )
+    }
+
+    private func yesNoPill(title: String, icon: String, selected: Bool, action: @escaping () -> Void) -> some View {
+        Button {
+            BrandHaptics.tap()
+            action()
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: icon)
+                    .font(.system(size: 12, weight: .semibold))
+                Text(title)
+                    .font(Brand.Font.body(15, weight: .medium))
+            }
+            .frame(maxWidth: .infinity)
+            .frame(height: 46)
+            .foregroundStyle(selected ? Brand.ink : Brand.cream)
+            .background(
+                Capsule().fill(selected ? Brand.cream : Brand.bgCard)
+            )
+            .overlay(
+                Capsule().strokeBorder(selected ? Color.clear : Brand.line, lineWidth: 1)
+            )
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var interestCard: some View {
+        sectionCard(eyebrow: "/ INTEREST LEVEL", required: true) {
+            HStack(spacing: 10) {
+                interestPill(.cold, "Cold", "snowflake")
+                interestPill(.warm, "Warm", "thermometer.medium")
+                interestPill(.hot, "Hot", "flame.fill")
+            }
+        }
+    }
+
+    private func interestPill(_ value: InterestLevel, _ title: String, _ icon: String) -> some View {
+        let selected = interestLevel == value
+        return Button {
+            BrandHaptics.tap()
+            interestLevel = value
+        } label: {
+            VStack(spacing: 6) {
+                Image(systemName: icon).font(.system(size: 16, weight: .medium))
+                Text(title)
+                    .font(Brand.Font.mono(11, weight: .medium))
+                    .tracking(Brand.Tracking.meta)
+            }
+            .frame(maxWidth: .infinity)
+            .frame(height: 64)
+            .foregroundStyle(selected ? Brand.ink : Brand.cream)
+            .background(
+                RoundedRectangle(cornerRadius: 12).fill(selected ? Brand.cream : Brand.bgCard)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 12).strokeBorder(selected ? Color.clear : Brand.line, lineWidth: 1)
+            )
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var consentCard: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 6) {
+                Text("/ CONSENT")
+                    .font(Brand.Font.mono(Brand.Font.eyebrow, weight: .medium))
+                    .tracking(Brand.Tracking.eyebrow)
+                    .foregroundStyle(Brand.signal)
+                Text("·").foregroundStyle(Brand.creamMuted)
+                Text("REQUIRED FOR DISSERTATION")
+                    .font(Brand.Font.mono(9.5))
+                    .tracking(Brand.Tracking.eyebrow)
+                    .foregroundStyle(Brand.creamMuted)
+            }
+
+            HStack(alignment: .top, spacing: 12) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Consent to record")
+                        .font(Brand.Font.body(15, weight: .medium))
+                        .foregroundStyle(Brand.cream)
+                    Text("Without consent the pitch saves but is excluded from research data.")
+                        .font(Brand.Font.body(13))
+                        .foregroundStyle(Brand.creamMuted)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer(minLength: 8)
+                Toggle("", isOn: $consentToRecord)
+                    .labelsHidden()
+                    .tint(Brand.signal)
+            }
+            .padding(.top, 12)
+        }
+        .padding(16)
+        .background(
+            RoundedRectangle(cornerRadius: Brand.Radius.card)
+                .fill(consentToRecord ? Brand.signalSoft : Brand.bgStrong)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: Brand.Radius.card)
+                .strokeBorder(consentToRecord ? Brand.signalBorder : Brand.line, lineWidth: 1)
+        )
+    }
+
     // ── Stage 2: conditional
 
     @ViewBuilder
     private var stage2Conditional: some View {
-        VStack(alignment: .leading, spacing: 20) {
+        VStack(spacing: 14) {
             if demoShown == true {
-                chipGroup(label: "Demo reaction") {
-                    demoReactionChip(.loved,       "loved")
-                    demoReactionChip(.liked,       "liked")
-                    demoReactionChip(.neutral,     "neutral")
-                    demoReactionChip(.unimpressed, "unimpressed")
+                sectionCard(eyebrow: "/ DEMO REACTION") {
+                    VStack(spacing: 8) {
+                        demoReactionRow(.loved, "Loved it", "heart.fill")
+                        demoReactionRow(.liked, "Liked it", "hand.thumbsup.fill")
+                        demoReactionRow(.neutral, "Neutral", "minus.circle")
+                        demoReactionRow(.unimpressed, "Unimpressed", "hand.thumbsdown")
+                    }
                 }
             }
 
             if outcome == .rejected || outcome == .followUp {
-                VStack(alignment: .leading, spacing: 10) {
-                    Text("Objections (tap all that apply)")
-                        .font(Brand.Font.mono(11))
-                        .tracking(Brand.Tracking.eyebrow)
-                        .foregroundStyle(Brand.creamMuted)
-
-                    FlexibleChips(items: ObjectionTag.allCases, label: { $0.label }, isSelected: { objections.contains($0) }) { tag in
-                        if objections.contains(tag) { objections.remove(tag) } else { objections.insert(tag) }
+                sectionCard(eyebrow: "/ OBJECTIONS", subtitle: "Tap all that apply") {
+                    LazyVGrid(columns: [GridItem(.flexible(), spacing: 8), GridItem(.flexible(), spacing: 8)], spacing: 8) {
+                        ForEach(ObjectionTag.allCases, id: \.self) { tag in
+                            objectionChip(tag)
+                        }
                     }
-
                     if objections.contains(.other) {
-                        TextField("Other (specify)", text: $objectionOther)
+                        TextField("What else?", text: $objectionOther)
                             .textFieldStyle(.plain)
-                            .padding(10)
-                            .background(Brand.bgCard)
-                            .clipShape(RoundedRectangle(cornerRadius: 10))
+                            .font(Brand.Font.body(14))
                             .foregroundStyle(Brand.cream)
+                            .padding(12)
+                            .background(Brand.bgCard)
+                            .clipShape(RoundedRectangle(cornerRadius: Brand.Radius.input))
+                            .overlay(RoundedRectangle(cornerRadius: Brand.Radius.input).strokeBorder(Brand.line, lineWidth: 1))
+                            .padding(.top, 8)
                     }
                 }
             }
 
             if outcome == .closedNow || outcome == .closedFollowup {
-                VStack(alignment: .leading, spacing: 10) {
-                    Text("Agreed price")
-                        .font(Brand.Font.mono(11))
-                        .tracking(Brand.Tracking.eyebrow)
-                        .foregroundStyle(Brand.creamMuted)
-                    HStack {
-                        Text("£").foregroundStyle(Brand.creamMuted)
+                sectionCard(eyebrow: "/ AGREED PRICE") {
+                    HStack(spacing: 6) {
+                        Text("£")
+                            .font(Brand.Font.display(20, weight: .medium))
+                            .foregroundStyle(Brand.creamDim)
                         TextField("350", text: $agreedPrice)
                             .keyboardType(.decimalPad)
+                            .font(Brand.Font.display(20, weight: .medium).monospacedDigit())
                             .foregroundStyle(Brand.cream)
                     }
-                    .padding(10)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 12)
                     .background(Brand.bgCard)
-                    .clipShape(RoundedRectangle(cornerRadius: 10))
+                    .clipShape(RoundedRectangle(cornerRadius: Brand.Radius.input))
+                    .overlay(RoundedRectangle(cornerRadius: Brand.Radius.input).strokeBorder(Brand.line, lineWidth: 1))
                 }
 
-                chipGroup(label: "Payment") {
-                    paymentChip(.paidNow,         "paid now")
-                    paymentChip(.willPayFollowup, "will pay follow-up")
+                sectionCard(eyebrow: "/ PAYMENT") {
+                    HStack(spacing: 10) {
+                        yesNoPill(title: "Paid now", icon: "creditcard.fill", selected: paymentMethod == .paidNow) { paymentMethod = .paidNow }
+                        yesNoPill(title: "Pay later", icon: "calendar", selected: paymentMethod == .willPayFollowup) { paymentMethod = .willPayFollowup }
+                    }
                 }
             }
 
             if outcome == .followUp || outcome == .closedFollowup {
-                chipGroup(label: "When to follow up") {
-                    followupTimeChip(.tomorrow,  "tomorrow")
-                    followupTimeChip(.thisWeek,  "this week")
-                    followupTimeChip(.nextWeek,  "next week")
-                    followupTimeChip(.nextMonth, "next month")
+                sectionCard(eyebrow: "/ FOLLOW UP WHEN") {
+                    LazyVGrid(columns: [GridItem(.flexible(), spacing: 8), GridItem(.flexible(), spacing: 8)], spacing: 8) {
+                        followupChip(.tomorrow, "Tomorrow")
+                        followupChip(.thisWeek, "This week")
+                        followupChip(.nextWeek, "Next week")
+                        followupChip(.nextMonth, "Next month")
+                    }
                 }
-
-                chipGroup(label: "Agreed next step") {
-                    nextStepChip(.spWillCall,        "I'll call them")
-                    nextStepChip(.customerWillCall,  "they'll call me")
-                    nextStepChip(.sentLink,          "sent demo link")
-                    nextStepChip(.scheduledMeeting,  "scheduled meeting")
+                sectionCard(eyebrow: "/ NEXT STEP") {
+                    VStack(spacing: 8) {
+                        nextStepRow(.spWillCall, "I'll call them", "phone.arrow.up.right")
+                        nextStepRow(.customerWillCall, "They'll call me", "phone.arrow.down.left")
+                        nextStepRow(.sentLink, "Sent demo link", "link")
+                        nextStepRow(.scheduledMeeting, "Scheduled meeting", "calendar.badge.plus")
+                    }
                 }
             }
 
             if !stage2HasAnyContent {
-                Text("Nothing extra needed for this outcome — tap Next.")
-                    .font(Brand.Font.mono(11))
-                    .foregroundStyle(Brand.creamMuted)
-                    .padding(.top, 8)
+                emptyStageCard
             }
         }
     }
 
     private var stage2HasAnyContent: Bool {
-        demoShown == true || outcome == .rejected || outcome == .followUp ||
-        outcome == .closedNow || outcome == .closedFollowup
+        demoShown == true
+            || outcome == .rejected
+            || outcome == .followUp
+            || outcome == .closedNow
+            || outcome == .closedFollowup
     }
 
-    // ── Stage 3: optional gold
-
-    private var stage3Optional: some View {
-        VStack(alignment: .leading, spacing: 20) {
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Anything notable in one sentence")
-                    .font(Brand.Font.mono(11))
-                    .tracking(Brand.Tracking.eyebrow)
-                    .foregroundStyle(Brand.creamMuted)
-                TextField("e.g. owner was distracted by his kid", text: $notes, axis: .vertical)
-                    .lineLimit(2...4)
-                    .padding(10)
-                    .background(Brand.bgCard)
-                    .clipShape(RoundedRectangle(cornerRadius: 10))
+    private var emptyStageCard: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "checkmark.circle.fill")
+                .font(.system(size: 18, weight: .medium))
+                .foregroundStyle(Brand.signal)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("No extra context needed")
+                    .font(Brand.Font.body(14, weight: .medium))
                     .foregroundStyle(Brand.cream)
-            }
-
-            VStack(alignment: .leading, spacing: 8) {
-                HStack {
-                    Text("Gut-feel close probability")
-                        .font(Brand.Font.mono(11))
-                        .tracking(Brand.Tracking.eyebrow)
-                        .foregroundStyle(Brand.creamMuted)
-                    Spacer()
-                    Text("\(Int(gutFeelClosePct))%")
-                        .font(Brand.Font.mono(13))
-                        .foregroundStyle(Brand.cream)
-                }
-                Slider(value: $gutFeelClosePct, in: 0...100, step: 1)
-                    .tint(Brand.cream)
-                Text("Calibrates over time — useful for self-coaching and dissertation analysis.")
-                    .font(Brand.Font.mono(10))
+                Text("Tap Next to add optional notes — or Submit to ship.")
+                    .font(Brand.Font.mono(Brand.Font.meta))
                     .foregroundStyle(Brand.creamMuted)
             }
-
-            VStack(alignment: .leading, spacing: 8) {
-                Text("What did they say first?")
-                    .font(Brand.Font.mono(11))
-                    .tracking(Brand.Tracking.eyebrow)
-                    .foregroundStyle(Brand.creamMuted)
-                TextField("\"oh we already have someone\"", text: $firstResponsePhrase)
-                    .padding(10)
-                    .background(Brand.bgCard)
-                    .clipShape(RoundedRectangle(cornerRadius: 10))
-                    .foregroundStyle(Brand.cream)
-            }
-
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Competitor mentioned")
-                    .font(Brand.Font.mono(11))
-                    .tracking(Brand.Tracking.eyebrow)
-                    .foregroundStyle(Brand.creamMuted)
-                TextField("Wix, Square, my nephew, …", text: $competitorMentioned)
-                    .padding(10)
-                    .background(Brand.bgCard)
-                    .clipShape(RoundedRectangle(cornerRadius: 10))
-                    .foregroundStyle(Brand.cream)
-            }
+            Spacer(minLength: 0)
         }
+        .padding(16)
+        .background(RoundedRectangle(cornerRadius: Brand.Radius.card).fill(Brand.bgStrong))
+        .overlay(RoundedRectangle(cornerRadius: Brand.Radius.card).strokeBorder(Brand.line, lineWidth: 1))
     }
 
-    // ── Sticky action bar
-
-    @ViewBuilder
-    private var stickyBar: some View {
-        HStack(spacing: 10) {
-            if stage > 0 {
-                Button("Back") {
-                    BrandHaptics.tap()
-                    stage -= 1
+    private func demoReactionRow(_ value: DemoReaction, _ title: String, _ icon: String) -> some View {
+        let selected = demoReaction == value
+        return Button {
+            BrandHaptics.tap()
+            demoReaction = value
+        } label: {
+            HStack(spacing: 12) {
+                Image(systemName: icon)
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundStyle(selected ? Brand.signal : Brand.creamDim)
+                    .frame(width: 32, height: 32)
+                    .background(RoundedRectangle(cornerRadius: 8).fill(selected ? Brand.signalSoft : Brand.bgCard))
+                    .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(selected ? Brand.signalBorder : Brand.line, lineWidth: 1))
+                Text(title)
+                    .font(Brand.Font.body(15, weight: .medium))
+                    .foregroundStyle(Brand.cream)
+                Spacer()
+                if selected {
+                    Image(systemName: "checkmark").font(.system(size: 13, weight: .bold)).foregroundStyle(Brand.signal)
                 }
-                .buttonStyle(GhostButtonStyle(size: .sm))
-                .disabled(submitting)
             }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
+            .background(RoundedRectangle(cornerRadius: 12).fill(selected ? Brand.signalSoft : Brand.bgCard))
+            .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(selected ? Brand.signalBorder : Brand.line, lineWidth: 1))
+        }
+        .buttonStyle(.plain)
+    }
 
-            if stage < 2 {
-                Button(stage == 0 ? "Next" : (stage2HasAnyContent ? "Next" : "Skip")) {
-                    BrandHaptics.tap()
-                    stage += 1
-                }
-                .buttonStyle(PrimaryButtonStyle(size: .sm))
+    private func objectionChip(_ tag: ObjectionTag) -> some View {
+        let selected = objections.contains(tag)
+        return Button {
+            BrandHaptics.tap()
+            if selected { objections.remove(tag) } else { objections.insert(tag) }
+        } label: {
+            Text(tag.label)
+                .font(Brand.Font.body(13, weight: .medium))
                 .frame(maxWidth: .infinity)
-                .disabled(stage == 0 ? !stage1Complete : false)
-            } else {
-                Button {
-                    submit()
-                } label: {
-                    HStack(spacing: 6) {
-                        if submitting { ProgressView().scaleEffect(0.7).tint(Brand.ink) }
-                        Text(submitting ? "Submitting…" : "Submit pitch")
-                    }
-                    .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(PrimaryButtonStyle(size: .sm))
-                .disabled(submitting)
-            }
-        }
-        .padding(.horizontal, 16)
-        .padding(.top, 8)
-        .padding(.bottom, 12)
-        .background(
-            ZStack {
-                Brand.ink.opacity(0.92)
-                Rectangle().fill(.ultraThinMaterial)
-            }
-            .ignoresSafeArea(edges: .bottom)
-            .overlay(alignment: .top) {
-                Rectangle().fill(Brand.line).frame(height: 1)
-            }
-        )
-    }
-
-    // ── Chip helpers
-
-    @ViewBuilder
-    private func chipGroup<Content: View>(label: String, @ViewBuilder content: () -> Content) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text(label)
-                .font(Brand.Font.mono(11))
-                .tracking(Brand.Tracking.eyebrow)
-                .foregroundStyle(Brand.creamMuted)
-            HStack(spacing: 8) {
-                content()
-            }
-        }
-    }
-
-    private func chip(_ title: String, selected: Bool, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Text(title)
-                .font(Brand.Font.mono(12))
-                .padding(.horizontal, 12)
-                .padding(.vertical, 8)
-                .background(selected ? Brand.cream : Brand.bgCard)
+                .padding(.vertical, 12)
                 .foregroundStyle(selected ? Brand.ink : Brand.cream)
-                .clipShape(RoundedRectangle(cornerRadius: 8))
+                .background(
+                    RoundedRectangle(cornerRadius: 10).fill(selected ? Brand.cream : Brand.bgCard)
+                )
                 .overlay(
-                    RoundedRectangle(cornerRadius: 8)
-                        .strokeBorder(selected ? Color.clear : Brand.line, lineWidth: 1)
+                    RoundedRectangle(cornerRadius: 10).strokeBorder(selected ? Color.clear : Brand.line, lineWidth: 1)
                 )
         }
         .buttonStyle(.plain)
     }
 
-    private func outcomeChip(_ value: PitchOutcome, _ label: String) -> some View {
-        chip(label, selected: outcome == value) { outcome = value }
-    }
-    private func interestChip(_ value: InterestLevel, _ label: String) -> some View {
-        chip(label, selected: interestLevel == value) { interestLevel = value }
-    }
-    private func demoReactionChip(_ value: DemoReaction, _ label: String) -> some View {
-        chip(label, selected: demoReaction == value) { demoReaction = value }
-    }
-    private func paymentChip(_ value: PaymentMethod, _ label: String) -> some View {
-        chip(label, selected: paymentMethod == value) { paymentMethod = value }
-    }
-    private func followupTimeChip(_ value: FollowupTime, _ label: String) -> some View {
-        chip(label, selected: bestFollowupTime == value) { bestFollowupTime = value }
-    }
-    private func nextStepChip(_ value: AgreedNextStep, _ label: String) -> some View {
-        chip(label, selected: agreedNextStep == value) { agreedNextStep = value }
+    private func followupChip(_ value: FollowupTime, _ title: String) -> some View {
+        let selected = bestFollowupTime == value
+        return Button {
+            BrandHaptics.tap()
+            bestFollowupTime = value
+        } label: {
+            Text(title)
+                .font(Brand.Font.body(14, weight: .medium))
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 12)
+                .foregroundStyle(selected ? Brand.ink : Brand.cream)
+                .background(
+                    RoundedRectangle(cornerRadius: 10).fill(selected ? Brand.cream : Brand.bgCard)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 10).strokeBorder(selected ? Color.clear : Brand.line, lineWidth: 1)
+                )
+        }
+        .buttonStyle(.plain)
     }
 
-    private func ynRow(label: String, value: Binding<Bool?>) -> some View {
-        HStack {
-            Text(label)
-                .font(Brand.Font.body(13))
-                .foregroundStyle(Brand.cream)
-            Spacer()
-            HStack(spacing: 8) {
-                chip("Yes", selected: value.wrappedValue == true)  { value.wrappedValue = true }
-                chip("No",  selected: value.wrappedValue == false) { value.wrappedValue = false }
+    private func nextStepRow(_ value: AgreedNextStep, _ title: String, _ icon: String) -> some View {
+        let selected = agreedNextStep == value
+        return Button {
+            BrandHaptics.tap()
+            agreedNextStep = value
+        } label: {
+            HStack(spacing: 12) {
+                Image(systemName: icon)
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(selected ? Brand.signal : Brand.creamDim)
+                    .frame(width: 32, height: 32)
+                    .background(RoundedRectangle(cornerRadius: 8).fill(selected ? Brand.signalSoft : Brand.bgCard))
+                    .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(selected ? Brand.signalBorder : Brand.line, lineWidth: 1))
+                Text(title)
+                    .font(Brand.Font.body(15, weight: .medium))
+                    .foregroundStyle(Brand.cream)
+                Spacer()
+                if selected {
+                    Image(systemName: "checkmark").font(.system(size: 13, weight: .bold)).foregroundStyle(Brand.signal)
+                }
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
+            .background(RoundedRectangle(cornerRadius: 12).fill(selected ? Brand.signalSoft : Brand.bgCard))
+            .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(selected ? Brand.signalBorder : Brand.line, lineWidth: 1))
+        }
+        .buttonStyle(.plain)
+    }
+
+    // ── Stage 3: optional gold
+
+    private var stage3Optional: some View {
+        VStack(spacing: 14) {
+            sectionCard(eyebrow: "/ NOTES", subtitle: "Anything notable in one sentence") {
+                TextField("e.g. owner was distracted", text: $notes, axis: .vertical)
+                    .lineLimit(2...4)
+                    .font(Brand.Font.body(14))
+                    .foregroundStyle(Brand.cream)
+                    .padding(12)
+                    .background(Brand.bgCard)
+                    .clipShape(RoundedRectangle(cornerRadius: Brand.Radius.input))
+                    .overlay(RoundedRectangle(cornerRadius: Brand.Radius.input).strokeBorder(Brand.line, lineWidth: 1))
+            }
+
+            sectionCard(eyebrow: "/ GUT-FEEL CLOSE", subtitle: "Where would you bet right now?") {
+                VStack(spacing: 12) {
+                    HStack(alignment: .firstTextBaseline) {
+                        Text("0%")
+                            .font(Brand.Font.mono(10))
+                            .foregroundStyle(Brand.creamMuted)
+                        Spacer()
+                        Text("\(Int(gutFeelClosePct))%")
+                            .font(Brand.Font.display(34, weight: .medium).monospacedDigit())
+                            .tracking(-0.5)
+                            .foregroundStyle(Brand.signal)
+                        Spacer()
+                        Text("100%")
+                            .font(Brand.Font.mono(10))
+                            .foregroundStyle(Brand.creamMuted)
+                    }
+                    Slider(value: $gutFeelClosePct, in: 0...100, step: 1)
+                        .tint(Brand.signal)
+                }
+            }
+
+            sectionCard(eyebrow: "/ FIRST RESPONSE", subtitle: "What did they say first?") {
+                TextField("\"oh we already have someone\"", text: $firstResponsePhrase)
+                    .font(Brand.Font.body(14))
+                    .foregroundStyle(Brand.cream)
+                    .padding(12)
+                    .background(Brand.bgCard)
+                    .clipShape(RoundedRectangle(cornerRadius: Brand.Radius.input))
+                    .overlay(RoundedRectangle(cornerRadius: Brand.Radius.input).strokeBorder(Brand.line, lineWidth: 1))
+            }
+
+            sectionCard(eyebrow: "/ COMPETITOR", subtitle: "Wix, Square, the nephew…") {
+                TextField("Optional", text: $competitorMentioned)
+                    .font(Brand.Font.body(14))
+                    .foregroundStyle(Brand.cream)
+                    .padding(12)
+                    .background(Brand.bgCard)
+                    .clipShape(RoundedRectangle(cornerRadius: Brand.Radius.input))
+                    .overlay(RoundedRectangle(cornerRadius: Brand.Radius.input).strokeBorder(Brand.line, lineWidth: 1))
             }
         }
+    }
+
+    // ── Sticky bar
+
+    @ViewBuilder
+    private var stickyBar: some View {
+        VStack(spacing: 0) {
+            Rectangle().fill(Brand.line).frame(height: 1)
+            HStack(spacing: 10) {
+                if stage > 0 {
+                    Button {
+                        BrandHaptics.tap()
+                        stage -= 1
+                    } label: {
+                        Text("Back")
+                            .font(Brand.Font.mono(11, weight: .medium))
+                            .tracking(Brand.Tracking.eyebrow)
+                            .foregroundStyle(Brand.cream)
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 50)
+                            .background(Capsule().fill(Brand.bgCard))
+                            .overlay(Capsule().strokeBorder(Brand.line, lineWidth: 1))
+                    }
+                    .buttonStyle(.plain)
+                }
+
+                if stage < 2 {
+                    Button {
+                        BrandHaptics.tap()
+                        stage += 1
+                    } label: {
+                        Text(stage == 0 ? "Next" : (stage2HasAnyContent ? "Next" : "Skip"))
+                            .font(Brand.Font.body(15, weight: .semibold))
+                            .foregroundStyle(stage == 0 && !stage1Complete ? Brand.creamMuted : Brand.ink)
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 50)
+                            .background(Capsule().fill(stage == 0 && !stage1Complete ? Brand.bgCard : Brand.cream))
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(stage == 0 && !stage1Complete)
+                } else {
+                    Button {
+                        submit()
+                    } label: {
+                        HStack(spacing: 6) {
+                            Image(systemName: "paperplane.fill").font(.system(size: 13))
+                            Text("Submit pitch")
+                                .font(Brand.Font.body(15, weight: .semibold))
+                        }
+                        .foregroundStyle(Brand.ink)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 50)
+                        .background(Capsule().fill(Brand.cream))
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(.horizontal, 20)
+            .padding(.top, 12)
+            .padding(.bottom, 12)
+            .background(
+                ZStack {
+                    Brand.ink.opacity(0.96)
+                    Rectangle().fill(.ultraThinMaterial).opacity(0.4)
+                }
+                .ignoresSafeArea(edges: .bottom)
+            )
+        }
+    }
+
+    // ── Section card helper
+
+    @ViewBuilder
+    private func sectionCard<Content: View>(
+        eyebrow: String,
+        subtitle: String? = nil,
+        required: Bool = false,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 6) {
+                Text(eyebrow)
+                    .font(Brand.Font.mono(Brand.Font.eyebrow, weight: .medium))
+                    .tracking(Brand.Tracking.eyebrow)
+                    .foregroundStyle(Brand.signal)
+                if required {
+                    Text("·").foregroundStyle(Brand.creamMuted)
+                    Text("REQUIRED")
+                        .font(Brand.Font.mono(9.5))
+                        .tracking(Brand.Tracking.eyebrow)
+                        .foregroundStyle(Brand.creamMuted)
+                }
+                Spacer(minLength: 0)
+            }
+            if let subtitle {
+                Text(subtitle)
+                    .font(Brand.Font.body(13))
+                    .foregroundStyle(Brand.creamMuted)
+                    .padding(.top, -4)
+            }
+            content()
+        }
+        .padding(16)
+        .background(
+            RoundedRectangle(cornerRadius: Brand.Radius.card).fill(Brand.bgStrong)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: Brand.Radius.card).strokeBorder(Brand.line, lineWidth: 1)
+        )
     }
 
     // ── Submit
 
     private func submit() {
         guard let outcome else { return }
-        submitting = true
         errorMessage = nil
 
         let durationSeconds: Int? = pitchStartedAt.map { Int(Date().timeIntervalSince($0)) }
@@ -475,22 +787,23 @@ struct PostPitchView: View {
             pitched_at: ISO8601DateFormatter().string(from: pitchStartedAt ?? Date())
         )
 
-        Task {
-            do {
-                let result = try await APIClient.shared.recordPitch(assignmentId: assignmentId, payload: payload)
-                BrandHaptics.tap(.medium)
-                await MainActor.run {
-                    submitting = false
-                    onSubmitted(result)
-                    dismiss()
-                }
-            } catch {
-                await MainActor.run {
-                    submitting = false
-                    errorMessage = "Couldn't save pitch — \(error.localizedDescription). Try again?"
-                }
-            }
-        }
+        let queuedId = PitchQueue.shared.enqueue(
+            assignmentId: assignmentId,
+            businessName: businessName,
+            payload: payload
+        )
+        BrandHaptics.tap(.medium)
+
+        let pendingResult = PostPitchResult(
+            pitchId: queuedId,
+            pitchAttemptNumber: 1,
+            forwarded: false,
+            nervePitchId: nil,
+            qualityFlag: nil,
+            forwardError: "queued"
+        )
+        onSubmitted(pendingResult)
+        dismiss()
     }
 
     private func trimmedOrNil(_ s: String) -> String? {
@@ -549,15 +862,15 @@ enum ObjectionTag: String, CaseIterable {
 
     var label: String {
         switch self {
-        case .tooExpensive: return "too expensive"
-        case .needToThink: return "need to think"
-        case .alreadyHaveOne: return "already have one"
-        case .wrongPerson: return "wrong person"
-        case .wrongTime: return "wrong time"
-        case .dontTrust: return "don't trust"
-        case .didntUnderstand: return "didn't understand"
-        case .wantsFeaturesWeDontHave: return "wants features we don't have"
-        case .other: return "other"
+        case .tooExpensive: return "Too expensive"
+        case .needToThink: return "Need to think"
+        case .alreadyHaveOne: return "Already have one"
+        case .wrongPerson: return "Wrong person"
+        case .wrongTime: return "Wrong time"
+        case .dontTrust: return "Don't trust"
+        case .didntUnderstand: return "Didn't get it"
+        case .wantsFeaturesWeDontHave: return "Wants more features"
+        case .other: return "Other"
         }
     }
 }
@@ -571,39 +884,4 @@ struct PostPitchResult {
     let nervePitchId: String?
     let qualityFlag: String?
     let forwardError: String?
-}
-
-// MARK: — Flexible chip wrap (for objections)
-
-private struct FlexibleChips<T: Hashable>: View {
-    let items: [T]
-    let label: (T) -> String
-    let isSelected: (T) -> Bool
-    let onTap: (T) -> Void
-
-    var body: some View {
-        // Single-line wrapped layout via FlowLayout if available; otherwise
-        // a simple lazy grid keeps it scrolling neatly.
-        LazyVGrid(columns: [GridItem(.adaptive(minimum: 110), spacing: 8)], alignment: .leading, spacing: 8) {
-            ForEach(items, id: \.self) { item in
-                Button {
-                    onTap(item)
-                } label: {
-                    Text(label(item))
-                        .font(Brand.Font.mono(11))
-                        .frame(maxWidth: .infinity)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 6)
-                        .background(isSelected(item) ? Brand.cream : Brand.bgCard)
-                        .foregroundStyle(isSelected(item) ? Brand.ink : Brand.cream)
-                        .clipShape(RoundedRectangle(cornerRadius: 6))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 6)
-                                .strokeBorder(isSelected(item) ? Color.clear : Brand.line, lineWidth: 1)
-                        )
-                }
-                .buttonStyle(.plain)
-            }
-        }
-    }
 }

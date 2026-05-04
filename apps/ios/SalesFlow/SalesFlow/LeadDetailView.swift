@@ -81,12 +81,15 @@ struct LeadDetailView: View {
                 demoVersion: lead.demoSiteDomain,
                 pitchStartedAt: visitStartTime
             ) { result in
-                // Mobile-api maps outcome → assignment status; mirror it locally
-                // so the UI updates immediately without re-fetching.
+                // The pitch lands in the local SwiftData queue first; it
+                // syncs in the background. We never block the UI on
+                // network. Toast reflects optimistic state.
                 if let nerveId = result.nervePitchId {
                     pitchToast = "Pitch logged · NERVE \(nerveId.prefix(8))…"
+                } else if result.forwardError == "queued" {
+                    pitchToast = "Pitch saved · syncing in background"
                 } else if !result.forwarded {
-                    pitchToast = "Pitch saved locally · NERVE forward queued"
+                    pitchToast = "Pitch saved offline · will sync when online"
                 } else {
                     pitchToast = "Pitch logged"
                 }
