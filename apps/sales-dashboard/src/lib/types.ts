@@ -74,6 +74,12 @@ export interface LeadCard {
   // Timestamps
   visited_at: string | null;
   pitched_at: string | null;
+  sold_at: string | null;
+  /// Stamp set by the Stripe webhook on checkout.session.completed
+  /// (payment_status='paid'). Distinguishes "Confirmed" sales from
+  /// "Projected" (SP claimed sold, no payment yet).
+  paid_at: string | null;
+  commission_amount_pence: number | null;
 }
 
 // ---------------------------------------------------------------------------

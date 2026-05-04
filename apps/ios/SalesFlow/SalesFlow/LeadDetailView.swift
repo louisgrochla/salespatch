@@ -1303,6 +1303,15 @@ struct LeadDetailView: View {
             lead.hasWebsite         = dto.hasWebsite ?? lead.hasWebsite
             lead.contactPerson      = dto.contactPerson ?? lead.contactPerson
             lead.contactRole        = dto.contactRole ?? lead.contactRole
+            // Payment confirmation — set by Stripe webhook in prod.
+            // Rebuild Date from ISO8601 string so the Payouts view
+            // flips this lead from Projected to Confirmed automatically.
+            if let raw = dto.paidAt {
+                lead.paidAt = ISO8601DateFormatter().date(from: raw) ?? lead.paidAt
+            }
+            if let pence = dto.commissionAmountPence {
+                lead.commissionAmountPence = pence
+            }
 
             // Rich content (list endpoint strips these out)
             lead.openingHours       = encode(dto.openingHours) ?? lead.openingHours

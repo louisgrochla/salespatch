@@ -187,6 +187,10 @@ async function handleCheckoutCompleted(
     .update({
       status: 'sold',
       sold_at: nowIso,
+      // paid_at is the explicit "real money has landed" stamp the iOS
+      // app uses to distinguish Confirmed from Projected sales. In live
+      // Stripe this equals sold_at; in test/manual flows it stays NULL.
+      paid_at: nowIso,
       commission_amount_pence: commissionPence,
       // legacy float-pounds column kept in sync for backwards compat.
       commission_amount: commissionPence / 100,

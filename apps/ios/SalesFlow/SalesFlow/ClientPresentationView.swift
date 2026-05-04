@@ -41,9 +41,16 @@ struct ClientPresentationView: View {
     var body: some View {
         ZStack(alignment: .top) {
 
+            // Solid backdrop that fills the safe-area zone (status bar /
+            // Dynamic Island) — sits BEHIND the web view so the demo's hero
+            // photo can't bleed up around the notch.
+            Color.black.ignoresSafeArea()
+
             // ── Full-screen web view ─────────────────────────────────────
+            // .top NOT ignored — demo content (incl. its sticky nav at top: 0)
+            // starts BELOW the iPhone status bar instead of under the notch.
             ClientWebView(domain: domain, isLoading: $isLoading, network: network)
-                .ignoresSafeArea()
+                .ignoresSafeArea(edges: [.horizontal, .bottom])
 
             // ── Loading shimmer ──────────────────────────────────────────
             if isLoading {
@@ -64,7 +71,10 @@ struct ClientPresentationView: View {
             // ── Top chrome — minimal, unobtrusive ───────────────────────
             VStack(spacing: 0) {
                 HStack(alignment: .center) {
-                    // Exit button — small, top-left, semi-transparent
+                    // Exit button — small, top-left, semi-transparent.
+                    // Lifted ~14pt so it doesn't overlap the demo's nav
+                    // logo (most demos place a logo at top: 14px in their
+                    // sticky header).
                     Button(action: { showExitConfirm = true }) {
                         Image(systemName: "xmark")
                             .font(.system(size: 13, weight: .semibold))
@@ -74,6 +84,7 @@ struct ClientPresentationView: View {
                             .clipShape(Circle())
                     }
                     .buttonStyle(.plain)
+                    .offset(y: -14)
 
                     Spacer()
 
@@ -118,7 +129,7 @@ struct ClientPresentationView: View {
                     }
                 }
                 .padding(.horizontal, 16)
-                .padding(.top, 56) // below status bar
+                .padding(.top, 8) // safe-area-top is now respected at the parent level
                 .padding(.bottom, 12)
 
                 Spacer()
@@ -153,9 +164,12 @@ struct ClientPresentationView: View {
                 }
             }
         }
-        // Hide navigation chrome but keep status bar (time/battery visible)
+        // Hide navigation chrome but keep status bar (time/battery visible).
+        // Top safe area is RESPECTED — demo content (sticky nav at top:0)
+        // sits cleanly below the iPhone status bar / Dynamic Island instead
+        // of bleeding under it. Bottom + sides still bleed edge-to-edge.
         .navigationBarHidden(true)
-        .ignoresSafeArea()
+        .ignoresSafeArea(edges: [.horizontal, .bottom])
         .animation(.easeInOut(duration: 0.2), value: isLoading)
         .task {
             // Bundled sites count as "cached" — always available
