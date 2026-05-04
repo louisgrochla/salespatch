@@ -173,7 +173,7 @@ export default function CustomerDemoPage() {
                 <div className="flex items-center justify-center gap-3 mb-8">
                   <div className="text-center">
                     <p className="text-[15px] font-medium text-neutral-900 tracking-[-0.01em]">
-                      {'\u00A3'}350
+                      {'\u00A3'}299
                     </p>
                     <p className="text-[11px] text-neutral-400 mt-0.5">setup</p>
                   </div>

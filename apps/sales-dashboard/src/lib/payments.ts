@@ -7,8 +7,8 @@
  * lead_payment_sessions so the customer's preview page can hand the same
  * session id back at scan time.
  *
- * Money model (locked 2026-04-25):
- *   - £350 setup, charged at checkout (mode='payment', save card off-session)
+ * Money model (locked 2026-05-05 — beta launch):
+ *   - £299 setup, charged at checkout (mode='payment', save card off-session)
  *   - £25/mo recurring, subscription created server-side in the webhook
  *     after payment_status='paid', with trial_end = now + 30 days
  *   - Contractor commission = sales_users.commission_amount_pence (flat)
@@ -18,9 +18,9 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { getStripe } from './stripe';
 
 // Setup fee — read from env so beta pricing experiments don't need a code
-// deploy. Set SETUP_FEE_PENCE on Vercel (e.g. 35000 = £350, 29900 = £299).
-// Defaults to 35000 if unset.
-const DEFAULT_SETUP_FEE_PENCE = 35000;
+// deploy. Set SETUP_FEE_PENCE on Vercel (e.g. 29900 = £299, 35000 = £350).
+// Defaults to 29900 (the beta price) if unset.
+const DEFAULT_SETUP_FEE_PENCE = 29900;
 export function getSetupFeePence(): number {
   const raw = process.env.SETUP_FEE_PENCE;
   if (!raw) return DEFAULT_SETUP_FEE_PENCE;

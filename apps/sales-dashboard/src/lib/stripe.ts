@@ -71,8 +71,9 @@ export function getStripeWebhookSecret(): string {
  *   STRIPE_HOSTING_PRICE_ID       — for STRIPE_MODE=live
  *
  * The webhook reads this when creating the £25/mo subscription after a
- * successful £350 setup payment. If unset, the subscription is skipped and
- * the £350 still captures — ops can manually attach a subscription.
+ * successful setup payment (£299 beta price, see lib/payments.ts). If
+ * unset, the subscription is skipped and the setup fee still captures —
+ * ops can manually attach a subscription.
  */
 export function getStripeHostingPriceId(): string | null {
   const mode = getStripeMode();

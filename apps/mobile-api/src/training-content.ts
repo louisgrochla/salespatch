@@ -35,7 +35,7 @@ export const TRAINING_UNITS: TrainingUnitSeed[] = [
         options: [
           {
             id: 'a',
-            text: '"The business pays £350 for the website and £25 a month after that. I get £50 for every sale, paid weekly. No base pay — it\'s commission only, but I choose my own hours."',
+            text: '"The business pays £299 for the website and £25 a month after that. I get £50 for every sale, paid weekly. No base pay — it\'s commission only, but I choose my own hours."',
             score: 3,
             feedback: 'Clear, honest, and covers the key points without overselling. This is exactly how you\'d explain it.'
           },
@@ -160,7 +160,7 @@ export const TRAINING_UNITS: TrainingUnitSeed[] = [
             role: 'you',
             options: [
               { id: 'a', text: '*Hands phone over* This is your business. Everything here — the services, the reviews, the layout — it\'s all based on your actual business. Have a scroll.', score: 3 },
-              { id: 'b', text: 'So basically we build affordable websites for small businesses. The package includes hosting, domain, everything. It\'s £350 upfront...', score: 1 },
+              { id: 'b', text: 'So basically we build affordable websites for small businesses. The package includes hosting, domain, everything. It\'s £299 upfront...', score: 1 },
               { id: 'c', text: '*Shows phone screen* We built this demo site for you. It\'s got your name and services on it. What do you think?', score: 2 }
             ]
           }
@@ -204,7 +204,7 @@ export const TRAINING_UNITS: TrainingUnitSeed[] = [
           },
           {
             id: 'b',
-            text: '"So, shall I explain the pricing? It\'s £350 upfront and £25 a month."',
+            text: '"So, shall I explain the pricing? It\'s £299 upfront and £25 a month."',
             score: 1,
             feedback: 'Way too early. They haven\'t even reacted to the demo yet. Jumping to price before they\'re sold on value is the fastest way to hear "too expensive."'
           },
@@ -274,7 +274,7 @@ export const TRAINING_UNITS: TrainingUnitSeed[] = [
             role: 'you',
             options: [
               { id: 'a', text: 'I get that. But that covers everything — hosting, domain, maintenance, updates. It works out to less than a pound a day. And there\'s no contract, so if it doesn\'t work for you, you can cancel anytime.', score: 3 },
-              { id: 'b', text: 'Most web agencies charge £2,000 or more for something like this. £350 is actually very competitive.', score: 2 },
+              { id: 'b', text: 'Most web agencies charge £2,000 or more for something like this. £299 is actually very competitive.', score: 2 },
               { id: 'c', text: 'I could see if there\'s a discount available?', score: 1 }
             ]
           }

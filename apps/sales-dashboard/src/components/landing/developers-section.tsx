@@ -28,7 +28,7 @@ theirs is 5+ years outdated."`,
     label: "The close",
     code: `// "How much does it cost?"
 
-"£350 one-time, or £25/month.
+"£299 one-time, plus £25/month.
 
 That includes hosting, updates,
 and a custom design based on

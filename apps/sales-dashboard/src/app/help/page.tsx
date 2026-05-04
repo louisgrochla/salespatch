@@ -57,7 +57,7 @@ const FAQS = [
     category: 'Pitching',
     question: 'How much do I tell them it costs?',
     answer:
-      '£350 upfront, around £27.50/month. That covers hosting, domain, the site itself, and updates. The demo reveals the price after fifteen seconds of scrolling — the site sells the price.',
+      '£299 upfront, £25/month after that. That covers hosting, domain, the site itself, and updates. The demo reveals the price after fifteen seconds of scrolling — the site sells the price.',
   },
   {
     id: 'no-right-to-work',
