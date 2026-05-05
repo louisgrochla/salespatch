@@ -91,7 +91,7 @@ export interface InterestArgs {
 }
 
 export async function sendCustomerInterest(args: InterestArgs): Promise<SendResult> {
-  const subject = `Thanks for taking a look — questions?`;
+  const subject = `Quick hello about your demo`;
   const html = interestHtml(args);
   const text = interestText(args);
   return send({ to: args.to, subject, html, text });
@@ -103,24 +103,24 @@ function interestHtml(a: InterestArgs): string {
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Thanks for taking a look — ${escapeHtml(a.businessName)}</title>
+<title>Quick hello about your demo</title>
 </head>
 <body style="margin:0;padding:0;background:#FAF8F5;font-family:'Inter Tight','Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;color:#0F0E0C;">
   <div style="max-width:560px;margin:0 auto;padding:32px 24px;">
 
     <h1 style="margin:0 0 12px;font-size:30px;font-weight:500;letter-spacing:-0.03em;line-height:1.2;">
-      Thanks for taking a look.
+      Hey, thanks for stopping by.
     </h1>
     <p style="margin:0 0 18px;font-size:16px;line-height:1.55;color:rgba(15,14,12,0.7);">
-      We saw you putting your details into the site we made for ${escapeHtml(a.businessName)}. Whether you go ahead today or not, we'd love to hear what you think.
+      Thanks for sharing your email on the demo we put together for ${escapeHtml(a.businessName)}. Whether you go ahead or not, we'd love to know what you think.
     </p>
 
     <p style="margin:0 0 18px;font-size:16px;line-height:1.55;color:rgba(15,14,12,0.7);">
-      A real person reads every email we get — just hit reply, or send a note to <a href="mailto:${escapeHtml(SUPPORT_EMAIL)}" style="color:#B8860B;font-weight:500;">${escapeHtml(SUPPORT_EMAIL)}</a>. Questions, design tweaks, anything.
+      Just hit reply if you've got questions, or drop a note to <a href="mailto:${escapeHtml(SUPPORT_EMAIL)}" style="color:#B8860B;font-weight:500;">${escapeHtml(SUPPORT_EMAIL)}</a>. Design tweaks, pricing, anything at all.
     </p>
 
     <div style="margin:24px 0;padding:16px 18px;background:rgba(184,134,11,0.06);border:1px solid rgba(184,134,11,0.22);border-radius:12px;font-size:14px;line-height:1.55;color:rgba(15,14,12,0.78);">
-      <strong style="color:#0F0E0C;">If you decide to go ahead:</strong> ${escapeHtml(a.setupFeePoundsLabel)} setup, then ${escapeHtml(a.monthlyPoundsLabel)} for hosting & support. Your site goes live within 7 days. We'll fold any tweaks you want into the build before launch — no extra cost.
+      <strong style="color:#0F0E0C;">If you decide to go ahead:</strong> ${escapeHtml(a.setupFeePoundsLabel)} setup, then ${escapeHtml(a.monthlyPoundsLabel)} for hosting and support. Your site goes live within 7 days. Any tweaks you want, we'll build them in before launch at no extra cost.
     </div>
 
     <p style="margin:24px 0 8px;font-size:15px;line-height:1.55;color:rgba(15,14,12,0.78);">
@@ -131,10 +131,11 @@ function interestHtml(a: InterestArgs): string {
     </p>
 
     <p style="margin:32px 0 0;font-size:13px;line-height:1.6;color:rgba(15,14,12,0.55);">
-      No follow-up emails after this one unless you reply. Promise.
+      We won't follow up unless you reply. Promise.
     </p>
-    <p style="margin:6px 0 0;font-size:13px;line-height:1.6;color:rgba(15,14,12,0.55);">
-      — The SalesPatch team
+    <p style="margin:14px 0 0;font-size:13px;line-height:1.6;color:rgba(15,14,12,0.55);">
+      Speak soon,<br>
+      The SalesPatch team
     </p>
 
     <hr style="border:0;border-top:1px solid rgba(15,14,12,0.08);margin:32px 0 16px;">
@@ -147,24 +148,27 @@ function interestHtml(a: InterestArgs): string {
 }
 
 function interestText(a: InterestArgs): string {
-  return `Thanks for taking a look.
+  return `Hey, thanks for stopping by.
 
-We saw you putting your details into the site we made for ${a.businessName}.
-Whether you go ahead today or not, we'd love to hear what you think.
+Thanks for sharing your email on the demo we put together for
+${a.businessName}. Whether you go ahead or not, we'd love to know
+what you think.
 
-A real person reads every email we get — just hit reply, or send a note
-to ${SUPPORT_EMAIL}. Questions, design tweaks, anything.
+Just hit reply if you've got questions, or drop a note to ${SUPPORT_EMAIL}.
+Design tweaks, pricing, anything at all.
 
 If you decide to go ahead: ${a.setupFeePoundsLabel} setup, then
-${a.monthlyPoundsLabel} for hosting & support. Your site goes live within
-7 days. We'll fold any tweaks you want into the build before launch —
-no extra cost.
+${a.monthlyPoundsLabel} for hosting and support. Your site goes live
+within 7 days. Any tweaks you want, we'll build them in before launch
+at no extra cost.
 
 Your demo's still here whenever you want another look:
 ${a.previewUrl}
 
-No follow-up emails after this one unless you reply. Promise.
-— The SalesPatch team
+We won't follow up unless you reply. Promise.
+
+Speak soon,
+The SalesPatch team
 
 Reference: ${a.assignmentId}
 `;
@@ -185,7 +189,7 @@ export interface WelcomeArgs {
 }
 
 export async function sendCustomerWelcome(args: WelcomeArgs): Promise<SendResult> {
-  const subject = `Your website is being built — live within 7 days`;
+  const subject = `Your site's in the build, live within 7 days`;
   const html = welcomeHtml(args);
   const text = welcomeText(args);
   return send({ to: args.to, subject, html, text });
@@ -197,7 +201,7 @@ function welcomeHtml(a: WelcomeArgs): string {
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>${escapeHtml(a.businessName)} — your site is being built</title>
+<title>${escapeHtml(a.businessName)}: your site is being built</title>
 </head>
 <body style="margin:0;padding:0;background:#FAF8F5;font-family:'Inter Tight','Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;color:#0F0E0C;">
   <div style="max-width:560px;margin:0 auto;padding:32px 24px;">
@@ -237,21 +241,22 @@ function welcomeHtml(a: WelcomeArgs): string {
 
     <h2 style="margin:32px 0 12px;font-size:18px;font-weight:500;letter-spacing:-0.02em;">What happens next</h2>
     <ol style="margin:0 0 24px;padding-left:20px;font-size:15px;line-height:1.7;color:rgba(15,14,12,0.78);">
-      <li>We finalise your site — copy, photos, design.</li>
+      <li>We finalise your site (copy, photos, design).</li>
       <li>You can request small design changes any time during the 7-day build by emailing <a href="mailto:${escapeHtml(SUPPORT_EMAIL)}" style="color:#B8860B;">${escapeHtml(SUPPORT_EMAIL)}</a>.</li>
       <li>We email you the moment your site is live with your domain, login details, and how to manage it.</li>
       <li>30 days from today, your £25/mo hosting & support plan starts. We'll send a reminder a few days before.</li>
     </ol>
 
     <div style="margin:24px 0;padding:14px 18px;background:rgba(184,134,11,0.08);border:1px solid rgba(184,134,11,0.25);border-radius:12px;font-size:14px;line-height:1.5;color:rgba(15,14,12,0.78);">
-      Want a tweak? Reply to this email or send a note to <a href="mailto:${escapeHtml(SUPPORT_EMAIL)}" style="color:#B8860B;font-weight:500;">${escapeHtml(SUPPORT_EMAIL)}</a> any time during the 7-day window. We fold changes in before launch — no extra cost.
+      Want a tweak? Reply to this email or drop a note to <a href="mailto:${escapeHtml(SUPPORT_EMAIL)}" style="color:#B8860B;font-weight:500;">${escapeHtml(SUPPORT_EMAIL)}</a> any time in the 7-day window. We'll build changes in before launch at no extra cost.
     </div>
 
     <p style="margin:32px 0 0;font-size:13px;line-height:1.6;color:rgba(15,14,12,0.55);">
-      Any questions, just reply. A real person reads every email.
+      Any questions, just reply. We'll get back the same day.
     </p>
-    <p style="margin:6px 0 0;font-size:13px;line-height:1.6;color:rgba(15,14,12,0.55);">
-      — The SalesPatch team
+    <p style="margin:14px 0 0;font-size:13px;line-height:1.6;color:rgba(15,14,12,0.55);">
+      Speak soon,<br>
+      The SalesPatch team
     </p>
 
     <hr style="border:0;border-top:1px solid rgba(15,14,12,0.08);margin:36px 0 16px;">
@@ -276,7 +281,7 @@ Order summary
   Site live by:              ${a.deliveryByLabel}
 
 What happens next
-  1. We finalise your site — copy, photos, design.
+  1. We finalise your site (copy, photos, design).
   2. You can request small design changes any time during the 7-day build
      by emailing ${SUPPORT_EMAIL}.
   3. We email you the moment your site is live with your domain, login,
@@ -284,12 +289,14 @@ What happens next
   4. 30 days from today, your £25/mo hosting & support plan starts.
      We'll send a reminder a few days before.
 
-Want a tweak? Reply to this email or send a note to ${SUPPORT_EMAIL} any
-time during the 7-day window. We fold changes in before launch — no extra
-cost.
+Want a tweak? Reply to this email or drop a note to ${SUPPORT_EMAIL} any
+time in the 7-day window. We'll build changes in before launch at no
+extra cost.
 
-Any questions, just reply. A real person reads every email.
-— The SalesPatch team
+Any questions, just reply. We'll get back the same day.
+
+Speak soon,
+The SalesPatch team
 
 Reference: ${a.assignmentId}
 Preview:   ${a.previewUrl}
