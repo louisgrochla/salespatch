@@ -21,8 +21,18 @@
  */
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { sendCustomerInterest } from '@/lib/email';
+import { formatPenceAsPounds, getMonthlyPence, getSetupFeePence } from '@/lib/payments';
 
 export const dynamic = 'force-dynamic';
+
+// Accepts most reasonable email shapes; rejects nonsense before we
+// hit Resend. Lightweight on purpose — Resend will reject malformed
+// addresses too, and we'd rather a permissive UX than a strict regex
+// that blocks "name+something@gmail.com".
+function looksLikeEmail(s: string): boolean {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s);
+}
 
 interface PhotoEntry {
   url: string;
@@ -73,12 +83,13 @@ export async function POST(
 
   const supabase = getSupabase();
 
-  // Confirm assignment exists. Don't gate on status='sold' — Stripe might
-  // redirect before our webhook lands, and a few seconds of "open before sold"
-  // is fine for capturing answers (the row is keyed on the same lead_id).
+  // Confirm assignment exists + grab notes for business name. Don't gate
+  // on status='sold' — Stripe might redirect before our webhook lands,
+  // and a few seconds of "open before sold" is fine for capturing
+  // answers (the row is keyed on the same lead_id).
   const { data: assignment, error: aErr } = await supabase
     .from('lead_assignments')
-    .select('id')
+    .select('id, notes')
     .eq('id', leadId)
     .maybeSingle();
   if (aErr) return NextResponse.json({ error: aErr.message }, { status: 500 });
@@ -87,6 +98,10 @@ export async function POST(
   // Build the upsert payload. Only allow whitelisted fields.
   const update: Record<string, unknown> = { lead_assignment_id: leadId };
   if ('contact_phone' in body) update.contact_phone = trimOrNull(body.contact_phone);
+  if ('contact_email' in body) {
+    const email = trimOrNull(body.contact_email);
+    update.contact_email = email && looksLikeEmail(email) ? email.toLowerCase() : email;
+  }
   if ('top_changes' in body) update.top_changes = trimOrNull(body.top_changes);
   if ('anything_else' in body) update.anything_else = trimOrNull(body.anything_else);
   if ('existing_domain' in body) update.existing_domain = trimOrNull(body.existing_domain);
@@ -132,6 +147,54 @@ export async function POST(
     .select('*')
     .single();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  // If the customer just dropped their email AND we haven't sent the
+  // soft welcome yet, fire it now + stamp welcome_sent_at so we don't
+  // re-fire on every auto-save tick. Best-effort — failure logs but
+  // doesn't break the upsert response.
+  const newEmail = (data as Record<string, unknown> | null)?.contact_email as string | null | undefined;
+  const alreadySent = (data as Record<string, unknown> | null)?.welcome_sent_at != null;
+  if (newEmail && looksLikeEmail(newEmail) && !alreadySent) {
+    // Mirror the email to lead_assignments so Stripe Checkout can
+    // pre-fill it later, and the post-payment welcome has it even if
+    // the customer types something different at checkout.
+    await supabase
+      .from('lead_assignments')
+      .update({ customer_email: newEmail })
+      .eq('id', leadId);
+
+    // Pull business name from notes JSON for the email subject.
+    let businessName = 'your business';
+    try {
+      const parsed = JSON.parse((assignment.notes as string | null) ?? '{}') as Record<string, unknown>;
+      if (typeof parsed.business_name === 'string' && parsed.business_name.trim()) {
+        businessName = parsed.business_name;
+      }
+    } catch { /* fallthrough */ }
+
+    const setupFeeLabel = formatPenceAsPounds(getSetupFeePence());
+    const monthlyLabel = `${formatPenceAsPounds(getMonthlyPence())}/mo`;
+    const previewUrl = `https://salespatch.co.uk/preview/${leadId}`;
+
+    const result = await sendCustomerInterest({
+      to: newEmail,
+      businessName,
+      setupFeePoundsLabel: setupFeeLabel,
+      monthlyPoundsLabel: monthlyLabel,
+      previewUrl,
+      assignmentId: leadId,
+    });
+
+    if (result.ok) {
+      await supabase
+        .from('lead_onboarding_responses')
+        .update({ welcome_sent_at: new Date().toISOString() })
+        .eq('lead_assignment_id', leadId);
+      console.log(`[onboarding] interest email sent: ${result.id} to ${newEmail}`);
+    } else {
+      console.warn(`[onboarding] interest email FAILED to ${newEmail}: ${result.error}`);
+    }
+  }
 
   return NextResponse.json({ data });
 }
