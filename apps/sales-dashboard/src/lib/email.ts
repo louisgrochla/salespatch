@@ -57,6 +57,14 @@ async function send(args: {
       html: args.html,
       text: args.text,
       replyTo: args.replyTo ?? SUPPORT_EMAIL,
+      // List-Unsubscribe headers improve inbox placement on Gmail/Apple.
+      // We use mailto rather than One-Click POST because we don't have a
+      // public unsubscribe HTTP endpoint yet — mailto is fully RFC-compliant
+      // and counts as valid for the bulk-sender requirements.
+      headers: {
+        'List-Unsubscribe': `<mailto:${SUPPORT_EMAIL}?subject=unsubscribe>`,
+        'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
+      },
     });
     if (error) {
       console.error(`[email] Resend error sending "${args.subject}" to ${args.to}: ${error.message}`);
