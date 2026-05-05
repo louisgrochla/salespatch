@@ -27,6 +27,13 @@ const LINE = 'rgba(15,14,12,0.08)';
 type StepKey = 'contact' | 'changes' | 'photos' | 'domain' | 'else';
 const STEPS: StepKey[] = ['contact', 'changes', 'photos', 'domain', 'else'];
 
+// Mirrors server-side regex in /api/onboarding/[leadId]/route.ts. We use it
+// to gate UI hints (e.g. "check your spam folder") so they only appear once
+// the customer has typed something the server will actually accept.
+function looksLikeEmail(s: string): boolean {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s);
+}
+
 interface PhotoEntry {
   url: string;
   filename: string;
@@ -518,6 +525,20 @@ export default function OnboardingClient({ leadId, businessName, demoUrl }: Prop
                   value={answers.contact_email}
                   onChange={(v) => update('contact_email', v)}
                 />
+                {looksLikeEmail(answers.contact_email) && (
+                  <p
+                    style={{
+                      margin: '-4px 4px 0',
+                      fontSize: 12.5,
+                      lineHeight: 1.55,
+                      color: 'rgba(15,14,12,0.55)',
+                      letterSpacing: '0.005em',
+                    }}
+                  >
+                    We&rsquo;ll send a quick hello to that inbox. If you don&rsquo;t
+                    see it within a minute, check your spam or junk folder.
+                  </p>
+                )}
                 <PhoneInput
                   value={answers.contact_phone}
                   onChange={(v) => update('contact_phone', v)}
