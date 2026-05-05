@@ -133,6 +133,10 @@ export default function OnboardingClient({ leadId, businessName, demoUrl }: Prop
   // the drag handle to toggle. Auto-expands when an input gets focus on
   // mobile so the keyboard doesn't shove fields out of view.
   const [expanded, setExpanded] = useState(false);
+  // Returning-visitor banner: shown if the initial GET shows the customer
+  // has already saved at least one answer. Dismissable. Reassures them
+  // their progress is still here so they don't redo what they already did.
+  const [resumed, setResumed] = useState(false);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
@@ -154,6 +158,17 @@ export default function OnboardingClient({ leadId, businessName, demoUrl }: Prop
           anything_else: d.anything_else ?? '',
           photos: Array.isArray(d.photos) ? d.photos : [],
         });
+        // If they'd saved at least one answer, this is a return visit.
+        // Show the resumed banner so they know their progress is here.
+        const hasProgress =
+          (d.contact_email && d.contact_email.length > 0) ||
+          (d.contact_phone && d.contact_phone.length > 0) ||
+          (d.top_changes && d.top_changes.length > 0) ||
+          (d.existing_domain && d.existing_domain.length > 0) ||
+          (Array.isArray(d.domain_preferences) && d.domain_preferences.length > 0) ||
+          (d.anything_else && d.anything_else.length > 0) ||
+          (Array.isArray(d.photos) && d.photos.length > 0);
+        if (hasProgress) setResumed(true);
       })
       .catch(() => undefined);
   }, [leadId]);
@@ -462,6 +477,63 @@ export default function OnboardingClient({ leadId, businessName, demoUrl }: Prop
             }}
           />
         </div>
+
+        {/* Returning-visitor banner. Only renders when initial load detects
+            saved answers. Dismissable so it doesn't sit there forever. */}
+        {resumed && (
+          <div
+            style={{
+              margin: '10px 22px 0',
+              padding: '10px 12px',
+              background: 'rgba(61,158,95,0.08)',
+              border: '1px solid rgba(61,158,95,0.28)',
+              borderRadius: 12,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 10,
+              flexShrink: 0,
+            }}
+          >
+            <span
+              style={{
+                width: 6,
+                height: 6,
+                borderRadius: '50%',
+                background: LIVE_GREEN,
+                flexShrink: 0,
+                boxShadow: `0 0 6px ${LIVE_GREEN}88`,
+              }}
+            />
+            <span
+              style={{
+                fontSize: 12.5,
+                lineHeight: 1.4,
+                color: 'rgba(15,14,12,0.78)',
+                flex: 1,
+              }}
+            >
+              <strong style={{ color: INK, fontWeight: 600 }}>Welcome back.</strong>{' '}
+              Everything you entered last time is saved. Pick up wherever feels right.
+            </span>
+            <button
+              type="button"
+              onClick={() => setResumed(false)}
+              aria-label="Dismiss"
+              style={{
+                background: 'transparent',
+                border: 0,
+                padding: '2px 6px',
+                cursor: 'pointer',
+                color: 'rgba(15,14,12,0.45)',
+                fontSize: 14,
+                lineHeight: 1,
+                flexShrink: 0,
+              }}
+            >
+              ×
+            </button>
+          </div>
+        )}
 
         {/* Always-visible info strip. Three compact chips that frame the
             offer + reassurance. Sets expectations so the form feels like a

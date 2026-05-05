@@ -175,6 +175,10 @@ export async function POST(
     const setupFeeLabel = formatPenceAsPounds(getSetupFeePence());
     const monthlyLabel = `${formatPenceAsPounds(getMonthlyPence())}/mo`;
     const previewUrl = `https://salespatch.co.uk/preview/${leadId}`;
+    // Resume link — same URL the customer is on right now. Auto-save means
+    // every field they entered is already in `lead_onboarding_responses`,
+    // so opening this URL hours later restores their progress exactly.
+    const onboardingUrl = `https://salespatch.co.uk/onboarding/${leadId}`;
 
     const result = await sendCustomerInterest({
       to: newEmail,
@@ -182,6 +186,7 @@ export async function POST(
       setupFeePoundsLabel: setupFeeLabel,
       monthlyPoundsLabel: monthlyLabel,
       previewUrl,
+      onboardingUrl,
       assignmentId: leadId,
     });
 
