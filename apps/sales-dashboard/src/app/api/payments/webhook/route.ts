@@ -21,6 +21,8 @@ import Stripe from 'stripe';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { getStripe, getStripeWebhookSecret, getStripeHostingPriceId } from '@/lib/stripe';
 import { claimStripeEvent, markStripeEventProcessed } from '@/lib/stripe-events';
+import { sendCustomerWelcome } from '@/lib/email';
+import { formatPenceAsPounds, getMonthlyPence } from '@/lib/payments';
 
 function getSupabase() {
   return createClient(
@@ -249,8 +251,53 @@ async function handleCheckoutCompleted(
   console.log(
     `[payments/webhook] SOLD: assignment=${leadAssignmentId} sp=${salespersonId} commission_pence=${commissionPence}`,
   );
-  // TODO(payments): fire push notification to contractor. iOS polling covers
-  // the foreground case (step 9); push helps if the app is backgrounded.
+
+  // Welcome email to the customer. Best-effort — failure here doesn't
+  // unwind the sale; the sale is already committed in the DB and Stripe.
+  // We log loudly so a missing RESEND_API_KEY or unverified domain
+  // surfaces in Vercel logs, not as a silent customer-experience gap.
+  if (customerEmail) {
+    const sevenDays = 7 * 24 * 60 * 60 * 1000;
+    const thirtyDays = 30 * 24 * 60 * 60 * 1000;
+    const deliveryBy = new Date(Date.now() + sevenDays);
+    const trialEnds = new Date(Date.now() + thirtyDays);
+    const fmtDate = (d: Date) =>
+      d.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
+    // Best-effort business name lookup — fall back to "your business".
+    let businessName = 'your business';
+    try {
+      const { data } = await supabase
+        .from('lead_assignments')
+        .select('notes')
+        .eq('id', leadAssignmentId)
+        .maybeSingle();
+      if (data?.notes) {
+        const parsed = JSON.parse(data.notes as string) as Record<string, unknown>;
+        if (typeof parsed.business_name === 'string' && parsed.business_name.trim()) {
+          businessName = parsed.business_name;
+        }
+      }
+    } catch { /* fall through with default */ }
+
+    const result = await sendCustomerWelcome({
+      to: customerEmail,
+      businessName,
+      amountPaidPence: amountPaid,
+      setupFeePoundsLabel: formatPenceAsPounds(amountPaid),
+      monthlyPoundsLabel: `${formatPenceAsPounds(getMonthlyPence())}/mo`,
+      trialEndsLabel: fmtDate(trialEnds),
+      deliveryByLabel: fmtDate(deliveryBy),
+      previewUrl: `https://salespatch.co.uk/preview/${leadAssignmentId}`,
+      assignmentId: leadAssignmentId,
+    });
+    if (result.ok) {
+      console.log(`[payments/webhook] welcome email sent: ${result.id} to ${customerEmail}`);
+    } else {
+      console.warn(`[payments/webhook] welcome email FAILED to ${customerEmail}: ${result.error}`);
+    }
+  } else {
+    console.warn(`[payments/webhook] no customer_email on session ${session.id} — welcome email skipped`);
+  }
 }
 
 async function createMonthlySubscription(args: {

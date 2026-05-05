@@ -67,16 +67,38 @@ export default function PaidPage({ params }: { params: { leadId: string } }) {
           fontSize: 16,
           lineHeight: 1.55,
           color: 'rgba(15,14,12,0.65)',
-          maxWidth: 360,
+          maxWidth: 380,
+          marginBottom: 28,
+        }}
+      >
+        Your website will be live within <strong style={{ color: INK }}>7 days</strong>. We’ll email you a confirmation now, and again the moment your site goes live with your domain and login.
+      </p>
+
+      <div
+        style={{
+          maxWidth: 380,
+          padding: '14px 18px',
+          background: 'rgba(184,134,11,0.08)',
+          border: '1px solid rgba(184,134,11,0.25)',
+          borderRadius: 12,
+          fontSize: 14,
+          lineHeight: 1.5,
+          color: 'rgba(15,14,12,0.78)',
           marginBottom: 32,
         }}
       >
-        Thanks for going live. We have everything we need from the setup form — we’ll text you within 24 hours with your build timeline.
-      </p>
+        Want a small design change? Email{' '}
+        <a
+          href="mailto:support@salespatch.co.uk"
+          style={{ color: SIGNAL, textDecoration: 'underline', fontWeight: 500 }}
+        >
+          support@salespatch.co.uk
+        </a>{' '}
+        any time during the 7-day build window — we’ll fold it in before launch.
+      </div>
 
       <p
         style={{
-          marginTop: 32,
           fontSize: 12,
           color: 'rgba(15,14,12,0.4)',
           fontFamily: "'JetBrains Mono', ui-monospace, monospace",
