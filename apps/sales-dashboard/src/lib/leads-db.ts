@@ -11,37 +11,60 @@ import { isSupabaseMode } from './auth-db';
 import { getSupabaseServer } from './supabase';
 import type { SalesStats } from './types';
 
+const PROXY_BASE = 'https://salespatch.co.uk/api/demo-site';
+
 /**
- * Expand a `demo_site_domain` value into a fully-qualified URL the iOS app
- * can hit directly.
+ * Expand a `demo_site_domain` value into a fully-qualified, *renderable* URL.
  *
- * Background: admin/upload stores the demo HTML in Supabase Storage at
- * `<slug>.html`, and admin/assign stamps `notes.demo_site_domain` with the
- * BARE slug (e.g. "third-circle-coffee"). The iOS app's webview tried to
- * load that as a domain (`https://third-circle-coffee`) which DNS-fails →
- * "this demo hasn't been uploaded yet" fallback.
+ * Three failure modes this fixes:
  *
- * Fix: at API response time, expand the slug to the public proxy URL
- * `https://salespatch.co.uk/api/demo-site/<slug>` which streams the HTML
- * back from Supabase Storage. The iOS code already handles full URLs in
- * its `domain.startsWith('http') ? domain : 'https://' + domain` check.
+ *   1. /admin/assign stamps notes.demo_site_domain with a BARE SLUG (e.g.
+ *      "third-circle-coffee"). iOS webview tried `https://<slug>` → DNS
+ *      fails → "demo hasn't been uploaded" fallback.
  *
- * Backwards-compatible: any existing rows with full URLs (or live-domain
- * strings like `barber-co.salesflow.site`) pass through unchanged.
+ *   2. Some legacy rows stored a full SUPABASE STORAGE URL directly
+ *      (`https://<proj>.supabase.co/storage/v1/object/public/demo-sites/<slug>.html`).
+ *      Supabase serves those with `Content-Type: text/plain` so the
+ *      browser/WKWebView shows raw HTML *as text* instead of rendering.
+ *
+ *   3. A few rows have the doubled-protocol bug `https://https://...` from
+ *      a historic iOS save path.
+ *
+ * All three resolve via the in-house Vercel proxy at /api/demo-site/<slug>,
+ * which re-serves the bytes with `text/html`.
+ *
+ * Mirrors `resolveDemoUrl()` in
+ * apps/sales-dashboard/src/app/preview/[leadId]/page.tsx so iOS and the
+ * customer preview page behave identically. Backwards-compatible: live
+ * domains (e.g. "barber-co.salesflow.site") pass through with https://;
+ * null/empty stays null.
  */
 export function expandDemoUrl(value: string | null | undefined): string | null {
   if (!value || typeof value !== 'string') return null;
-  const trimmed = value.trim();
+  let trimmed = value.trim();
   if (trimmed.length === 0) return null;
+
+  // (3) Strip historic doubled-protocol bug.
+  trimmed = trimmed.replace(/^https?:\/\/(?=https?:\/\/)/, '');
+
+  // (2) Supabase Storage URL → extract slug, route through proxy.
+  const supabaseMatch = trimmed.match(
+    /^https?:\/\/[^/]+\.supabase\.co\/storage\/v1\/object\/public\/demo-sites\/([^/?#]+?)(?:\.html)?(?:[?#].*)?$/i,
+  );
+  if (supabaseMatch) {
+    return `${PROXY_BASE}/${encodeURIComponent(supabaseMatch[1])}`;
+  }
+
+  // Any other full URL → trust as-is (live demo, custom hosting, etc).
   if (/^https?:\/\//i.test(trimmed)) return trimmed;
-  // Heuristic for "looks like a real domain we should leave alone":
-  // contains a dot AND ends with a TLD-shaped suffix. Slugs are
-  // dash-separated alphanumerics with no dots, so they'll fall through
-  // to the proxy expansion.
+
+  // Live-domain heuristic: dotted + TLD-shaped suffix.
   if (trimmed.includes('.') && /\.[a-z]{2,}$/i.test(trimmed)) {
     return `https://${trimmed}`;
   }
-  return `https://salespatch.co.uk/api/demo-site/${encodeURIComponent(trimmed)}`;
+
+  // (1) Bare slug → route through the proxy.
+  return `${PROXY_BASE}/${encodeURIComponent(trimmed)}`;
 }
 
 export interface LeadAssignmentRow {
