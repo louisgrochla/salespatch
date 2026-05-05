@@ -99,6 +99,18 @@ export default function PaidPage({ params }: { params: { leadId: string } }) {
 
       <p
         style={{
+          fontSize: 12.5,
+          lineHeight: 1.5,
+          color: 'rgba(15,14,12,0.55)',
+          maxWidth: 380,
+          marginBottom: 24,
+        }}
+      >
+        Hosting &amp; support (£25/mo) starts in 30 days. <strong style={{ color: INK }}>Cancel anytime</strong>, no notice or fee — just reply to any email from us.
+      </p>
+
+      <p
+        style={{
           fontSize: 12,
           color: 'rgba(15,14,12,0.4)',
           fontFamily: "'JetBrains Mono', ui-monospace, monospace",

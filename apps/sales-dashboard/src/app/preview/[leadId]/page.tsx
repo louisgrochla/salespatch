@@ -324,7 +324,7 @@ function FloatingCTAButton({
             lineHeight: 1.1,
           }}
         >
-          {setupLabel} setup · then {monthlyLabel}/mo
+          {setupLabel} setup · then {monthlyLabel}/mo · cancel anytime
         </span>
       </span>
       <span

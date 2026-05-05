@@ -835,69 +835,83 @@ function InfoStrip() {
   const items: Array<{ glyph: string; label: string; sub: string }> = [
     { glyph: '◐', label: 'Live in 7 days', sub: 'from payment' },
     { glyph: '✶', label: '£299 today', sub: 'then £25/mo from day 30' },
-    { glyph: '✦', label: 'Tweak anytime', sub: 'just email us' },
+    { glyph: '✦', label: 'Cancel anytime', sub: 'no commitment' },
   ];
   return (
-    <div
-      style={{
-        display: 'flex',
-        gap: 6,
-        margin: '12px 22px 0',
-        padding: '8px 4px',
-        background: 'rgba(184,134,11,0.05)',
-        border: '1px solid rgba(184,134,11,0.18)',
-        borderRadius: 12,
-        flexShrink: 0,
-      }}
-    >
-      {items.map((it, i) => (
-        <div
-          key={it.label}
-          style={{
-            flex: 1,
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            gap: 1,
-            padding: '4px 6px',
-            borderLeft: i === 0 ? 'none' : '1px solid rgba(184,134,11,0.16)',
-            textAlign: 'center',
-          }}
-        >
-          <span
+    <div style={{ margin: '12px 22px 0', flexShrink: 0 }}>
+      <div
+        style={{
+          display: 'flex',
+          gap: 6,
+          padding: '8px 4px',
+          background: 'rgba(184,134,11,0.05)',
+          border: '1px solid rgba(184,134,11,0.18)',
+          borderRadius: 12,
+        }}
+      >
+        {items.map((it, i) => (
+          <div
+            key={it.label}
             style={{
-              fontSize: 14,
-              color: SIGNAL,
-              lineHeight: 1,
-              marginBottom: 2,
+              flex: 1,
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              gap: 1,
+              padding: '4px 6px',
+              borderLeft: i === 0 ? 'none' : '1px solid rgba(184,134,11,0.16)',
+              textAlign: 'center',
             }}
           >
-            {it.glyph}
-          </span>
-          <span
-            style={{
-              fontSize: 11.5,
-              fontWeight: 600,
-              color: INK,
-              letterSpacing: '-0.005em',
-              lineHeight: 1.15,
-            }}
-          >
-            {it.label}
-          </span>
-          <span
-            style={{
-              fontSize: 9.5,
-              color: 'rgba(15,14,12,0.55)',
-              lineHeight: 1.15,
-              fontFamily: "'JetBrains Mono', ui-monospace, monospace",
-              letterSpacing: '0.02em',
-            }}
-          >
-            {it.sub}
-          </span>
-        </div>
-      ))}
+            <span
+              style={{
+                fontSize: 14,
+                color: SIGNAL,
+                lineHeight: 1,
+                marginBottom: 2,
+              }}
+            >
+              {it.glyph}
+            </span>
+            <span
+              style={{
+                fontSize: 11.5,
+                fontWeight: 600,
+                color: INK,
+                letterSpacing: '-0.005em',
+                lineHeight: 1.15,
+              }}
+            >
+              {it.label}
+            </span>
+            <span
+              style={{
+                fontSize: 9.5,
+                color: 'rgba(15,14,12,0.55)',
+                lineHeight: 1.15,
+                fontFamily: "'JetBrains Mono', ui-monospace, monospace",
+                letterSpacing: '0.02em',
+              }}
+            >
+              {it.sub}
+            </span>
+          </div>
+        ))}
+      </div>
+      {/* Tiny clarifier under the strip — explicit about the recurring
+          charge so customers don't feel they're locking in £25/mo forever. */}
+      <p
+        style={{
+          margin: '6px 4px 0',
+          fontSize: 10.5,
+          lineHeight: 1.4,
+          color: 'rgba(15,14,12,0.50)',
+          textAlign: 'center',
+          letterSpacing: '0.005em',
+        }}
+      >
+        £25/mo hosting starts day 30. Cancel any time, no notice or fee.
+      </p>
     </div>
   );
 }

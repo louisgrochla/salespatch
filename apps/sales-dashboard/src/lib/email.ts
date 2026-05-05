@@ -138,7 +138,7 @@ function interestHtml(a: InterestArgs): string {
     </p>
 
     <div style="margin:24px 0;padding:16px 18px;background:rgba(184,134,11,0.06);border:1px solid rgba(184,134,11,0.22);border-radius:12px;font-size:14px;line-height:1.55;color:rgba(15,14,12,0.78);">
-      <strong style="color:#0F0E0C;">If you decide to go ahead:</strong> ${escapeHtml(a.setupFeePoundsLabel)} setup, then ${escapeHtml(a.monthlyPoundsLabel)} for hosting and support. Your site goes live within 7 days. Any tweaks you want, we'll build them in before launch at no extra cost.
+      <strong style="color:#0F0E0C;">If you decide to go ahead:</strong> ${escapeHtml(a.setupFeePoundsLabel)} setup, then ${escapeHtml(a.monthlyPoundsLabel)} for hosting and support starting day 30 — <strong style="color:#0F0E0C;">cancel anytime, no commitment</strong>. Your site goes live within 7 days. Any tweaks you want, we'll build them in before launch at no extra cost.
     </div>
 
     <p style="margin:24px 0 8px;font-size:13px;line-height:1.55;color:rgba(15,14,12,0.55);">
@@ -181,7 +181,8 @@ Or just hit reply if you've got questions. Drop a note to
 ${SUPPORT_EMAIL} any time. Design tweaks, pricing, anything at all.
 
 If you decide to go ahead: ${a.setupFeePoundsLabel} setup, then
-${a.monthlyPoundsLabel} for hosting and support. Your site goes live
+${a.monthlyPoundsLabel} for hosting and support starting day 30 — cancel
+anytime, no commitment. Your site goes live
 within 7 days. Any tweaks you want, we'll build them in before launch
 at no extra cost.
 
@@ -248,7 +249,7 @@ function welcomeHtml(a: WelcomeArgs): string {
           <td style="padding:6px 0;text-align:right;font-weight:500;">${escapeHtml(a.setupFeePoundsLabel)}</td>
         </tr>
         <tr>
-          <td style="padding:6px 0;color:rgba(15,14,12,0.65);">Hosting & support</td>
+          <td style="padding:6px 0;color:rgba(15,14,12,0.65);">Hosting &amp; support<br><span style="font-size:11px;color:rgba(15,14,12,0.50);font-family:'JetBrains Mono',ui-monospace,monospace;">cancel anytime</span></td>
           <td style="padding:6px 0;text-align:right;font-weight:500;">${escapeHtml(a.monthlyPoundsLabel)}</td>
         </tr>
         <tr>
@@ -267,7 +268,7 @@ function welcomeHtml(a: WelcomeArgs): string {
       <li>We finalise your site (copy, photos, design).</li>
       <li>You can request small design changes any time during the 7-day build by emailing <a href="mailto:${escapeHtml(SUPPORT_EMAIL)}" style="color:#B8860B;">${escapeHtml(SUPPORT_EMAIL)}</a>.</li>
       <li>We email you the moment your site is live with your domain, login details, and how to manage it.</li>
-      <li>30 days from today, your £25/mo hosting & support plan starts. We'll send a reminder a few days before.</li>
+      <li>30 days from today, your £25/mo hosting &amp; support plan starts. <strong style="color:#0F0E0C;">Cancel anytime</strong> — no notice, no fee, just reply to this email or drop a line to <a href="mailto:${escapeHtml(SUPPORT_EMAIL)}" style="color:#B8860B;">${escapeHtml(SUPPORT_EMAIL)}</a>. We'll also send a reminder a few days before the first charge.</li>
     </ol>
 
     <div style="margin:24px 0;padding:14px 18px;background:rgba(184,134,11,0.08);border:1px solid rgba(184,134,11,0.25);border-radius:12px;font-size:14px;line-height:1.5;color:rgba(15,14,12,0.78);">
@@ -299,7 +300,7 @@ Thanks for going live with us. Your website will be built and delivered within 7
 
 Order summary
   Setup fee:                 ${a.setupFeePoundsLabel}
-  Hosting & support:         ${a.monthlyPoundsLabel}
+  Hosting & support:         ${a.monthlyPoundsLabel}  (cancel anytime)
   First hosting charge:      ${a.trialEndsLabel}
   Site live by:              ${a.deliveryByLabel}
 
@@ -310,7 +311,9 @@ What happens next
   3. We email you the moment your site is live with your domain, login,
      and how to manage it.
   4. 30 days from today, your £25/mo hosting & support plan starts.
-     We'll send a reminder a few days before.
+     Cancel anytime — no notice, no fee, just reply to this email
+     or write to ${SUPPORT_EMAIL}. We'll also send a reminder a few
+     days before the first charge.
 
 Want a tweak? Reply to this email or drop a note to ${SUPPORT_EMAIL} any
 time in the 7-day window. We'll build changes in before launch at no
