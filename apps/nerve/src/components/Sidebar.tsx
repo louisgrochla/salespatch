@@ -16,6 +16,7 @@ import {
   GitCommit,
   Gavel,
   GraduationCap,
+  Hammer,
   LayoutDashboard,
   Search,
   Sparkles,
@@ -42,6 +43,7 @@ export interface SidebarCounts {
   prompts?: number;
   demos?: number;
   leads?: number;
+  builds?: number;
   literature?: number;
   sections?: number;
   brand?: number;
@@ -70,6 +72,7 @@ export function Sidebar({ counts }: { counts: SidebarCounts }) {
         { href: "/product", label: "Product & System", icon: Cpu, count: counts.prompts },
         { href: "/demos", label: "Demo Library", icon: Boxes, count: counts.demos },
         { href: "/leads", label: "Lead Intelligence", icon: Briefcase, count: counts.leads },
+        { href: "/builds", label: "Customer Builds", icon: Hammer, count: counts.builds },
       ],
     },
     {
