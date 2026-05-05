@@ -34,6 +34,7 @@ interface PhotoEntry {
 }
 
 interface Answers {
+  contact_email: string;
   contact_phone: string;
   top_changes: string;
   has_existing_domain: boolean | null;
@@ -44,6 +45,7 @@ interface Answers {
 }
 
 const EMPTY: Answers = {
+  contact_email: '',
   contact_phone: '',
   top_changes: '',
   has_existing_domain: null,
@@ -59,9 +61,9 @@ const LABELS: Record<
 > = {
   contact: {
     eyebrow: '01 / 05',
-    question: 'Best mobile to',
-    emphasis: 'text you on?',
-    sub: 'Updates and check-ins only. We won’t spam.',
+    question: 'Where can we',
+    emphasis: 'reach you?',
+    sub: 'Email for updates + your launch confirmation, mobile for the occasional text. We won’t spam either.',
     glyph: '✶',
   },
   changes: {
@@ -128,6 +130,7 @@ export default function OnboardingClient({ leadId, businessName, demoUrl }: Prop
         const d = j.data;
         if (!d) return;
         setAnswers({
+          contact_email: d.contact_email ?? '',
           contact_phone: d.contact_phone ?? '',
           top_changes: d.top_changes ?? '',
           has_existing_domain: d.has_existing_domain,
@@ -166,6 +169,7 @@ export default function OnboardingClient({ leadId, businessName, demoUrl }: Prop
     saveTimer.current = setTimeout(async () => {
       try {
         const body: Record<string, unknown> = {};
+        if ('contact_email' in patch) body.contact_email = patch.contact_email;
         if ('contact_phone' in patch) body.contact_phone = patch.contact_phone;
         if ('top_changes' in patch) body.top_changes = patch.top_changes;
         if ('anything_else' in patch) body.anything_else = patch.anything_else;
@@ -509,10 +513,16 @@ export default function OnboardingClient({ leadId, businessName, demoUrl }: Prop
             )}
 
             {step === 'contact' && (
-              <PhoneInput
-                value={answers.contact_phone}
-                onChange={(v) => update('contact_phone', v)}
-              />
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                <EmailInput
+                  value={answers.contact_email}
+                  onChange={(v) => update('contact_email', v)}
+                />
+                <PhoneInput
+                  value={answers.contact_phone}
+                  onChange={(v) => update('contact_phone', v)}
+                />
+              </div>
             )}
 
             {step === 'changes' && (
@@ -629,6 +639,60 @@ function SaveIndicator({ state }: { state: 'idle' | 'saving' | 'saved' | 'error'
     >
       {map[state]}
     </span>
+  );
+}
+
+function EmailInput({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  return (
+    <div
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 0,
+        background: CREAM,
+        border: `1px solid rgba(15,14,12,0.14)`,
+        borderRadius: 16,
+        padding: 4,
+        boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.6)',
+      }}
+    >
+      <span
+        style={{
+          padding: '12px 14px',
+          fontSize: 15,
+          fontFamily: 'inherit',
+          color: 'rgba(15,14,12,0.65)',
+          flexShrink: 0,
+          borderRight: `1px solid rgba(15,14,12,0.10)`,
+          letterSpacing: '0.02em',
+        }}
+      >
+        ✉
+      </span>
+      <input
+        type="email"
+        inputMode="email"
+        autoComplete="email"
+        autoCapitalize="off"
+        autoCorrect="off"
+        spellCheck={false}
+        placeholder="you@yourbusiness.co.uk"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        style={{
+          flex: 1,
+          padding: '12px 14px',
+          fontSize: 18,
+          color: INK,
+          background: 'transparent',
+          border: 0,
+          outline: 'none',
+          fontFamily: 'inherit',
+          letterSpacing: '0.01em',
+          fontWeight: 500,
+        }}
+      />
+    </div>
   );
 }
 

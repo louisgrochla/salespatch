@@ -70,6 +70,98 @@ async function send(args: {
   }
 }
 
+// MARK: — Customer interest (when they enter email in onboarding,
+// pre-payment). Soft, friendly, encourages reply.
+
+export interface InterestArgs {
+  to: string;
+  businessName: string;
+  setupFeePoundsLabel: string;     // e.g. "£299"
+  monthlyPoundsLabel: string;      // e.g. "£25/mo"
+  previewUrl: string;
+  assignmentId: string;
+}
+
+export async function sendCustomerInterest(args: InterestArgs): Promise<SendResult> {
+  const subject = `Thanks for taking a look — questions?`;
+  const html = interestHtml(args);
+  const text = interestText(args);
+  return send({ to: args.to, subject, html, text });
+}
+
+function interestHtml(a: InterestArgs): string {
+  return `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Thanks for taking a look — ${escapeHtml(a.businessName)}</title>
+</head>
+<body style="margin:0;padding:0;background:#FAF8F5;font-family:'Inter Tight','Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;color:#0F0E0C;">
+  <div style="max-width:560px;margin:0 auto;padding:32px 24px;">
+
+    <h1 style="margin:0 0 12px;font-size:30px;font-weight:500;letter-spacing:-0.03em;line-height:1.2;">
+      Thanks for taking a look.
+    </h1>
+    <p style="margin:0 0 18px;font-size:16px;line-height:1.55;color:rgba(15,14,12,0.7);">
+      We saw you putting your details into the site we made for ${escapeHtml(a.businessName)}. Whether you go ahead today or not, we'd love to hear what you think.
+    </p>
+
+    <p style="margin:0 0 18px;font-size:16px;line-height:1.55;color:rgba(15,14,12,0.7);">
+      A real person reads every email we get — just hit reply, or send a note to <a href="mailto:${escapeHtml(SUPPORT_EMAIL)}" style="color:#B8860B;font-weight:500;">${escapeHtml(SUPPORT_EMAIL)}</a>. Questions, design tweaks, anything.
+    </p>
+
+    <div style="margin:24px 0;padding:16px 18px;background:rgba(184,134,11,0.06);border:1px solid rgba(184,134,11,0.22);border-radius:12px;font-size:14px;line-height:1.55;color:rgba(15,14,12,0.78);">
+      <strong style="color:#0F0E0C;">If you decide to go ahead:</strong> ${escapeHtml(a.setupFeePoundsLabel)} setup, then ${escapeHtml(a.monthlyPoundsLabel)} for hosting & support. Your site goes live within 7 days. We'll fold any tweaks you want into the build before launch — no extra cost.
+    </div>
+
+    <p style="margin:24px 0 8px;font-size:15px;line-height:1.55;color:rgba(15,14,12,0.78);">
+      Your demo's still here whenever you want another look:
+    </p>
+    <p style="margin:0 0 8px;">
+      <a href="${escapeHtml(a.previewUrl)}" style="color:#B8860B;font-size:14px;text-decoration:underline;">${escapeHtml(a.previewUrl)}</a>
+    </p>
+
+    <p style="margin:32px 0 0;font-size:13px;line-height:1.6;color:rgba(15,14,12,0.55);">
+      No follow-up emails after this one unless you reply. Promise.
+    </p>
+    <p style="margin:6px 0 0;font-size:13px;line-height:1.6;color:rgba(15,14,12,0.55);">
+      — The SalesPatch team
+    </p>
+
+    <hr style="border:0;border-top:1px solid rgba(15,14,12,0.08);margin:32px 0 16px;">
+    <p style="margin:0;font-size:11px;color:rgba(15,14,12,0.4);font-family:'JetBrains Mono',ui-monospace,monospace;letter-spacing:0.04em;">
+      Reference: ${escapeHtml(a.assignmentId)}
+    </p>
+  </div>
+</body>
+</html>`;
+}
+
+function interestText(a: InterestArgs): string {
+  return `Thanks for taking a look.
+
+We saw you putting your details into the site we made for ${a.businessName}.
+Whether you go ahead today or not, we'd love to hear what you think.
+
+A real person reads every email we get — just hit reply, or send a note
+to ${SUPPORT_EMAIL}. Questions, design tweaks, anything.
+
+If you decide to go ahead: ${a.setupFeePoundsLabel} setup, then
+${a.monthlyPoundsLabel} for hosting & support. Your site goes live within
+7 days. We'll fold any tweaks you want into the build before launch —
+no extra cost.
+
+Your demo's still here whenever you want another look:
+${a.previewUrl}
+
+No follow-up emails after this one unless you reply. Promise.
+— The SalesPatch team
+
+Reference: ${a.assignmentId}
+`;
+}
+
 // MARK: — Customer welcome (after Stripe payment confirmed)
 
 export interface WelcomeArgs {
