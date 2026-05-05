@@ -81,49 +81,87 @@ interface RawOnboarding {
 }
 
 /**
- * Fetch all leads relevant to the build dashboard. We include:
- *   - status='sold' (paid, build in progress)
- *   - status='pitched' (interested, may have entered email)
- * Sorted by paid_at desc (paid first, newest at top), then sold_at,
- * then a final fallback to onboarding updated_at so a still-unpaid
- * lead with recent activity surfaces near the top.
+ * Fetch all leads relevant to the build dashboard.
+ *
+ * The customer flow auto-saves the moment they type into the onboarding
+ * form (debounced 500ms) — so the SOURCE OF TRUTH for "is this customer
+ * actively engaging" is the lead_onboarding_responses table, not the
+ * lead_assignments status. We pull that first, then join the assignment
+ * metadata for business name / paid_at / etc.
+ *
+ * We also union any paid/sold leads that don't yet have an onboarding row
+ * (defensive — shouldn't happen in normal flow, but if it does we don't
+ * want a paying customer to be invisible here).
+ *
+ * Result is sorted: paid first (newest paid at top), then unpaid by most-
+ * recent onboarding activity. So a customer who literally JUST typed
+ * their email lands at the top of the Pitched section.
  */
 export async function fetchBuilds(): Promise<BuildRow[]> {
   const sb = getSupabase();
   if (!sb) return [];
 
-  const { data: assignments, error: aErr } = await sb
-    .from('lead_assignments')
-    .select('id, status, notes, paid_at, sold_at, customer_email')
-    .in('status', ['sold', 'pitched'])
-    .order('paid_at', { ascending: false, nullsFirst: false })
-    .limit(200);
-  if (aErr) {
-    console.error('[builds] lead_assignments fetch failed:', aErr.message);
-    return [];
-  }
-  if (!assignments || assignments.length === 0) return [];
-
-  const ids = (assignments as RawAssignment[]).map((a) => a.id);
-  const { data: onboarding, error: oErr } = await sb
+  // Onboarding responses — every customer who's touched the form. Most
+  // recent activity first so a returning visit / fresh edit surfaces.
+  const { data: responses, error: oErr } = await sb
     .from('lead_onboarding_responses')
     .select(
       'lead_assignment_id, contact_email, contact_phone, top_changes, has_existing_domain, existing_domain, domain_preferences, anything_else, photos, completed_at, welcome_sent_at, updated_at',
     )
-    .in('lead_assignment_id', ids);
+    .order('updated_at', { ascending: false, nullsFirst: false })
+    .limit(200);
   if (oErr) {
     console.error('[builds] onboarding fetch failed:', oErr.message);
   }
+  const onboardingRows = (responses ?? []) as RawOnboarding[];
 
-  const byLead = new Map<string, RawOnboarding>();
-  for (const row of (onboarding ?? []) as RawOnboarding[]) {
-    byLead.set(row.lead_assignment_id, row);
+  // Defensive: also pull paid/sold leads in case any paid without leaving
+  // an onboarding row (would be a bug in the customer flow, but we still
+  // want them visible in the dashboard if it happens).
+  const { data: paidAssignments, error: pErr } = await sb
+    .from('lead_assignments')
+    .select('id, status, notes, paid_at, sold_at, customer_email')
+    .or('status.eq.sold,paid_at.not.is.null')
+    .order('paid_at', { ascending: false, nullsFirst: false })
+    .limit(200);
+  if (pErr) {
+    console.error('[builds] paid assignments fetch failed:', pErr.message);
   }
 
-  return (assignments as RawAssignment[]).map((a) => {
-    const ob = byLead.get(a.id);
+  // Union of leadIds we care about.
+  const ids = new Set<string>();
+  for (const r of onboardingRows) ids.add(r.lead_assignment_id);
+  for (const a of (paidAssignments ?? []) as RawAssignment[]) ids.add(a.id);
+  if (ids.size === 0) return [];
+
+  // Fetch the assignment row for every leadId we care about, in one go.
+  const { data: assignments, error: aErr } = await sb
+    .from('lead_assignments')
+    .select('id, status, notes, paid_at, sold_at, customer_email')
+    .in('id', Array.from(ids));
+  if (aErr) {
+    console.error('[builds] lead_assignments fetch failed:', aErr.message);
+    return [];
+  }
+
+  const assignmentByLead = new Map<string, RawAssignment>();
+  for (const a of (assignments ?? []) as RawAssignment[]) assignmentByLead.set(a.id, a);
+
+  const onboardingByLead = new Map<string, RawOnboarding>();
+  for (const r of onboardingRows) onboardingByLead.set(r.lead_assignment_id, r);
+
+  // Build rows for every unique leadId. Skip any whose assignment row has
+  // disappeared (data inconsistency — worth logging).
+  const rows: BuildRow[] = [];
+  for (const id of ids) {
+    const a = assignmentByLead.get(id);
+    if (!a) {
+      console.warn(`[builds] orphan onboarding row, no assignment for ${id}`);
+      continue;
+    }
+    const ob = onboardingByLead.get(id);
     const meta = parseNotes(a.notes);
-    return {
+    rows.push({
       leadId: a.id,
       status: a.status,
       businessName: meta.business_name ?? null,
@@ -142,8 +180,20 @@ export async function fetchBuilds(): Promise<BuildRow[]> {
       completedAt: ob?.completed_at ?? null,
       welcomeSentAt: ob?.welcome_sent_at ?? null,
       onboardingUpdatedAt: ob?.updated_at ?? null,
-    };
+    });
+  }
+
+  // Sort: paid first (newest paid_at), then unpaid by most-recent
+  // onboarding activity, then by sold_at as a final tiebreaker.
+  rows.sort((a, b) => {
+    if (a.paidAt && b.paidAt) return b.paidAt.localeCompare(a.paidAt);
+    if (a.paidAt) return -1;
+    if (b.paidAt) return 1;
+    const aAct = a.onboardingUpdatedAt ?? a.soldAt ?? '';
+    const bAct = b.onboardingUpdatedAt ?? b.soldAt ?? '';
+    return bAct.localeCompare(aAct);
   });
+  return rows;
 }
 
 /** Sidebar count: paid leads still awaiting delivery (sold but not yet

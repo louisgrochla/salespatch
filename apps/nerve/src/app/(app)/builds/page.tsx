@@ -10,6 +10,7 @@ import { PageHeader } from '@/components/PageHeader';
 import { StatTile } from '@/components/StatTile';
 import { fetchBuilds, type BuildRow, type BuildPhoto } from '@/lib/supabase-builds';
 import { format } from 'date-fns';
+import { AutoRefresher } from './AutoRefresher';
 
 export const dynamic = 'force-dynamic';
 
@@ -244,7 +245,8 @@ export default async function BuildsPage() {
     <div className="p-6 space-y-6">
       <PageHeader
         title="Customer Builds"
-        subtitle="paid + pitched leads · onboarding answers · photos · domain prefs"
+        subtitle="every customer who's touched the onboarding form · photos, answers, payment status"
+        actions={<AutoRefresher intervalMs={20000} />}
       />
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -275,7 +277,7 @@ export default async function BuildsPage() {
           {pitched.length > 0 && (
             <section className="space-y-3">
               <h2 className="font-mono text-2xs uppercase tracking-wider text-fg-muted">
-                Pitched ({pitched.length}) — interested, not paid
+                In progress ({pitched.length}) — onboarding started, not paid
               </h2>
               {pitched.map((b) => (
                 <BuildCard key={b.leadId} b={b} />
