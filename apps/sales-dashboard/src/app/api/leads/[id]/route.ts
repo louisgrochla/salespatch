@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { resolveUserFromRequest } from '@/lib/auth';
-import { getAssignment } from '@/lib/leads-db';
+import { getAssignment, expandDemoUrl } from '@/lib/leads-db';
 import type { LeadDetail, ReviewItem, ObjectionPair } from '@/lib/types';
 
 export async function GET(
@@ -43,7 +43,7 @@ export async function GET(
     logo_filename: (n.logo_filename as string | null) ?? null,
     gallery_filenames: toStringArray(n.gallery_filenames),
     demo_site_html: (n.demo_site_html as string | null) ?? null,
-    demo_site_domain: (n.demo_site_domain as string | null) ?? null,
+    demo_site_domain: expandDemoUrl(n.demo_site_domain as string | null | undefined),
     demo_site_qa_score: (n.demo_site_qa_score as number | null) ?? null,
     has_demo_site: !!n.demo_site_domain,
     trust_badges: toStringArray(n.trust_badges),
