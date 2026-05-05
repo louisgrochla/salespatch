@@ -11,6 +11,39 @@ import { isSupabaseMode } from './auth-db';
 import { getSupabaseServer } from './supabase';
 import type { SalesStats } from './types';
 
+/**
+ * Expand a `demo_site_domain` value into a fully-qualified URL the iOS app
+ * can hit directly.
+ *
+ * Background: admin/upload stores the demo HTML in Supabase Storage at
+ * `<slug>.html`, and admin/assign stamps `notes.demo_site_domain` with the
+ * BARE slug (e.g. "third-circle-coffee"). The iOS app's webview tried to
+ * load that as a domain (`https://third-circle-coffee`) which DNS-fails →
+ * "this demo hasn't been uploaded yet" fallback.
+ *
+ * Fix: at API response time, expand the slug to the public proxy URL
+ * `https://salespatch.co.uk/api/demo-site/<slug>` which streams the HTML
+ * back from Supabase Storage. The iOS code already handles full URLs in
+ * its `domain.startsWith('http') ? domain : 'https://' + domain` check.
+ *
+ * Backwards-compatible: any existing rows with full URLs (or live-domain
+ * strings like `barber-co.salesflow.site`) pass through unchanged.
+ */
+export function expandDemoUrl(value: string | null | undefined): string | null {
+  if (!value || typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  if (trimmed.length === 0) return null;
+  if (/^https?:\/\//i.test(trimmed)) return trimmed;
+  // Heuristic for "looks like a real domain we should leave alone":
+  // contains a dot AND ends with a TLD-shaped suffix. Slugs are
+  // dash-separated alphanumerics with no dots, so they'll fall through
+  // to the proxy expansion.
+  if (trimmed.includes('.') && /\.[a-z]{2,}$/i.test(trimmed)) {
+    return `https://${trimmed}`;
+  }
+  return `https://salespatch.co.uk/api/demo-site/${encodeURIComponent(trimmed)}`;
+}
+
 export interface LeadAssignmentRow {
   id: string;                    // assignment_id
   lead_id: string;

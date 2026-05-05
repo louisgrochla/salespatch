@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { resolveUserFromRequest } from '@/lib/auth';
-import { listAssignments, type LeadAssignmentRow } from '@/lib/leads-db';
+import { listAssignments, expandDemoUrl, type LeadAssignmentRow } from '@/lib/leads-db';
 import type { LeadCard } from '@/lib/types';
 
 export async function GET(req: NextRequest) {
@@ -38,7 +38,7 @@ function rowToCard(r: LeadAssignmentRow): LeadCard {
     has_website: !!n.has_website,
     website_quality_score: (n.website_quality_score as number | null) ?? null,
     has_demo_site: !!n.demo_site_domain,
-    demo_site_domain: (n.demo_site_domain as string | null) ?? null,
+    demo_site_domain: expandDemoUrl(n.demo_site_domain as string | null | undefined),
     follow_up_at: r.follow_up_at,
     follow_up_note: r.follow_up_note,
     contact_name: r.contact_name,
