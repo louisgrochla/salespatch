@@ -175,7 +175,7 @@ export async function createCheckoutSessionForAssignment(
           unit_amount: setupPence,
           product_data: {
             name: `Website setup — ${businessName}`,
-            description: `One-time setup fee. Includes first month of hosting & support. ${monthlyDisplay}/month thereafter, starting in 30 days.`,
+            description: `One-time setup fee. Includes first month of hosting & support. ${monthlyDisplay}/month thereafter, starting in 30 days. Cancel anytime, no commitment.`,
           },
         },
         quantity: 1,
