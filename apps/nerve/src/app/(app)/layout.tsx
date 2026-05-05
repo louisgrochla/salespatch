@@ -6,6 +6,7 @@ export const dynamic = "force-dynamic";
 import { Sidebar, type SidebarCounts } from "@/components/Sidebar";
 import { SessionProvider } from "@/components/SessionProvider";
 import { prisma } from "@/lib/db";
+import { countPendingBuilds } from "@/lib/supabase-builds";
 
 async function loadCounts(): Promise<SidebarCounts> {
   try {
@@ -16,6 +17,7 @@ async function loadCounts(): Promise<SidebarCounts> {
       prompts,
       demos,
       leads,
+      builds,
       literature,
       sections,
       brand,
@@ -28,6 +30,9 @@ async function loadCounts(): Promise<SidebarCounts> {
       prisma.promptLibraryEntry.count(),
       prisma.demoRecord.count(),
       prisma.leadRecord.count(),
+      // Pending-builds count comes from Supabase, not Prisma — wrap so a
+      // missing service-role key never breaks the layout shell.
+      countPendingBuilds().catch(() => 0),
       prisma.literatureEntry.count(),
       prisma.dissertationSection.count(),
       prisma.brandDocument.count(),
@@ -35,7 +40,7 @@ async function loadCounts(): Promise<SidebarCounts> {
       prisma.changelogEntry.count(),
     ]);
     return {
-      pitches, operations, revenue, prompts, demos, leads,
+      pitches, operations, revenue, prompts, demos, leads, builds,
       literature, sections, brand, legal, changelog,
     };
   } catch {
