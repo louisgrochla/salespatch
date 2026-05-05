@@ -387,6 +387,72 @@ export default function OnboardingClient({ leadId, businessName, demoUrl }: Prop
         </span>
       </div>
 
+      {/* Floating "welcome back" banner — sits between the business-name pill
+          and the sheet, visually attached to neither. Auto-dismissed when
+          the customer taps the drag handle to expand the sheet (signal that
+          they're focused on the form, no longer reading the banner). */}
+      {resumed && (
+        <div
+          style={{
+            position: 'fixed',
+            top: 'calc(env(safe-area-inset-top) + 70px)',
+            left: 16,
+            right: 16,
+            padding: '10px 12px',
+            background: 'rgba(245, 250, 247, 0.92)',
+            backdropFilter: 'blur(10px)',
+            WebkitBackdropFilter: 'blur(10px)',
+            border: '1px solid rgba(61,158,95,0.45)',
+            borderRadius: 14,
+            boxShadow: '0 8px 24px rgba(15,14,12,0.18)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 10,
+            zIndex: 19,
+            animation: 'sheetIn 380ms cubic-bezier(0.22, 1, 0.36, 1) both',
+          }}
+        >
+          <span
+            style={{
+              width: 6,
+              height: 6,
+              borderRadius: '50%',
+              background: LIVE_GREEN,
+              flexShrink: 0,
+              boxShadow: `0 0 6px ${LIVE_GREEN}88`,
+            }}
+          />
+          <span
+            style={{
+              fontSize: 12.5,
+              lineHeight: 1.4,
+              color: 'rgba(15,14,12,0.82)',
+              flex: 1,
+            }}
+          >
+            <strong style={{ color: INK, fontWeight: 600 }}>Welcome back.</strong>{' '}
+            Everything you entered last time is saved. Pick up wherever feels right.
+          </span>
+          <button
+            type="button"
+            onClick={() => setResumed(false)}
+            aria-label="Dismiss"
+            style={{
+              background: 'transparent',
+              border: 0,
+              padding: '2px 6px',
+              cursor: 'pointer',
+              color: 'rgba(15,14,12,0.50)',
+              fontSize: 16,
+              lineHeight: 1,
+              flexShrink: 0,
+            }}
+          >
+            ×
+          </button>
+        </div>
+      )}
+
       {/* Bottom sheet */}
       <section
         style={{
@@ -409,10 +475,19 @@ export default function OnboardingClient({ leadId, businessName, demoUrl }: Prop
         }}
       >
         {/* Drag handle — also a tap-target to expand/collapse the sheet.
-            Larger hit area than the visible bar so it works on a phone. */}
+            Larger hit area than the visible bar so it works on a phone.
+            Tapping to expand also dismisses the welcome-back banner: by
+            committing to "more room" the customer is signalling they're
+            past the welcome message and into the form. */}
         <button
           type="button"
-          onClick={() => setExpanded((p) => !p)}
+          onClick={() =>
+            setExpanded((p) => {
+              const next = !p;
+              if (next) setResumed(false);
+              return next;
+            })
+          }
           aria-label={expanded ? 'Shrink sheet' : 'Expand sheet'}
           aria-expanded={expanded}
           style={{
@@ -477,63 +552,6 @@ export default function OnboardingClient({ leadId, businessName, demoUrl }: Prop
             }}
           />
         </div>
-
-        {/* Returning-visitor banner. Only renders when initial load detects
-            saved answers. Dismissable so it doesn't sit there forever. */}
-        {resumed && (
-          <div
-            style={{
-              margin: '10px 22px 0',
-              padding: '10px 12px',
-              background: 'rgba(61,158,95,0.08)',
-              border: '1px solid rgba(61,158,95,0.28)',
-              borderRadius: 12,
-              display: 'flex',
-              alignItems: 'center',
-              gap: 10,
-              flexShrink: 0,
-            }}
-          >
-            <span
-              style={{
-                width: 6,
-                height: 6,
-                borderRadius: '50%',
-                background: LIVE_GREEN,
-                flexShrink: 0,
-                boxShadow: `0 0 6px ${LIVE_GREEN}88`,
-              }}
-            />
-            <span
-              style={{
-                fontSize: 12.5,
-                lineHeight: 1.4,
-                color: 'rgba(15,14,12,0.78)',
-                flex: 1,
-              }}
-            >
-              <strong style={{ color: INK, fontWeight: 600 }}>Welcome back.</strong>{' '}
-              Everything you entered last time is saved. Pick up wherever feels right.
-            </span>
-            <button
-              type="button"
-              onClick={() => setResumed(false)}
-              aria-label="Dismiss"
-              style={{
-                background: 'transparent',
-                border: 0,
-                padding: '2px 6px',
-                cursor: 'pointer',
-                color: 'rgba(15,14,12,0.45)',
-                fontSize: 14,
-                lineHeight: 1,
-                flexShrink: 0,
-              }}
-            >
-              ×
-            </button>
-          </div>
-        )}
 
         {/* Always-visible info strip. Three compact chips that frame the
             offer + reassurance. Sets expectations so the form feels like a
