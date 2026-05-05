@@ -314,7 +314,7 @@ function FloatingCTAButton({
     >
       <span style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
         <span style={{ fontSize: 15, fontWeight: 600, lineHeight: 1.1 }}>
-          Go live now
+          Live in 7 days
         </span>
         <span
           style={{
@@ -395,7 +395,7 @@ function PaidState({ businessName, demoUrl }: { businessName: string; demoUrl: s
           maxWidth: 'calc(100vw - 32px)',
         }}
       >
-        <span style={{ color: SIGNAL }}>✓ Paid</span> — building your site. We'll text you within 24h.
+        <span style={{ color: SIGNAL }}>✓ Paid</span> — your site goes live within 7 days. Email <a href="mailto:support@salespatch.co.uk" style={{ color: CREAM, textDecoration: 'underline' }}>support@salespatch.co.uk</a> for any design changes.
       </div>
     </div>
   );
