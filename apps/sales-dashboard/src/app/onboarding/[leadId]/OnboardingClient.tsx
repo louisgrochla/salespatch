@@ -703,69 +703,102 @@ export default function OnboardingClient({ leadId, businessName, demoUrl }: Prop
           </div>
         </main>
 
-        {/* Action row — single line, three pills max. The middle "Pay £299"
-            pill is the secondary affordance; styled outline-gold so it's
-            clearly tappable but quieter than the primary Next pill. Hidden
-            on the last step (Next *is* the pay CTA there). Tighter padding
-            than before so we don't eat into the scrollable form area. */}
+        {/* Action row — pills float over the cream sheet, no toolbar bar
+            behind them. A short fade-out gradient handles content that
+            scrolls behind the pills so it never reads as overlap.
+
+            Two rows:
+              1. [Back] ............ [Next] (primary CTA per step)
+              2.    "Or pay £299 now and share details later"  (centered link)
+            The secondary link is hidden on the final step where the
+            primary Next button is already the pay CTA. */}
         <div
           style={{
             display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            gap: 8,
-            padding: '10px 18px calc(env(safe-area-inset-bottom) + 10px)',
-            borderTop: `1px solid ${LINE}`,
+            flexDirection: 'column',
+            gap: 6,
+            padding: '8px 18px calc(env(safe-area-inset-bottom) + 8px)',
             flexShrink: 0,
-            background: CREAM_WARM,
+            // Soft cream-to-cream fade at the top so any form content
+            // scrolling behind the pills dissolves rather than collides.
+            // No solid bar, no border line.
+            background:
+              `linear-gradient(180deg, rgba(243,237,227,0) 0%, ${CREAM_WARM} 38%)`,
+            paddingTop: 22,
           }}
         >
-          <button
-            onClick={back}
-            disabled={stepIndex === 0}
+          <div
             style={{
-              ...ghostButtonStyle,
-              opacity: stepIndex === 0 ? 0.3 : 1,
-              pointerEvents: stepIndex === 0 ? 'none' : 'auto',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: 12,
             }}
-            className="oc-press"
           >
-            ← Back
-          </button>
+            <button
+              onClick={back}
+              disabled={stepIndex === 0}
+              style={{
+                ...ghostButtonStyle,
+                opacity: stepIndex === 0 ? 0.3 : 1,
+                pointerEvents: stepIndex === 0 ? 'none' : 'auto',
+              }}
+              className="oc-press"
+            >
+              ← Back
+            </button>
+            {isLastStep ? (
+              <button
+                onClick={continueToPayment}
+                disabled={checkoutLoading}
+                className="oc-press"
+                style={{
+                  ...primaryButtonStyle,
+                  opacity: checkoutLoading ? 0.6 : 1,
+                  cursor: checkoutLoading ? 'wait' : 'pointer',
+                }}
+              >
+                {checkoutLoading ? 'Opening checkout…' : 'Pay £299 · start the build →'}
+              </button>
+            ) : (
+              <button onClick={advance} className="oc-press" style={primaryButtonStyle}>
+                Next →
+              </button>
+            )}
+          </div>
 
+          {/* Secondary "pay now, share details later" link. Centered text
+              link, gold-deep underline. Hidden on the last step. */}
           {!isLastStep && (
-            <button
-              onClick={continueToPayment}
-              disabled={checkoutLoading}
-              className="oc-press"
+            <div
               style={{
-                ...payInlinePillStyle,
-                opacity: checkoutLoading ? 0.5 : 1,
-                cursor: checkoutLoading ? 'wait' : 'pointer',
-              }}
-              aria-label="Pay £299 now and share details later"
-            >
-              {checkoutLoading ? '…' : 'Pay £299'}
-            </button>
-          )}
-
-          {isLastStep ? (
-            <button
-              onClick={continueToPayment}
-              disabled={checkoutLoading}
-              className="oc-press"
-              style={{
-                ...primaryButtonStyle,
-                opacity: checkoutLoading ? 0.6 : 1,
-                cursor: checkoutLoading ? 'wait' : 'pointer',
+                textAlign: 'center',
+                fontSize: 12,
+                color: 'rgba(15,14,12,0.50)',
+                letterSpacing: '0.005em',
+                lineHeight: 1.4,
               }}
             >
-              {checkoutLoading ? 'Opening checkout…' : 'Pay £299 · start →'}
-            </button>
-          ) : (
-            <button onClick={advance} className="oc-press" style={primaryButtonStyle}>
-              Next →
-            </button>
+              <button
+                onClick={continueToPayment}
+                disabled={checkoutLoading}
+                style={{
+                  background: 'transparent',
+                  border: 0,
+                  padding: 0,
+                  font: 'inherit',
+                  color: SIGNAL_DEEP,
+                  textDecoration: 'underline',
+                  textUnderlineOffset: 3,
+                  cursor: checkoutLoading ? 'wait' : 'pointer',
+                  letterSpacing: 'inherit',
+                }}
+              >
+                {checkoutLoading
+                  ? 'Opening checkout…'
+                  : 'Or pay £299 now and share details later'}
+              </button>
+            </div>
           )}
         </div>
       </section>
@@ -1715,23 +1748,6 @@ const ghostButtonStyle: React.CSSProperties = {
   border: `1px solid rgba(15,14,12,0.14)`,
   borderRadius: 9999,
   fontSize: 13.5,
-  cursor: 'pointer',
-  fontFamily: 'inherit',
-  transition: 'all 140ms ease',
-};
-
-// Outline-gold pill used as the in-row "Pay £299" secondary CTA. Visibly
-// tappable but quieter than primaryButtonStyle so it doesn't compete with
-// the active-step Next button.
-const payInlinePillStyle: React.CSSProperties = {
-  padding: '10px 14px',
-  background: 'rgba(184,134,11,0.08)',
-  color: SIGNAL_DEEP,
-  border: `1px solid rgba(184,134,11,0.40)`,
-  borderRadius: 9999,
-  fontSize: 13.5,
-  fontWeight: 600,
-  letterSpacing: '-0.005em',
   cursor: 'pointer',
   fontFamily: 'inherit',
   transition: 'all 140ms ease',
