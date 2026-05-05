@@ -70,35 +70,35 @@ const LABELS: Record<
     eyebrow: '01 / 05',
     question: 'Where can we',
     emphasis: 'reach you?',
-    sub: 'Email for updates + your launch confirmation, mobile for the occasional text. We won’t spam either.',
+    sub: 'Email for your launch confirmation, mobile for the occasional text. We won’t spam either.',
     glyph: '✶',
   },
   changes: {
     eyebrow: '02 / 05',
     question: 'Any',
     emphasis: 'first-day tweaks?',
-    sub: 'Tap any that apply, or write your own. We’ll handle the bigger stuff after launch.',
+    sub: 'All optional. Tap what comes to mind. Anything bigger you can email us during the build.',
     glyph: '✦',
   },
   photos: {
     eyebrow: '03 / 05',
     question: 'Bring your business',
     emphasis: 'to life.',
-    sub: 'Storefront, products, food, a smiling face. Add as many as you like.',
+    sub: 'Storefront, products, food, a smiling face. Add as many as you like, or skip and send later.',
     glyph: '◐',
   },
   domain: {
     eyebrow: '04 / 05',
     question: 'Where will',
     emphasis: 'people find you?',
-    sub: 'If you don’t have a domain yet, we’ll buy one for you.',
+    sub: 'If you don’t have a domain yet, we’ll buy one for you. You can change your mind any time before launch.',
     glyph: '◊',
   },
   else: {
     eyebrow: '05 / 05',
     question: 'Anything else',
     emphasis: 'we should know?',
-    sub: 'Optional — 30 seconds, max.',
+    sub: 'Optional. 30 seconds, max. After this you can pay and we start the build.',
     glyph: '✺',
   },
 };
@@ -429,6 +429,11 @@ export default function OnboardingClient({ leadId, businessName, demoUrl }: Prop
           />
         </div>
 
+        {/* Always-visible info strip. Three compact chips that frame the
+            offer + reassurance. Sets expectations so the form feels like a
+            speed-up, not a gate before payment. */}
+        <InfoStrip />
+
         {/* Eyebrow row */}
         <header
           style={{
@@ -590,47 +595,168 @@ export default function OnboardingClient({ leadId, businessName, demoUrl }: Prop
         <div
           style={{
             display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            gap: 12,
+            flexDirection: 'column',
+            gap: 8,
             padding: '14px 22px calc(env(safe-area-inset-bottom) + 16px)',
             borderTop: `1px solid ${LINE}`,
             flexShrink: 0,
             background: CREAM_WARM,
           }}
         >
-          <button
-            onClick={back}
-            disabled={stepIndex === 0}
+          <div
             style={{
-              ...ghostButtonStyle,
-              opacity: stepIndex === 0 ? 0.3 : 1,
-              pointerEvents: stepIndex === 0 ? 'none' : 'auto',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: 12,
             }}
-            className="oc-press"
           >
-            ← Back
-          </button>
-          {isLastStep ? (
             <button
-              onClick={continueToPayment}
-              disabled={checkoutLoading}
-              className="oc-press"
+              onClick={back}
+              disabled={stepIndex === 0}
               style={{
-                ...primaryButtonStyle,
-                opacity: checkoutLoading ? 0.6 : 1,
-                cursor: checkoutLoading ? 'wait' : 'pointer',
+                ...ghostButtonStyle,
+                opacity: stepIndex === 0 ? 0.3 : 1,
+                pointerEvents: stepIndex === 0 ? 'none' : 'auto',
+              }}
+              className="oc-press"
+            >
+              ← Back
+            </button>
+            {isLastStep ? (
+              <button
+                onClick={continueToPayment}
+                disabled={checkoutLoading}
+                className="oc-press"
+                style={{
+                  ...primaryButtonStyle,
+                  opacity: checkoutLoading ? 0.6 : 1,
+                  cursor: checkoutLoading ? 'wait' : 'pointer',
+                }}
+              >
+                {checkoutLoading ? 'Opening checkout…' : 'Pay £299 · start the build →'}
+              </button>
+            ) : (
+              <button onClick={advance} className="oc-press" style={primaryButtonStyle}>
+                Next →
+              </button>
+            )}
+          </div>
+
+          {/* Subtle "pay now, share details later" affordance. Hidden on the
+              final step (the primary CTA is already payment there). Keeps the
+              form feeling like an aid, not a gate, without being pushy. */}
+          {!isLastStep && (
+            <div
+              style={{
+                textAlign: 'center',
+                fontSize: 11.5,
+                color: 'rgba(15,14,12,0.50)',
+                letterSpacing: '0.005em',
+                lineHeight: 1.4,
               }}
             >
-              {checkoutLoading ? 'Opening checkout…' : 'Continue to payment →'}
-            </button>
-          ) : (
-            <button onClick={advance} className="oc-press" style={primaryButtonStyle}>
-              Next →
-            </button>
+              <button
+                onClick={continueToPayment}
+                disabled={checkoutLoading}
+                style={{
+                  background: 'transparent',
+                  border: 0,
+                  padding: 0,
+                  font: 'inherit',
+                  color: SIGNAL_DEEP,
+                  textDecoration: 'underline',
+                  textUnderlineOffset: 3,
+                  cursor: checkoutLoading ? 'wait' : 'pointer',
+                  letterSpacing: 'inherit',
+                }}
+              >
+                {checkoutLoading
+                  ? 'Opening checkout…'
+                  : 'Or pay £299 now and share details later'}
+              </button>
+            </div>
           )}
         </div>
       </section>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// InfoStrip — three short, always-visible reassurances at the top of the
+// sheet. Reframes the form as "speed us up" rather than "gate before pay".
+// Content order is deliberate: timeline first (we move fast), price second
+// (transparent + low), edit-anytime last (de-risk the decision).
+// ---------------------------------------------------------------------------
+
+function InfoStrip() {
+  const items: Array<{ glyph: string; label: string; sub: string }> = [
+    { glyph: '◐', label: 'Live in 7 days', sub: 'from payment' },
+    { glyph: '✶', label: '£299 today', sub: 'then £25/mo from day 30' },
+    { glyph: '✦', label: 'Tweak anytime', sub: 'just email us' },
+  ];
+  return (
+    <div
+      style={{
+        display: 'flex',
+        gap: 6,
+        margin: '12px 22px 0',
+        padding: '8px 4px',
+        background: 'rgba(184,134,11,0.05)',
+        border: '1px solid rgba(184,134,11,0.18)',
+        borderRadius: 12,
+        flexShrink: 0,
+      }}
+    >
+      {items.map((it, i) => (
+        <div
+          key={it.label}
+          style={{
+            flex: 1,
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            gap: 1,
+            padding: '4px 6px',
+            borderLeft: i === 0 ? 'none' : '1px solid rgba(184,134,11,0.16)',
+            textAlign: 'center',
+          }}
+        >
+          <span
+            style={{
+              fontSize: 14,
+              color: SIGNAL,
+              lineHeight: 1,
+              marginBottom: 2,
+            }}
+          >
+            {it.glyph}
+          </span>
+          <span
+            style={{
+              fontSize: 11.5,
+              fontWeight: 600,
+              color: INK,
+              letterSpacing: '-0.005em',
+              lineHeight: 1.15,
+            }}
+          >
+            {it.label}
+          </span>
+          <span
+            style={{
+              fontSize: 9.5,
+              color: 'rgba(15,14,12,0.55)',
+              lineHeight: 1.15,
+              fontFamily: "'JetBrains Mono', ui-monospace, monospace",
+              letterSpacing: '0.02em',
+            }}
+          >
+            {it.sub}
+          </span>
+        </div>
+      ))}
     </div>
   );
 }
