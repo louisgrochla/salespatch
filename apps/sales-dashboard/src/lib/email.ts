@@ -86,7 +86,11 @@ export interface InterestArgs {
   businessName: string;
   setupFeePoundsLabel: string;     // e.g. "£299"
   monthlyPoundsLabel: string;      // e.g. "£25/mo"
-  previewUrl: string;
+  previewUrl: string;              // /preview/<assignmentId> — view-only demo
+  onboardingUrl: string;           // /onboarding/<assignmentId> — resume the
+                                   // form. Customer's data is auto-saved
+                                   // there so a returning visit picks back
+                                   // up exactly where they left off.
   assignmentId: string;
 }
 
@@ -115,19 +119,33 @@ function interestHtml(a: InterestArgs): string {
       Thanks for sharing your email on the demo we put together for ${escapeHtml(a.businessName)}. Whether you go ahead or not, we'd love to know what you think.
     </p>
 
+    <p style="margin:0 0 22px;font-size:16px;line-height:1.55;color:rgba(15,14,12,0.7);">
+      Anything you'd already filled in is saved. You can come back, look around, find your photos, and finish whenever you're ready.
+    </p>
+
+    <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 0 24px;">
+      <tr>
+        <td style="background:#B8860B;border-radius:12px;">
+          <a href="${escapeHtml(a.onboardingUrl)}" style="display:inline-block;padding:14px 22px;color:#FAF8F5;font-size:15px;font-weight:600;text-decoration:none;letter-spacing:0.005em;">
+            Pick up where you left off →
+          </a>
+        </td>
+      </tr>
+    </table>
+
     <p style="margin:0 0 18px;font-size:16px;line-height:1.55;color:rgba(15,14,12,0.7);">
-      Just hit reply if you've got questions, or drop a note to <a href="mailto:${escapeHtml(SUPPORT_EMAIL)}" style="color:#B8860B;font-weight:500;">${escapeHtml(SUPPORT_EMAIL)}</a>. Design tweaks, pricing, anything at all.
+      Or just hit reply if you've got questions. Drop a note to <a href="mailto:${escapeHtml(SUPPORT_EMAIL)}" style="color:#B8860B;font-weight:500;">${escapeHtml(SUPPORT_EMAIL)}</a> any time. Design tweaks, pricing, anything at all.
     </p>
 
     <div style="margin:24px 0;padding:16px 18px;background:rgba(184,134,11,0.06);border:1px solid rgba(184,134,11,0.22);border-radius:12px;font-size:14px;line-height:1.55;color:rgba(15,14,12,0.78);">
       <strong style="color:#0F0E0C;">If you decide to go ahead:</strong> ${escapeHtml(a.setupFeePoundsLabel)} setup, then ${escapeHtml(a.monthlyPoundsLabel)} for hosting and support. Your site goes live within 7 days. Any tweaks you want, we'll build them in before launch at no extra cost.
     </div>
 
-    <p style="margin:24px 0 8px;font-size:15px;line-height:1.55;color:rgba(15,14,12,0.78);">
-      Your demo's still here whenever you want another look:
+    <p style="margin:24px 0 8px;font-size:13px;line-height:1.55;color:rgba(15,14,12,0.55);">
+      Just want another look at the demo?
     </p>
     <p style="margin:0 0 8px;">
-      <a href="${escapeHtml(a.previewUrl)}" style="color:#B8860B;font-size:14px;text-decoration:underline;">${escapeHtml(a.previewUrl)}</a>
+      <a href="${escapeHtml(a.previewUrl)}" style="color:#B8860B;font-size:13px;text-decoration:underline;">${escapeHtml(a.previewUrl)}</a>
     </p>
 
     <p style="margin:32px 0 0;font-size:13px;line-height:1.6;color:rgba(15,14,12,0.55);">
@@ -154,16 +172,21 @@ Thanks for sharing your email on the demo we put together for
 ${a.businessName}. Whether you go ahead or not, we'd love to know
 what you think.
 
-Just hit reply if you've got questions, or drop a note to ${SUPPORT_EMAIL}.
-Design tweaks, pricing, anything at all.
+Anything you'd already filled in is saved. You can come back, look
+around, find your photos, and finish whenever you're ready:
+
+  ${a.onboardingUrl}
+
+Or just hit reply if you've got questions. Drop a note to
+${SUPPORT_EMAIL} any time. Design tweaks, pricing, anything at all.
 
 If you decide to go ahead: ${a.setupFeePoundsLabel} setup, then
 ${a.monthlyPoundsLabel} for hosting and support. Your site goes live
 within 7 days. Any tweaks you want, we'll build them in before launch
 at no extra cost.
 
-Your demo's still here whenever you want another look:
-${a.previewUrl}
+Just want another look at the demo?
+  ${a.previewUrl}
 
 We won't follow up unless you reply. Promise.
 
