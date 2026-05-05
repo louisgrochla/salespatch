@@ -128,6 +128,11 @@ export default function OnboardingClient({ leadId, businessName, demoUrl }: Prop
   const [error, setError] = useState<string | null>(null);
   const [checkoutUrl, setCheckoutUrl] = useState<string | null>(null);
   const [checkoutLoading, setCheckoutLoading] = useState(false);
+  // Sheet height — collapsed shows the demo as a backdrop, expanded gives
+  // the customer more room to type without losing the demo entirely. Tap
+  // the drag handle to toggle. Auto-expands when an input gets focus on
+  // mobile so the keyboard doesn't shove fields out of view.
+  const [expanded, setExpanded] = useState(false);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
@@ -374,7 +379,7 @@ export default function OnboardingClient({ leadId, businessName, demoUrl }: Prop
           left: 0,
           right: 0,
           bottom: 0,
-          height: 'min(74dvh, 660px)',
+          height: expanded ? 'min(92dvh, 880px)' : 'min(74dvh, 660px)',
           background: `linear-gradient(180deg, ${CREAM} 0%, ${CREAM_WARM} 100%)`,
           color: INK,
           borderTopLeftRadius: 28,
@@ -385,16 +390,31 @@ export default function OnboardingClient({ leadId, businessName, demoUrl }: Prop
           flexDirection: 'column',
           zIndex: 10,
           animation: 'sheetIn 520ms cubic-bezier(0.22, 1, 0.36, 1) both',
+          transition: 'height 360ms cubic-bezier(0.22, 1, 0.36, 1)',
         }}
       >
-        {/* Drag handle */}
-        <div
+        {/* Drag handle — also a tap-target to expand/collapse the sheet.
+            Larger hit area than the visible bar so it works on a phone. */}
+        <button
+          type="button"
+          onClick={() => setExpanded((p) => !p)}
+          aria-label={expanded ? 'Shrink sheet' : 'Expand sheet'}
+          aria-expanded={expanded}
           style={{
             display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
             justifyContent: 'center',
+            gap: 4,
             paddingTop: 10,
-            paddingBottom: 4,
+            paddingBottom: 6,
             flexShrink: 0,
+            background: 'transparent',
+            border: 0,
+            cursor: 'pointer',
+            width: '100%',
+            // Slightly bigger hit zone without changing the visual.
+            minHeight: 28,
           }}
         >
           <span
@@ -402,10 +422,24 @@ export default function OnboardingClient({ leadId, businessName, demoUrl }: Prop
               width: 38,
               height: 4,
               borderRadius: 2,
-              background: 'rgba(15,14,12,0.16)',
+              background: 'rgba(15,14,12,0.22)',
+              transition: 'background 200ms',
             }}
           />
-        </div>
+          <span
+            style={{
+              fontSize: 9.5,
+              letterSpacing: '0.10em',
+              textTransform: 'uppercase',
+              color: 'rgba(15,14,12,0.42)',
+              fontFamily: "'JetBrains Mono', ui-monospace, monospace",
+              lineHeight: 1,
+              transition: 'opacity 200ms',
+            }}
+          >
+            {expanded ? '⌄ tap for less room' : '⌃ tap for more room'}
+          </span>
+        </button>
 
         {/* Progress bar */}
         <div
@@ -472,8 +506,14 @@ export default function OnboardingClient({ leadId, businessName, demoUrl }: Prop
           <SaveIndicator state={savingState} />
         </header>
 
-        {/* Scrollable question content */}
+        {/* Scrollable question content. We auto-expand the sheet on focus
+            of any descendant input so the iOS keyboard doesn't squash the
+            field the customer is typing into. */}
         <main
+          onFocusCapture={(e) => {
+            const tag = (e.target as HTMLElement).tagName;
+            if (tag === 'INPUT' || tag === 'TEXTAREA') setExpanded(true);
+          }}
           style={{
             flex: 1,
             overflowY: 'auto',
