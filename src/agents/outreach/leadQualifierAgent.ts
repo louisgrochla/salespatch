@@ -30,6 +30,8 @@ interface LeadWithProfile {
   address?: string;
   description?: string;
   reviews?: Array<{ rating: number; text: string; time?: number }>;
+  instagram_followers?: number;
+  instagram_handle?: string;
 }
 
 interface QualifiedLead extends LeadWithProfile {
@@ -50,9 +52,103 @@ const VERTICAL_MULTIPLIERS: Record<string, number> = {
   beauty: 1.2,
   retail: 1.1,
   professional: 1.0,
-  trades: 0.3,
+  trades: 0.9,
+  health: 1.1,
+  automotive: 1.0,
+  services: 1.0,
   unknown: 0.8,
 };
+
+// ---------------------------------------------------------------------------
+// Hard rejection — instant disqualification
+// ---------------------------------------------------------------------------
+
+const KNOWN_CHAINS_EXPANDED = [
+  // Fast food
+  "mcdonald", "burger king", "kfc", "subway", "domino", "pizza hut", "five guys",
+  "taco bell", "wendy", "papa john", "papa johns",
+  // Coffee
+  "costa", "starbucks", "caffe nero", "pret a manger", "pret ",
+  // High street food
+  "greggs", "nando", "wagamama", "zizzi", "pizza express", "yo sushi",
+  "frankie & benny", "tgi friday", "ask italian", "prezzo", "bella italia",
+  "harvester", "beefeater", "toby carvery", "hungry horse",
+  // Pubs
+  "wetherspoon", "slug and lettuce", "all bar one", "greene king",
+  "stonegate", "mitchells & butlers",
+  // Hair
+  "toni & guy", "toni&guy", "supercuts", "rush hair", "headmasters",
+  // Retail
+  "tesco", "sainsbury", "asda", "aldi", "lidl", "morrisons", "waitrose",
+  "boots", "superdrug", "the body shop", "lush ",
+  // Fitness
+  "anytime fitness", "puregym", "pure gym", "the gym group", "david lloyd",
+  "nuffield health", "virgin active", "bannatyne",
+  // Bakery / cake
+  "cake box", "black sheep coffee", "gail", "greggs",
+  // Other
+  "specsavers", "vision express", "eurocar parts", "halfords",
+  "kwik fit", "national tyres",
+];
+
+interface HardRejectResult {
+  rejected: boolean;
+  reason: string;
+}
+
+function checkHardReject(lead: LeadWithProfile): HardRejectResult {
+  // 1. Permanently or temporarily closed
+  if (lead.business_status === "CLOSED_PERMANENTLY") {
+    return { rejected: true, reason: "Permanently closed" };
+  }
+  if (lead.business_status === "CLOSED_TEMPORARILY") {
+    return { rejected: true, reason: "Temporarily closed" };
+  }
+
+  // 2. Instagram followers > 10K = chain signal
+  if (lead.instagram_followers && lead.instagram_followers > 10_000) {
+    return {
+      rejected: true,
+      reason: `Chain signal: ${(lead.instagram_followers / 1000).toFixed(1)}K Instagram followers`,
+    };
+  }
+
+  // 3. Known chain by name
+  const nameLower = lead.business_name.toLowerCase();
+  for (const chain of KNOWN_CHAINS_EXPANDED) {
+    if (nameLower.includes(chain)) {
+      return { rejected: true, reason: `Known chain: matches "${chain}"` };
+    }
+  }
+
+  // 4. is_chain flag from scout
+  if (lead.is_chain) {
+    return { rejected: true, reason: "Chain/franchise detected by scout" };
+  }
+
+  // 5. Google review count > 1000 = large operation
+  if (lead.google_review_count && lead.google_review_count > 1000) {
+    return {
+      rejected: true,
+      reason: `Large operation: ${lead.google_review_count} Google reviews`,
+    };
+  }
+
+  // 6. Website quality > 70 = they don't need us
+  if (lead.website_quality_score != null && lead.website_quality_score > 70) {
+    return {
+      rejected: true,
+      reason: `Good existing website (quality ${lead.website_quality_score}/100) — doesn't need us`,
+    };
+  }
+
+  // 7. No physical premises (unless trades — they go to customers)
+  if (lead.has_premises === false && lead.vertical_category !== "trades") {
+    return { rejected: true, reason: "No physical premises detected" };
+  }
+
+  return { rejected: false, reason: "" };
+}
 
 // ---------------------------------------------------------------------------
 // Agent
@@ -89,6 +185,13 @@ export const leadQualifierAgent: AgentHandler = async (input) => {
   const rejected: RejectedLead[] = [];
 
   for (const lead of leadsToScore) {
+    // Hard rejections first — instant disqualification
+    const hardReject = checkHardReject(lead);
+    if (hardReject.rejected) {
+      rejected.push({ ...lead, rejection_reason: hardReject.reason });
+      continue;
+    }
+
     const { score, reasons } = scoreLead(lead);
     const vertical = lead.vertical_category ?? "unknown";
     const multiplier = VERTICAL_MULTIPLIERS[vertical] ?? 0.8;
@@ -101,16 +204,7 @@ export const leadQualifierAgent: AgentHandler = async (input) => {
     if (finalScore >= 30) {
       qualified.push({ ...lead, qualification_score: finalScore, qualification_reasons: reasons });
     } else {
-      let reason: string;
-      if (vertical === "trades") {
-        reason = `Trades business — no walk-in premises (${score} × ${multiplier} = ${finalScore})`;
-      } else if (lead.is_chain) {
-        reason = `Chain/franchise — corporate decisions (${finalScore})`;
-      } else if (finalScore <= 0) {
-        reason = "Established business with good website — not a fit";
-      } else {
-        reason = `Score ${finalScore} below threshold — ${reasons.join("; ") || "insufficient signals"}`;
-      }
+      const reason = `Score ${finalScore} below threshold — ${reasons.join("; ") || "insufficient signals"}`;
       rejected.push({ ...lead, rejection_reason: reason });
     }
   }
@@ -160,6 +254,7 @@ function scoreLead(lead: LeadWithProfile): { score: number; reasons: string[] } 
   const reviews = lead.google_review_count ?? 0;
 
   // ── WEBSITE OPPORTUNITY ──
+  // Note: websites with quality > 70 are hard-rejected before reaching scoring
   if (!lead.has_website || lead.has_website === 0) {
     score += 40;
     reasons.push("No website — prime candidate");
@@ -169,9 +264,9 @@ function scoreLead(lead: LeadWithProfile): { score: number; reasons: string[] } 
   } else if (lead.website_quality_score != null && lead.website_quality_score < 60) {
     score += 15;
     reasons.push(`Below-average website (${lead.website_quality_score}/100)`);
-  } else if (lead.website_quality_score != null && lead.website_quality_score >= 70) {
-    score -= 20;
-    reasons.push(`Good existing website (${lead.website_quality_score}/100)`);
+  } else if (lead.website_quality_score != null && lead.website_quality_score <= 70) {
+    score += 5;
+    reasons.push(`Decent website but could be better (${lead.website_quality_score}/100)`);
   }
 
   // ── NEW BUSINESS SIGNALS (high priority) ──
@@ -225,10 +320,8 @@ function scoreLead(lead: LeadWithProfile): { score: number; reasons: string[] } 
   }
 
   // ── CHAIN DETECTION ──
-  if (lead.is_chain) {
-    score -= 15;
-    reasons.push("Chain/franchise — not independent");
-  }
+  // Note: known chains and high-follower accounts are hard-rejected before scoring.
+  // This only catches edge cases where is_chain wasn't strong enough for hard reject.
 
   // ── SOCIAL PRESENCE ──
   if (lead.has_social_links) {
@@ -249,15 +342,10 @@ function scoreLead(lead: LeadWithProfile): { score: number; reasons: string[] } 
   }
 
   // ── BUSINESS STATUS ──
+  // Note: closed businesses are hard-rejected before scoring
   if (lead.business_status === "OPERATIONAL") {
     score += 5;
     reasons.push("Confirmed operational");
-  } else if (lead.business_status === "CLOSED_TEMPORARILY") {
-    score -= 30;
-    reasons.push("Temporarily closed");
-  } else if (lead.business_status === "CLOSED_PERMANENTLY") {
-    score -= 100;
-    reasons.push("Permanently closed");
   }
 
   // ── PAIN POINTS ──

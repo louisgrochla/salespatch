@@ -24,6 +24,12 @@
       "runtimeExecutable": "npm",
       "runtimeArgs": ["--prefix", "apps/nerve", "run", "dev"],
       "port": 4400
+    },
+    {
+      "name": "workbench",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["tsx", "tools/workbench/server.ts"],
+      "port": 3456
     }
   ]
 }
