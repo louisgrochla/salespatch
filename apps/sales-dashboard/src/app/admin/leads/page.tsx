@@ -213,31 +213,62 @@ export default function AdminLeadsPage() {
       }
     }
 
-    // Upload HTML demo if present
+    // Upload HTML demo if present.
+    //
+    // Two-step flow so the file bytes never traverse Vercel (4.5 MB limit on
+    // serverless function bodies): mint a signed Supabase upload URL on our
+    // API, then PUT the file straight to Supabase Storage from the browser.
     if (htmlFile) {
       setUploading(true);
       try {
-        const fd = new FormData();
-        fd.append('file', htmlFile);
         const slugSource = briefBusinessName || businessName || stripExt(htmlFile.name);
-        if (slugSource) fd.append('slug', slugSource);
-        const res = await fetch('/api/admin/demo-upload', { method: 'POST', body: fd });
-        const body = await res.json();
-        if (!res.ok) {
-          setDropMsg({ kind: 'err', text: body.error ?? `Upload failed (${res.status})` });
-        } else {
-          const url = body.data.public_url as string;
-          setUploadedDemoUrl(url);
-          setDemoDomain(url); // stash on the lead payload
+        const signRes = await fetch('/api/admin/demo-upload', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ filename: htmlFile.name, slug: slugSource || undefined }),
+        });
+        const signMsg = await readJsonOrText(signRes);
+        if (!signRes.ok) {
           setDropMsg({
-            kind: 'ok',
-            text:
-              (jsonFile ? `Filled from ${jsonFile.name} · ` : '') +
-              `Uploaded ${htmlFile.name} (${body.data.size_kb} KB)`,
+            kind: 'err',
+            text: signMsg.error ?? `Couldn't get upload URL (${signRes.status})`,
           });
+          return;
         }
+        const { signed_url, public_url } = signMsg.body.data ?? {};
+        if (!signed_url || !public_url) {
+          setDropMsg({ kind: 'err', text: 'Upload URL response was malformed.' });
+          return;
+        }
+
+        const putRes = await fetch(signed_url, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'text/html; charset=utf-8' },
+          body: htmlFile,
+        });
+        if (!putRes.ok) {
+          const putMsg = await readJsonOrText(putRes);
+          setDropMsg({
+            kind: 'err',
+            text: putMsg.error ?? `Storage rejected upload (${putRes.status})`,
+          });
+          return;
+        }
+
+        setUploadedDemoUrl(public_url);
+        setDemoDomain(public_url); // stash on the lead payload
+        const sizeKb = Math.round(htmlFile.size / 1024);
+        setDropMsg({
+          kind: 'ok',
+          text:
+            (jsonFile ? `Filled from ${jsonFile.name} · ` : '') +
+            `Uploaded ${htmlFile.name} (${sizeKb} KB)`,
+        });
       } catch (err) {
-        setDropMsg({ kind: 'err', text: 'Network error uploading demo.' });
+        setDropMsg({
+          kind: 'err',
+          text: `Couldn't reach upload service: ${err instanceof Error ? err.message : 'unknown'}`,
+        });
       } finally {
         setUploading(false);
       }
@@ -249,6 +280,22 @@ export default function AdminLeadsPage() {
   };
 
   const stripExt = (filename: string) => filename.replace(/\.[^.]+$/, '');
+
+  // Read a Response as JSON when possible; fall back to a short text excerpt.
+  // Returns { body, error } so callers don't need a second try/catch around
+  // .json() — Supabase / Vercel sometimes return HTML on error.
+  const readJsonOrText = async (
+    res: Response,
+  ): Promise<{ body: any; error?: string }> => {
+    const text = await res.text();
+    try {
+      const body = text ? JSON.parse(text) : {};
+      return { body, error: typeof body?.error === 'string' ? body.error : undefined };
+    } catch {
+      const excerpt = text.replace(/\s+/g, ' ').slice(0, 200);
+      return { body: {}, error: excerpt || `HTTP ${res.status}` };
+    }
+  };
 
   const handleCreate = async () => {
     setError('');
