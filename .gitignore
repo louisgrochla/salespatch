@@ -15,7 +15,9 @@ data-test/
 apps/*/.next/
 apps/*/node_modules/
 apps/*/dist/
+apps/*/tsconfig.tsbuildinfo
 apps/mobile/.expo/
+apps/ios/**/build/
 packages/*/node_modules/
 
 # Binary files that shouldn't be in the repo
