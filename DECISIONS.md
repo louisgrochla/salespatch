@@ -36,6 +36,56 @@ Keep entries terse. One screen each is plenty.
 
 ---
 
+## 2026-05-07 — Pushing the migration: rebase, secret redaction, GitHub Push Protection
+
+**Context:** Stage 3 (CLAUDE.md rewrite, DECISIONS.md, `/finish`) shipped as PR #31.
+Then turned to pushing the composer branch with the 6 cleanup commits we'd added
+during the migration. Discovered the branch was actually 16 commits ahead of
+updated main, not 6 — 10 pre-existing feature commits (composer workbench,
+qualifier hard-rejects, Apify scout, profiler IG fields, simplified pipeline)
+weren't factored into the original audit.
+
+**Tried:** Rebase the whole branch onto current `origin/main` with
+`git rebase --empty=drop origin/main`. Pre-check showed main hadn't touched any
+of the 4 src files composer modifies since the fork point, so conflicts predicted
+to be minimal.
+
+**Result:** One conflict — `.claude/launch.json` (both branches added entries:
+composer added "workbench", main added "nerve"). Resolved by keeping both. The
+duplicate `feat(claude): add nerve slash commands` commit auto-dropped — `--empty=drop`
+recognised *"patch contents already upstream"*.
+
+`git push --force-with-lease` then **failed**: GitHub Push Protection caught live
+API key strings in `context/handovers/2026-04_mas-handover.md` (Apify, OpenRouter).
+Those keys had been rotated weeks earlier but their stale values were still in the
+archived doc. Redacted in place, amended the tip commit, force-pushed — accepted.
+Two PRs landed: #31 (workflow infra) and #32 (composer + cleanup, 15 commits).
+
+**Decision:** Force-pushing an existing remote branch is fine when the rebase is the
+intended operation. Use `--force-with-lease`, never plain `--force` — the lease
+refuses the push if the remote moved underneath, protecting against lost work.
+
+**Watch out for:**
+- **Audit hygiene:** when auditing a feature branch, count *all* commits ahead of
+  updated main, not just the ones added in the current session. The original
+  migration plan undercounted by 10.
+- **GitHub Push Protection scans the entire push, not just the diff.** Pre-existing
+  secret strings in older commits will block force-pushes through them. Solution:
+  redact and amend (or interactive rebase reword for non-tip commits). Never click
+  the "allow secret" unblock URL — bypassing protection defeats its purpose.
+- **`git rebase --empty=drop`** cleanly handles the "patch already upstream" case —
+  useful when a duplicate commit landed via two different routes.
+- **Verifying stash redundancy:** `git diff stash@{N} main -- <file>` works because
+  stashes are commit-like. Per-file diff size against current main tells you which
+  parts of a stash have been superseded by upstream evolution.
+- Even rotated keys don't belong in committed files — scrubbing stale-secret
+  documents is a required step when archiving old handover docs into the repo.
+
+**Related:** PR #31, PR #32. Branches `feat/cli-workflow-onboarding`,
+`feat/composer-workbench-and-qualifier` (rebased to `1ae0747`).
+
+---
+
 ## 2026-05-07 — Migrating workflow from Claude Desktop to terminal Claude Code
 
 **Context:** The repo was in unknown shape after months of Claude Desktop sessions.
