@@ -159,7 +159,11 @@ export default function AdminLeadsPage() {
     setOpeningHours(joinLines(b.opening_hours));
     setTrustBadges(joinCsv(b.trust_badges));
     setAvoidTopics(joinCsv(b.avoid_topics));
-    setDemoDomain(s('demo_site_domain'));
+    // If the user already uploaded an HTML demo (in this session), keep that
+    // Supabase URL — it's the live one. The JSON's demo_site_domain is often a
+    // placeholder shop domain from the lead-json skill that doesn't actually serve.
+    const briefDomain = s('demo_site_domain');
+    setDemoDomain(uploadedDemoUrl || briefDomain);
     setContactName(s('contact_name'));
     setContactRole(s('contact_role'));
     const brand = b.brand_colours as Record<string, string> | undefined;
@@ -280,6 +284,48 @@ export default function AdminLeadsPage() {
   };
 
   const stripExt = (filename: string) => filename.replace(/\.[^.]+$/, '');
+
+  // Pull files out of a DataTransfer, unwrapping any dropped folders one level
+  // deep — so dropping the `submit/` folder behaves the same as dropping its
+  // two files. We only walk one level because the convention is a flat folder
+  // (`<slug>.html` + `<slug>.json`); deeper trees aren't a use case here.
+  const collectDroppedFiles = async (dt: DataTransfer): Promise<File[]> => {
+    const items = Array.from(dt.items ?? []);
+    if (!items.length) return Array.from(dt.files ?? []);
+    const out: File[] = [];
+    await Promise.all(
+      items.map(async (item) => {
+        if (item.kind !== 'file') return;
+        const entry = (item as any).webkitGetAsEntry?.();
+        if (!entry) {
+          const f = item.getAsFile();
+          if (f) out.push(f);
+          return;
+        }
+        if (entry.isFile) {
+          const f: File = await new Promise((res) => entry.file(res));
+          out.push(f);
+        } else if (entry.isDirectory) {
+          const reader = entry.createReader();
+          const entries: any[] = await new Promise((res) => reader.readEntries(res));
+          await Promise.all(
+            entries
+              .filter((e) => e.isFile)
+              .map(
+                (e) =>
+                  new Promise<void>((res) => {
+                    e.file((f: File) => {
+                      out.push(f);
+                      res();
+                    });
+                  }),
+              ),
+          );
+        }
+      }),
+    );
+    return out;
+  };
 
   // Read a Response as JSON when possible; fall back to a short text excerpt.
   // Returns { body, error } so callers don't need a second try/catch around
@@ -585,10 +631,11 @@ export default function AdminLeadsPage() {
               setDropActive(true);
             }}
             onDragLeave={() => setDropActive(false)}
-            onDrop={(e) => {
+            onDrop={async (e) => {
               e.preventDefault();
               setDropActive(false);
-              if (e.dataTransfer.files?.length) handleFiles(e.dataTransfer.files);
+              const files = await collectDroppedFiles(e.dataTransfer);
+              if (files.length) handleFiles(files);
             }}
             className="rounded-2xl p-6 text-center cursor-pointer transition-colors"
             style={{
@@ -610,8 +657,9 @@ export default function AdminLeadsPage() {
               Drop the brief + demo site
             </p>
             <p className="text-[12.5px] m-0" style={{ color: CREAM_DIM, lineHeight: 1.55 }}>
-              JSON fills the form. HTML uploads and becomes the live demo link. Drop both at
-              once, or <span style={{ color: SIGNAL, textDecoration: 'underline' }}>click to browse</span>.
+              JSON fills the form. HTML uploads and becomes the live demo link. Drop the
+              <code style={{ fontFamily: MONO_FONT }}> submit/ </code>folder, both files,
+              or <span style={{ color: SIGNAL, textDecoration: 'underline' }}>click to browse</span>.
             </p>
             <input
               id="brief-file"
