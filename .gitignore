@@ -28,4 +28,5 @@ packages/*/node_modules/
 *.xcworkspace/xcuserdata/
 xcuserdata/
 *.xcworkspace/contents.xcworkspacedata
+apps/ios/**/*.xcworkspace/
 reports/*.html
