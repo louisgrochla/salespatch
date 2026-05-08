@@ -14,12 +14,15 @@ import {
   Cpu,
   FileText,
   GitCommit,
+  GitBranch,
   Gavel,
   GraduationCap,
   Hammer,
   LayoutDashboard,
   Search,
   Sparkles,
+  Target,
+  Workflow,
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/cn";
@@ -73,6 +76,14 @@ export function Sidebar({ counts }: { counts: SidebarCounts }) {
         { href: "/demos", label: "Demo Library", icon: Boxes, count: counts.demos },
         { href: "/leads", label: "Lead Intelligence", icon: Briefcase, count: counts.leads },
         { href: "/builds", label: "Customer Builds", icon: Hammer, count: counts.builds },
+      ],
+    },
+    {
+      label: "pipeline",
+      items: [
+        { href: "/pipeline", label: "Pivot", icon: Workflow },
+        { href: "/pipeline/episodes", label: "Episodes", icon: GitBranch },
+        { href: "/pipeline/strategies", label: "Strategies", icon: Target },
       ],
     },
     {
