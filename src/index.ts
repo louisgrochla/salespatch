@@ -26,6 +26,7 @@ import { HeuristicCritic } from "./evaluation/heuristicCritic.js";
 import { ReflectionLoop } from "./evaluation/reflectionLoop.js";
 import { AgentCapabilityRegistry } from "./runtime/agentRegistry.js";
 import { AttributionEngine } from "./evaluation/attributionEngine.js";
+import { StrategicStore } from "./memory/strategicStore.js";
 import { PipelineEngine } from "./pipeline/engine.js";
 import { PipelineScheduler } from "./pipeline/scheduler.js";
 import { SQLitePipelineStore } from "./pipeline/sqlitePipelineStore.js";
@@ -98,6 +99,10 @@ async function main(): Promise<void> {
   // ── Episodic memory (per-run history with critic scores + outcomes) ──
   const episodicStore = new EpisodicStore(dbPath);
   closeables.push(episodicStore);
+
+  // ── Strategic memory (cross-run knowledge, populated by nightly ranker) ──
+  const strategicStore = new StrategicStore(dbPath);
+  closeables.push(strategicStore);
 
   // ── Pipeline runtime + capability registry ──
   // Created early so the reflection loop can derive its enabled set from it.
