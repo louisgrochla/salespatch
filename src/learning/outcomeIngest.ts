@@ -1,6 +1,7 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { createLogger } from "../lib/logger.js";
 import { DecisionStore } from "./decisionStore.js";
+import type { EpisodicStore, Episode } from "../memory/episodicStore.js";
 
 const log = createLogger("outcome-ingest");
 
@@ -104,7 +105,10 @@ export function verifySignature(
 // ── Ingester ──
 
 export class OutcomeIngester {
-  constructor(private readonly decisionStore: DecisionStore) {
+  constructor(
+    private readonly decisionStore: DecisionStore,
+    private readonly episodicStore?: EpisodicStore,
+  ) {
     // Reach into the underlying database to install ingest tables alongside
     // decisions/outcomes/learning_insights. We avoid a parallel SQLite handle.
     (this.decisionStore as unknown as { db: { exec(sql: string): void } }).db.exec(SCHEMA_SQL);
@@ -160,6 +164,7 @@ export class OutcomeIngester {
     // Attach an outcome row to each matched decision. Lag is computed against
     // the outcome's occurred_at timestamp.
     const occurredAtMs = Date.parse(payload.occurred_at);
+    const episodeIdsTouched = new Set<string>();
     for (const d of decisions) {
       const lagHours = Number.isFinite(occurredAtMs)
         ? Math.max(0, (occurredAtMs - Date.parse(d.created_at)) / 3_600_000)
@@ -173,6 +178,19 @@ export class OutcomeIngester {
         notes: this.formatNotes(payload),
         lag_hours: lagHours,
       });
+
+      // Mirror onto the episode for that decision's run, once per run_id.
+      if (this.episodicStore && d.run_id && !episodeIdsTouched.has(d.run_id)) {
+        episodeIdsTouched.add(d.run_id);
+        const updated = this.episodicStore.attachOutcome(d.run_id, {
+          pitch_outcome: mapOutcomeKindToEpisode(payload.outcome_type),
+          close_amount_gbp: payload.agreed_price_gbp,
+          outcome_notes: this.formatNotes(payload),
+        });
+        if (updated) {
+          this.attachEpisodeIdToLog(payload.external_id, updated.id);
+        }
+      }
     }
 
     // Persist the ingest log row regardless of match outcome.
@@ -236,6 +254,14 @@ export class OutcomeIngester {
   }
 
   // ── Internal ──
+
+  private attachEpisodeIdToLog(externalId: string, episodeId: string): void {
+    (this.decisionStore as unknown as {
+      db: { prepare(sql: string): { run(...p: unknown[]): unknown } };
+    }).db
+      .prepare("UPDATE outcome_ingest_log SET episode_id = ? WHERE external_id = ?")
+      .run(episodeId, externalId);
+  }
 
   private matchByBusinessNameAndDate(
     businessName: string,
@@ -314,4 +340,19 @@ interface IngestLogRow {
   match_strategy: string;
   episode_id: string | null;
   ingested_at: string;
+}
+
+function mapOutcomeKindToEpisode(
+  kind: OutcomeKind,
+): NonNullable<Episode["pitch_outcome"]> {
+  switch (kind) {
+    case "pitch_closed":
+      return "closed";
+    case "pitch_rejected":
+      return "rejected";
+    case "pitch_followup":
+      return "follow_up";
+    default:
+      return "no_outcome";
+  }
 }

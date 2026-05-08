@@ -21,6 +21,9 @@ import { DecisionStore } from "./learning/decisionStore.js";
 import { withLearning } from "./learning/learningAgent.js";
 import { OutcomeIngester } from "./learning/outcomeIngest.js";
 import { SupabaseOutcomePoller } from "./learning/supabaseOutcomePoller.js";
+import { EpisodicStore } from "./memory/episodicStore.js";
+import { HeuristicCritic } from "./evaluation/heuristicCritic.js";
+import { ReflectionLoop } from "./evaluation/reflectionLoop.js";
 import { PipelineEngine } from "./pipeline/engine.js";
 import { PipelineScheduler } from "./pipeline/scheduler.js";
 import { SQLitePipelineStore } from "./pipeline/sqlitePipelineStore.js";
@@ -90,8 +93,29 @@ async function main(): Promise<void> {
   const decisionStore = new DecisionStore(dbPath);
   closeables.push(decisionStore);
 
+  // ── Episodic memory (per-run history with critic scores + outcomes) ──
+  const episodicStore = new EpisodicStore(dbPath);
+  closeables.push(episodicStore);
+
+  // ── Critic + reflection (only site-composer-agent participates today) ──
+  const critic = new HeuristicCritic();
+  const reflectionLoop = new ReflectionLoop(
+    critic,
+    {
+      threshold: Number(process.env.CRITIC_THRESHOLD ?? "0.7"),
+      maxRetries: Number(process.env.CRITIC_MAX_RETRIES ?? "1"),
+      enabledAgents: new Set(
+        (process.env.CRITIC_ENABLED_AGENTS ?? "site-composer-agent")
+          .split(",")
+          .map((s) => s.trim())
+          .filter(Boolean),
+      ),
+    },
+    episodicStore,
+  );
+
   // ── Outcome ingest (cross-system pitch result bridge) ──
-  const outcomeIngester = new OutcomeIngester(decisionStore);
+  const outcomeIngester = new OutcomeIngester(decisionStore, episodicStore);
   const outcomePoller = new SupabaseOutcomePoller(decisionStore, outcomeIngester);
 
   // ── Pipeline engine ──
@@ -116,6 +140,11 @@ async function main(): Promise<void> {
     pipelineStore,
     agentRuntime,
     notificationStore,
+    undefined, // budgetPolicy — keep default
+    undefined, // dispatchAdapters
+    episodicStore,
+    reflectionLoop,
+    decisionStore,
   );
 
   // Auto-register pipeline definitions
