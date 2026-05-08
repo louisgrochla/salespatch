@@ -24,6 +24,7 @@ import { SupabaseOutcomePoller } from "./learning/supabaseOutcomePoller.js";
 import { EpisodicStore } from "./memory/episodicStore.js";
 import { HeuristicCritic } from "./evaluation/heuristicCritic.js";
 import { ReflectionLoop } from "./evaluation/reflectionLoop.js";
+import { AgentCapabilityRegistry } from "./runtime/agentRegistry.js";
 import { PipelineEngine } from "./pipeline/engine.js";
 import { PipelineScheduler } from "./pipeline/scheduler.js";
 import { SQLitePipelineStore } from "./pipeline/sqlitePipelineStore.js";
@@ -97,30 +98,11 @@ async function main(): Promise<void> {
   const episodicStore = new EpisodicStore(dbPath);
   closeables.push(episodicStore);
 
-  // ── Critic + reflection (only site-composer-agent participates today) ──
-  const critic = new HeuristicCritic();
-  const reflectionLoop = new ReflectionLoop(
-    critic,
-    {
-      threshold: Number(process.env.CRITIC_THRESHOLD ?? "0.7"),
-      maxRetries: Number(process.env.CRITIC_MAX_RETRIES ?? "1"),
-      enabledAgents: new Set(
-        (process.env.CRITIC_ENABLED_AGENTS ?? "site-composer-agent")
-          .split(",")
-          .map((s) => s.trim())
-          .filter(Boolean),
-      ),
-    },
-    episodicStore,
-  );
-
-  // ── Outcome ingest (cross-system pitch result bridge) ──
-  const outcomeIngester = new OutcomeIngester(decisionStore, episodicStore);
-  const outcomePoller = new SupabaseOutcomePoller(decisionStore, outcomeIngester);
-
-  // ── Pipeline engine ──
+  // ── Pipeline runtime + capability registry ──
+  // Created early so the reflection loop can derive its enabled set from it.
   const agentRuntime = new MultiAgentRuntime();
-  registerOutreachAgents(agentRuntime);
+  const agentRegistry = new AgentCapabilityRegistry(agentRuntime);
+  registerOutreachAgents(agentRuntime, agentRegistry);
 
   // Wrap all registered agents with self-learning decision logging
   for (const agentId of agentRuntime.listRegistered()) {
@@ -135,7 +117,30 @@ async function main(): Promise<void> {
   log.info("agents registered with learning", {
     agents: agentRuntime.listRegistered(),
     count: agentRuntime.listRegistered().length,
+    capabilities: agentRegistry.list().length,
   });
+
+  // ── Critic + reflection ──
+  // Reflection-enabled agents derived from the capability registry. The env
+  // override remains useful for ops emergencies (force-disable a noisy agent).
+  const critic = new HeuristicCritic();
+  const envOverride = process.env.CRITIC_ENABLED_AGENTS;
+  const enabledFromEnv = envOverride
+    ? new Set(envOverride.split(",").map((s) => s.trim()).filter(Boolean))
+    : undefined;
+  const reflectionLoop = new ReflectionLoop(
+    critic,
+    {
+      threshold: Number(process.env.CRITIC_THRESHOLD ?? "0.7"),
+      maxRetries: Number(process.env.CRITIC_MAX_RETRIES ?? "1"),
+      enabledAgents: enabledFromEnv ?? agentRegistry.reflectionEnabledIds(),
+    },
+    episodicStore,
+  );
+
+  // ── Outcome ingest (cross-system pitch result bridge) ──
+  const outcomeIngester = new OutcomeIngester(decisionStore, episodicStore);
+  const outcomePoller = new SupabaseOutcomePoller(decisionStore, outcomeIngester);
   const pipelineEngine = new PipelineEngine(
     pipelineStore,
     agentRuntime,

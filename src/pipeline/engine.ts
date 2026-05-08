@@ -7,8 +7,13 @@ import { PipelineBudgetPolicy, PipelineNodeRun, PipelineRun } from "./types.js";
 import type { EpisodicStore } from "../memory/episodicStore.js";
 import type { ReflectionLoop } from "../evaluation/reflectionLoop.js";
 import type { DecisionStore } from "../learning/decisionStore.js";
+import { InMemoryWorkingMemory } from "../runtime/workingMemory.js";
+import type { WorkingMemory } from "../runtime/types.js";
 
 export class PipelineEngine {
+  /** WorkingMemory instances keyed by runId — shared across nodes of one run. */
+  private readonly workingMemories = new Map<string, WorkingMemory>();
+
   constructor(
     private readonly store: SQLitePipelineStore,
     private readonly runtime: MultiAgentRuntime,
@@ -22,6 +27,15 @@ export class PipelineEngine {
     private readonly reflectionLoop?: ReflectionLoop,
     private readonly decisionStore?: DecisionStore,
   ) {}
+
+  private getOrCreateWorkingMemory(runId: string): WorkingMemory {
+    let wm = this.workingMemories.get(runId);
+    if (!wm) {
+      wm = new InMemoryWorkingMemory(runId);
+      this.workingMemories.set(runId, wm);
+    }
+    return wm;
+  }
 
   createLeadGenerationDefinition(): ReturnType<SQLitePipelineStore["upsertDefinition"]> {
     return this.store.upsertDefinition({
@@ -248,12 +262,15 @@ export class PipelineEngine {
         },
       });
       try {
+        const workingMemory = this.getOrCreateWorkingMemory(runId);
         const baseInput = {
           run_id: runId,
           node_id: node.node_id,
           agent_id: node.agent_id,
           config: node.config,
           upstreamArtifacts,
+          workingMemory,
+          strategyContext: [],
         };
         let settled;
         if (this.reflectionLoop?.isEnabled(node.agent_id)) {
@@ -528,12 +545,17 @@ export class PipelineEngine {
     const decisions = this.decisionStore?.listDecisionsByRun(runId) ?? [];
     const pivotTags = derivePivotTags(decisions.flatMap((d) => d.tags));
     const leadId = findLeadIdFromDecisions(decisions);
+    const wm = this.workingMemories.get(runId);
 
     this.episodicStore.completeRun(runId, {
       status,
       pivot_tags: pivotTags,
       lead_id: leadId,
+      working_memory_snapshot: wm?.snapshot(),
     });
+
+    // Free the WM — it's persisted on the episode now.
+    this.workingMemories.delete(runId);
   }
 
   private collectUpstreamArtifacts(
