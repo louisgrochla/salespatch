@@ -26,6 +26,7 @@ import { HeuristicCritic } from "./evaluation/heuristicCritic.js";
 import { ReflectionLoop } from "./evaluation/reflectionLoop.js";
 import { CriticFactory, type CriticImplementation } from "./evaluation/criticFactory.js";
 import { DynamicPlanner } from "./runtime/dynamicPlanner.js";
+import { ModelRegistry } from "./runtime/modelRegistry.js";
 import { AgentCapabilityRegistry } from "./runtime/agentRegistry.js";
 import { AttributionEngine } from "./evaluation/attributionEngine.js";
 import { StrategicStore } from "./memory/strategicStore.js";
@@ -105,6 +106,10 @@ async function main(): Promise<void> {
   // ── Strategic memory (cross-run knowledge, populated by nightly ranker) ──
   const strategicStore = new StrategicStore(dbPath);
   closeables.push(strategicStore);
+
+  // ── Model registry (LoRA hot-swap interface — Phase 10) ──
+  const modelRegistry = new ModelRegistry(dbPath);
+  closeables.push(modelRegistry);
 
   // ── Pipeline runtime + capability registry ──
   // Created early so the reflection loop can derive its enabled set from it.
@@ -224,6 +229,7 @@ async function main(): Promise<void> {
       compatStore,
       outcomeIngester,
       decisionStore,
+      modelRegistry,
     );
     const host = process.env.MISSION_CONTROL_HOST ?? "127.0.0.1";
     const port = Number(process.env.MISSION_CONTROL_PORT ?? "4317");

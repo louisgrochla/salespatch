@@ -22,8 +22,10 @@ import { TelephonyControlClient } from "../telephony/controlClient.js";
 import { ClawdeckCompatStore } from "./clawdeckCompatStore.js";
 import { OutcomeIngester } from "../learning/outcomeIngest.js";
 import { DecisionStore } from "../learning/decisionStore.js";
+import { ModelRegistry } from "../runtime/modelRegistry.js";
 import { handleOutcomesRoute } from "./routes/outcomes.js";
 import { handleDecisionsRoute } from "./routes/decisions.js";
+import { handleModelsRoute } from "./routes/models.js";
 
 const log = createLogger("mission-control");
 const MAX_BODY_BYTES = 1_048_576; // 1MB
@@ -54,6 +56,7 @@ export class MissionControlServer {
     private readonly compatStore?: ClawdeckCompatStore,
     private readonly outcomeIngester?: OutcomeIngester,
     private readonly decisionStore?: DecisionStore,
+    private readonly modelRegistry?: ModelRegistry,
   ) {}
 
   start(options: MissionControlServerOptions): Promise<void> {
@@ -150,6 +153,14 @@ export class MissionControlServer {
     if (this.decisionStore && url.pathname.startsWith("/api/decisions/")) {
       const handled = await handleDecisionsRoute(req, res, url, {
         decisionStore: this.decisionStore,
+      });
+      if (handled) return;
+    }
+
+    // ── Model registry (LoRA hot-swap interface, no training yet) ──
+    if (this.modelRegistry && url.pathname.startsWith("/api/models")) {
+      const handled = await handleModelsRoute(req, res, url, {
+        modelRegistry: this.modelRegistry,
       });
       if (handled) return;
     }
