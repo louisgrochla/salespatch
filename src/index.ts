@@ -25,6 +25,7 @@ import { EpisodicStore } from "./memory/episodicStore.js";
 import { HeuristicCritic } from "./evaluation/heuristicCritic.js";
 import { ReflectionLoop } from "./evaluation/reflectionLoop.js";
 import { CriticFactory, type CriticImplementation } from "./evaluation/criticFactory.js";
+import { DynamicPlanner } from "./runtime/dynamicPlanner.js";
 import { AgentCapabilityRegistry } from "./runtime/agentRegistry.js";
 import { AttributionEngine } from "./evaluation/attributionEngine.js";
 import { StrategicStore } from "./memory/strategicStore.js";
@@ -151,6 +152,12 @@ async function main(): Promise<void> {
     },
     episodicStore,
   );
+
+  // ── Dynamic planner (registry-driven replanning on retryable failures) ──
+  // Instantiated but not yet wired into the engine — Phase 9.5 follow-up.
+  // Available for future engine.executeNode failure-handler integration.
+  const dynamicPlanner = new DynamicPlanner(agentRegistry);
+  void dynamicPlanner; // suppress unused warning until engine wires it in
 
   // ── Attribution + Outcome ingest (cross-system pitch result bridge) ──
   const attributionEngine = new AttributionEngine(decisionStore, episodicStore);
