@@ -162,9 +162,11 @@ export class OutcomeIngester {
     const matchedLeadId = payload.lead_id ?? this.inferLeadIdFromDecisions(decisions);
 
     // Attach an outcome row to each matched decision. Lag is computed against
-    // the outcome's occurred_at timestamp.
+    // the outcome's occurred_at timestamp. Track episode_ids so we can stamp
+    // the audit log row in a single INSERT below.
     const occurredAtMs = Date.parse(payload.occurred_at);
     const episodeIdsTouched = new Set<string>();
+    let firstEpisodeId: string | undefined;
     for (const d of decisions) {
       const lagHours = Number.isFinite(occurredAtMs)
         ? Math.max(0, (occurredAtMs - Date.parse(d.created_at)) / 3_600_000)
@@ -187,13 +189,13 @@ export class OutcomeIngester {
           close_amount_gbp: payload.agreed_price_gbp,
           outcome_notes: this.formatNotes(payload),
         });
-        if (updated) {
-          this.attachEpisodeIdToLog(payload.external_id, updated.id);
-        }
+        if (updated && !firstEpisodeId) firstEpisodeId = updated.id;
       }
     }
 
-    // Persist the ingest log row regardless of match outcome.
+    // Persist the ingest log row regardless of match outcome. Multi-episode
+    // ingests record only the first episode_id; full back-pointers live on
+    // the episodes themselves.
     (this.decisionStore as unknown as {
       db: { prepare(sql: string): { run(...params: unknown[]): unknown } };
     }).db
@@ -209,7 +211,7 @@ export class OutcomeIngester {
         JSON.stringify(payload),
         decisions.length,
         matchStrategy,
-        null, // episode_id wired in Phase 3
+        firstEpisodeId ?? null,
         new Date().toISOString(),
       );
 
@@ -254,14 +256,6 @@ export class OutcomeIngester {
   }
 
   // ── Internal ──
-
-  private attachEpisodeIdToLog(externalId: string, episodeId: string): void {
-    (this.decisionStore as unknown as {
-      db: { prepare(sql: string): { run(...p: unknown[]): unknown } };
-    }).db
-      .prepare("UPDATE outcome_ingest_log SET episode_id = ? WHERE external_id = ?")
-      .run(episodeId, externalId);
-  }
 
   private matchByBusinessNameAndDate(
     businessName: string,
