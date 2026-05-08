@@ -230,6 +230,8 @@ async function main(): Promise<void> {
       outcomeIngester,
       decisionStore,
       modelRegistry,
+      episodicStore,
+      strategicStore,
     );
     const host = process.env.MISSION_CONTROL_HOST ?? "127.0.0.1";
     const port = Number(process.env.MISSION_CONTROL_PORT ?? "4317");
