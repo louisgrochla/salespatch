@@ -1422,12 +1422,27 @@ export class MissionControlServer {
     @media (max-width: 1120px) {
       .cards { grid-template-columns: repeat(3, minmax(0, 1fr)); }
       .grid { grid-template-columns: 1fr; }
+      .panel.span-2 { grid-column: auto !important; }
     }
     @media (max-width: 760px) {
+      .wrap { padding: 12px 10px 24px; }
       .cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .toolbar, .toolbar.dual { grid-template-columns: 1fr; }
       .cols-2 { grid-template-columns: 1fr; }
+      .hero { flex-direction: column; align-items: flex-start; gap: 8px; padding: 14px; }
+      .hero h1 { font-size: 22px; }
+      .panel { padding: 10px; }
+      .panel h2 { font-size: 13px; }
+      input, button, select { padding: 11px 12px; font-size: 14px; }
+      .scroll { max-height: 360px; overflow-x: auto; }
+      table { font-size: 11px; min-width: 480px; }
+      th, td { padding: 6px 6px; }
+      .json { font-size: 11px; }
     }
+    /* Always allow horizontal scroll for wide tables (catches mid-sized
+       tablet portrait widths where the table is narrower than viewport
+       but still wider than the panel). */
+    .scroll { overflow-x: auto; }
   </style>
 </head>
 <body>
@@ -1558,7 +1573,7 @@ export class MissionControlServer {
     </section>
 
     <section class="grid sl-mas">
-      <div class="panel" style="grid-column: span 2;">
+      <div class="panel span-2" style="grid-column: span 2;">
         <h2>Friday Dashboard — Strategy Pivot</h2>
         <div class="toolbar dual">
           <select id="pivotVertical">
