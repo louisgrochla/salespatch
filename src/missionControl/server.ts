@@ -21,7 +21,9 @@ import { PipelineDefinition } from "../pipeline/types.js";
 import { TelephonyControlClient } from "../telephony/controlClient.js";
 import { ClawdeckCompatStore } from "./clawdeckCompatStore.js";
 import { OutcomeIngester } from "../learning/outcomeIngest.js";
+import { DecisionStore } from "../learning/decisionStore.js";
 import { handleOutcomesRoute } from "./routes/outcomes.js";
+import { handleDecisionsRoute } from "./routes/decisions.js";
 
 const log = createLogger("mission-control");
 const MAX_BODY_BYTES = 1_048_576; // 1MB
@@ -51,6 +53,7 @@ export class MissionControlServer {
     private readonly telephonyClient?: TelephonyControlClient,
     private readonly compatStore?: ClawdeckCompatStore,
     private readonly outcomeIngester?: OutcomeIngester,
+    private readonly decisionStore?: DecisionStore,
   ) {}
 
   start(options: MissionControlServerOptions): Promise<void> {
@@ -139,6 +142,14 @@ export class MissionControlServer {
         allowUnsigned:
           process.env.NODE_ENV !== "production" &&
           process.env.OUTCOME_INGEST_ALLOW_UNSIGNED === "true",
+      });
+      if (handled) return;
+    }
+
+    // ── Manual decisions (manual /build-demo skill, admin tools) ──
+    if (this.decisionStore && url.pathname.startsWith("/api/decisions/")) {
+      const handled = await handleDecisionsRoute(req, res, url, {
+        decisionStore: this.decisionStore,
       });
       if (handled) return;
     }

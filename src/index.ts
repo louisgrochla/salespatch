@@ -163,6 +163,7 @@ async function main(): Promise<void> {
       undefined, // telephonyClient — removed
       compatStore,
       outcomeIngester,
+      decisionStore,
     );
     const host = process.env.MISSION_CONTROL_HOST ?? "127.0.0.1";
     const port = Number(process.env.MISSION_CONTROL_PORT ?? "4317");
