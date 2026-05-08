@@ -24,6 +24,7 @@ import { SupabaseOutcomePoller } from "./learning/supabaseOutcomePoller.js";
 import { EpisodicStore } from "./memory/episodicStore.js";
 import { HeuristicCritic } from "./evaluation/heuristicCritic.js";
 import { ReflectionLoop } from "./evaluation/reflectionLoop.js";
+import { CriticFactory, type CriticImplementation } from "./evaluation/criticFactory.js";
 import { AgentCapabilityRegistry } from "./runtime/agentRegistry.js";
 import { AttributionEngine } from "./evaluation/attributionEngine.js";
 import { StrategicStore } from "./memory/strategicStore.js";
@@ -129,7 +130,14 @@ async function main(): Promise<void> {
   // ── Critic + reflection ──
   // Reflection-enabled agents derived from the capability registry. The env
   // override remains useful for ops emergencies (force-disable a noisy agent).
-  const critic = new HeuristicCritic();
+  // CriticFactory dispatches per-agent — heuristic by default, llm when the
+  // agent's registry entry sets critic_implementation: "llm".
+  const defaultImpl =
+    (process.env.CRITIC_IMPLEMENTATION as CriticImplementation | undefined) ?? "heuristic";
+  const critic =
+    defaultImpl === "heuristic" && process.env.CRITIC_FORCE_HEURISTIC === "true"
+      ? new HeuristicCritic()
+      : new CriticFactory(agentRegistry, { defaultImplementation: defaultImpl });
   const envOverride = process.env.CRITIC_ENABLED_AGENTS;
   const enabledFromEnv = envOverride
     ? new Set(envOverride.split(",").map((s) => s.trim()).filter(Boolean))
