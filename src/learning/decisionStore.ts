@@ -149,6 +149,10 @@ export class DecisionStore {
     return rows.map((r) => this.toDecision(r));
   }
 
+  listDecisionsByLeadId(leadId: string, limit = 50): Decision[] {
+    return this.listDecisionsByTag(`lead_id:${leadId}`, limit);
+  }
+
   // ── Outcomes ──
 
   recordOutcome(input: Omit<Outcome, "id" | "recorded_at">): Outcome {

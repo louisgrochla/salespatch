@@ -20,6 +20,8 @@ import { SQLitePipelineStore } from "../pipeline/sqlitePipelineStore.js";
 import { PipelineDefinition } from "../pipeline/types.js";
 import { TelephonyControlClient } from "../telephony/controlClient.js";
 import { ClawdeckCompatStore } from "./clawdeckCompatStore.js";
+import { OutcomeIngester } from "../learning/outcomeIngest.js";
+import { handleOutcomesRoute } from "./routes/outcomes.js";
 
 const log = createLogger("mission-control");
 const MAX_BODY_BYTES = 1_048_576; // 1MB
@@ -48,6 +50,7 @@ export class MissionControlServer {
     private readonly pipelineEngine?: PipelineEngine,
     private readonly telephonyClient?: TelephonyControlClient,
     private readonly compatStore?: ClawdeckCompatStore,
+    private readonly outcomeIngester?: OutcomeIngester,
   ) {}
 
   start(options: MissionControlServerOptions): Promise<void> {
@@ -126,6 +129,18 @@ export class MissionControlServer {
         build_version: "0.1.0",
       });
       return;
+    }
+
+    // ── Outcome ingest + listing ──
+    if (this.outcomeIngester && url.pathname.startsWith("/api/outcomes/")) {
+      const handled = await handleOutcomesRoute(req, res, url, {
+        ingester: this.outcomeIngester,
+        ingestSecret: process.env.OUTCOME_INGEST_SECRET,
+        allowUnsigned:
+          process.env.NODE_ENV !== "production" &&
+          process.env.OUTCOME_INGEST_ALLOW_UNSIGNED === "true",
+      });
+      if (handled) return;
     }
 
     if (method === "GET" && url.pathname === "/api/metrics") {

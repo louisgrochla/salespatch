@@ -19,6 +19,8 @@ import { MultiAgentRuntime } from "./pipeline/agentRuntime.js";
 import { registerOutreachAgents } from "./agents/outreach/index.js";
 import { DecisionStore } from "./learning/decisionStore.js";
 import { withLearning } from "./learning/learningAgent.js";
+import { OutcomeIngester } from "./learning/outcomeIngest.js";
+import { SupabaseOutcomePoller } from "./learning/supabaseOutcomePoller.js";
 import { PipelineEngine } from "./pipeline/engine.js";
 import { PipelineScheduler } from "./pipeline/scheduler.js";
 import { SQLitePipelineStore } from "./pipeline/sqlitePipelineStore.js";
@@ -88,6 +90,10 @@ async function main(): Promise<void> {
   const decisionStore = new DecisionStore(dbPath);
   closeables.push(decisionStore);
 
+  // ── Outcome ingest (cross-system pitch result bridge) ──
+  const outcomeIngester = new OutcomeIngester(decisionStore);
+  const outcomePoller = new SupabaseOutcomePoller(decisionStore, outcomeIngester);
+
   // ── Pipeline engine ──
   const agentRuntime = new MultiAgentRuntime();
   registerOutreachAgents(agentRuntime);
@@ -156,15 +162,23 @@ async function main(): Promise<void> {
       pipelineEngine,
       undefined, // telephonyClient — removed
       compatStore,
+      outcomeIngester,
     );
     const host = process.env.MISSION_CONTROL_HOST ?? "127.0.0.1";
     const port = Number(process.env.MISSION_CONTROL_PORT ?? "4317");
     await server.start({ host, port });
 
+    // Start the Supabase backstop poller. Skipped silently when
+    // SUPABASE_URL / service-role key are absent (logged once on first poll).
+    if (process.env.OUTCOME_POLLER_DISABLED !== "true") {
+      outcomePoller.start();
+    }
+
     // ── Graceful shutdown ──
     const shutdown = async (signal: string): Promise<void> => {
       log.info(`received ${signal}, shutting down`);
       pipelineScheduler.stop();
+      outcomePoller.stop();
       await server.stop();
       for (const c of closeables) {
         try {

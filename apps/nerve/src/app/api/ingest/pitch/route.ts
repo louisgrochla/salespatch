@@ -12,6 +12,7 @@ import type {
 import { prisma } from "@/lib/db";
 import { embedRecord } from "@/lib/embeddings";
 import { phaseLabelFor } from "@/lib/phase";
+import { postOutcomeToRuntime, OutcomeIngestPayload } from "@/lib/outcomeRuntime";
 
 // Pitch ingestion. Accepts both:
 //   1. Supabase Database Webhook envelope { type, table, record, … }
@@ -331,6 +332,22 @@ export async function POST(req: NextRequest) {
       },
     );
 
+    // Fan out to the runtime so the outcome lands on the matching decision.
+    // Fire-and-forget — failures here must never break the pitch ingest.
+    void postOutcomeToRuntime(
+      buildOutcomePayload({
+        pitchId: pitch.id,
+        outcome,
+        businessName,
+        agreedPrice,
+        interestLevel,
+        demoReaction,
+        objections: record.objections ?? null,
+        notes: record.notes ?? null,
+        pitchDate,
+      }),
+    ).catch((e) => console.warn("[pitch] outcome fan-out failed", String(e)));
+
     await logIngestion("/api/ingest/pitch", "ok", null, rawBody);
     return NextResponse.json({ ok: true, pitchId: pitch.id, qualityFlag });
   } catch (e) {
@@ -382,4 +399,51 @@ async function logIngestion(
 
 function msg(e: unknown): string {
   return e instanceof Error ? e.message : String(e);
+}
+
+function buildOutcomePayload(args: {
+  pitchId: string;
+  outcome: PitchOutcome;
+  businessName: string;
+  agreedPrice: number | null;
+  interestLevel: InterestLevel | null;
+  demoReaction: DemoReaction | null;
+  objections: string[] | null;
+  notes: string | null;
+  pitchDate: Date;
+}): OutcomeIngestPayload {
+  let outcomeType: OutcomeIngestPayload["outcome_type"];
+  let result: OutcomeIngestPayload["result"];
+  switch (args.outcome) {
+    case "closed_now":
+    case "closed_followup":
+      outcomeType = "pitch_closed";
+      result = "positive";
+      break;
+    case "rejected":
+      outcomeType = "pitch_rejected";
+      result = "negative";
+      break;
+    case "not_pitched":
+      outcomeType = "no_outcome";
+      result = "neutral";
+      break;
+    default:
+      outcomeType = "pitch_followup";
+      result = "neutral";
+  }
+  return {
+    source: "nerve_webhook",
+    external_id: args.pitchId,
+    business_name: args.businessName,
+    outcome_type: outcomeType,
+    result,
+    agreed_price_gbp: args.agreedPrice ?? undefined,
+    interest_level: (args.interestLevel ?? undefined) as OutcomeIngestPayload["interest_level"],
+    demo_reaction: (args.demoReaction ?? undefined) as OutcomeIngestPayload["demo_reaction"],
+    objections: args.objections ?? undefined,
+    notes: args.notes ?? undefined,
+    occurred_at: args.pitchDate.toISOString(),
+    pitch_log_id: args.pitchId,
+  };
 }
