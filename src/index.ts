@@ -25,6 +25,7 @@ import { EpisodicStore } from "./memory/episodicStore.js";
 import { HeuristicCritic } from "./evaluation/heuristicCritic.js";
 import { ReflectionLoop } from "./evaluation/reflectionLoop.js";
 import { AgentCapabilityRegistry } from "./runtime/agentRegistry.js";
+import { AttributionEngine } from "./evaluation/attributionEngine.js";
 import { PipelineEngine } from "./pipeline/engine.js";
 import { PipelineScheduler } from "./pipeline/scheduler.js";
 import { SQLitePipelineStore } from "./pipeline/sqlitePipelineStore.js";
@@ -138,8 +139,13 @@ async function main(): Promise<void> {
     episodicStore,
   );
 
-  // ── Outcome ingest (cross-system pitch result bridge) ──
-  const outcomeIngester = new OutcomeIngester(decisionStore, episodicStore);
+  // ── Attribution + Outcome ingest (cross-system pitch result bridge) ──
+  const attributionEngine = new AttributionEngine(decisionStore, episodicStore);
+  const outcomeIngester = new OutcomeIngester(
+    decisionStore,
+    episodicStore,
+    attributionEngine,
+  );
   const outcomePoller = new SupabaseOutcomePoller(decisionStore, outcomeIngester);
   const pipelineEngine = new PipelineEngine(
     pipelineStore,

@@ -85,7 +85,7 @@ async function handleIngest(
     return;
   }
 
-  const result = deps.ingester.ingest(payload);
+  const result = await deps.ingester.ingest(payload);
   sendJson(res, 200, result);
 }
 

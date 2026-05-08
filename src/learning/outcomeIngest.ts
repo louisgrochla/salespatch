@@ -2,6 +2,7 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 import { createLogger } from "../lib/logger.js";
 import { DecisionStore } from "./decisionStore.js";
 import type { EpisodicStore, Episode } from "../memory/episodicStore.js";
+import type { AttributionEngine } from "../evaluation/attributionEngine.js";
 
 const log = createLogger("outcome-ingest");
 
@@ -108,6 +109,7 @@ export class OutcomeIngester {
   constructor(
     private readonly decisionStore: DecisionStore,
     private readonly episodicStore?: EpisodicStore,
+    private readonly attributionEngine?: AttributionEngine,
   ) {
     // Reach into the underlying database to install ingest tables alongside
     // decisions/outcomes/learning_insights. We avoid a parallel SQLite handle.
@@ -129,7 +131,7 @@ export class OutcomeIngester {
    * outcome row to each. Returns a summary. Safe to call multiple times with
    * the same external_id — the second call is a no-op.
    */
-  ingest(payload: OutcomeIngestPayload): OutcomeIngestResult {
+  async ingest(payload: OutcomeIngestPayload): Promise<OutcomeIngestResult> {
     if (this.alreadySeen(payload.external_id)) {
       log.info("duplicate ingest, skipping", {
         external_id: payload.external_id,
@@ -214,6 +216,19 @@ export class OutcomeIngester {
         firstEpisodeId ?? null,
         new Date().toISOString(),
       );
+
+    // Compute attribution for the outcomes we just wrote. Errors are logged
+    // but never raised — attribution is advisory.
+    if (this.attributionEngine && decisions.length > 0) {
+      try {
+        const attributed = await this.attributionEngine.attributePending();
+        if (attributed.length > 0) {
+          log.debug("attribution computed", { count: attributed.length });
+        }
+      } catch (e) {
+        log.warn("attribution failed", { error: String(e) });
+      }
+    }
 
     log.info("ingested outcome", {
       external_id: payload.external_id,

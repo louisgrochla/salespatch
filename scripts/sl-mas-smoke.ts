@@ -271,14 +271,14 @@ async function main(): Promise<void> {
     ["rejected", rejectedAtRiverside],
     ["no-match", noMatch],
   ] as const) {
-    const r = ingester.ingest(payload);
+    const r = await ingester.ingest(payload);
     console.log(
       `  ${label.padEnd(10)} matched_decisions=${r.matched_decisions} match_strategy=${r.match_strategy} skipped=${r.skipped_reason ?? "no"}`,
     );
   }
 
   // Replay the closed outcome to demonstrate idempotency
-  const replay = ingester.ingest(closedAtSourceBarber);
+  const replay = await ingester.ingest(closedAtSourceBarber);
   console.log(`\nReplay of nerve-pitch-001 → matched=${replay.matched_decisions} skipped=${replay.skipped_reason}`);
 
   // ──────────────────────────────────────────────────────────────────

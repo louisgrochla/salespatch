@@ -41,7 +41,7 @@ describe("OutcomeIngester", () => {
     };
   }
 
-  it("matches by lead_id tag and records outcomes for each decision", () => {
+  it("matches by lead_id tag and records outcomes for each decision", async () => {
     // Two decisions tagged with lead_id:source-barber
     store.logDecision({
       agent_id: "site-composer-agent",
@@ -81,7 +81,7 @@ describe("OutcomeIngester", () => {
       tags: ["lead_id:other-shop", "vertical:cafe"],
     });
 
-    const result = ingester.ingest(basePayload({ agreed_price_gbp: 350 }));
+    const result = await ingester.ingest(basePayload({ agreed_price_gbp: 350 }));
 
     assert.equal(result.matched_decisions, 2);
     assert.equal(result.match_strategy, "lead_id");
@@ -103,7 +103,7 @@ describe("OutcomeIngester", () => {
     assert.equal(store.listOutcomesForDecision(cafeDecisions[0].id).length, 0);
   });
 
-  it("is idempotent — same external_id is a no-op on second ingest", () => {
+  it("is idempotent — same external_id is a no-op on second ingest", async () => {
     store.logDecision({
       agent_id: "site-composer-agent",
       run_id: "run-1",
@@ -117,8 +117,8 @@ describe("OutcomeIngester", () => {
       tags: ["lead_id:source-barber"],
     });
 
-    const first = ingester.ingest(basePayload());
-    const second = ingester.ingest(basePayload());
+    const first = await ingester.ingest(basePayload());
+    const second = await ingester.ingest(basePayload());
 
     assert.equal(first.matched_decisions, 1);
     assert.equal(second.matched_decisions, 0);
@@ -130,8 +130,8 @@ describe("OutcomeIngester", () => {
     assert.equal(outcomes.length, 1);
   });
 
-  it("records ingest log row even when no decisions match", () => {
-    const result = ingester.ingest(
+  it("records ingest log row even when no decisions match", async () => {
+    const result = await ingester.ingest(
       basePayload({ external_id: "ext-no-match", lead_id: "ghost-lead" }),
     );
     assert.equal(result.matched_decisions, 0);
@@ -144,7 +144,7 @@ describe("OutcomeIngester", () => {
     assert.equal(recent[0].matched_decisions, 0);
   });
 
-  it("falls back to business_name + date matching when lead_id absent", () => {
+  it("falls back to business_name + date matching when lead_id absent", async () => {
     store.logDecision({
       agent_id: "manual-build-demo",
       run_id: "manual-source-barber-2026-05-01",
@@ -160,7 +160,7 @@ describe("OutcomeIngester", () => {
       tags: ["agent:manual-build-demo"],
     });
 
-    const result = ingester.ingest(
+    const result = await ingester.ingest(
       basePayload({
         external_id: "ext-fallback",
         lead_id: undefined,

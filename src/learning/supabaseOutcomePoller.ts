@@ -63,7 +63,7 @@ export class SupabaseOutcomePoller {
         skipped += 1;
         continue;
       }
-      const result = this.ingester.ingest(payload);
+      const result = await this.ingester.ingest(payload);
       if (result.skipped_reason === "duplicate") skipped += 1;
       else ingested += 1;
       if (row.updated_at > maxUpdatedAt) maxUpdatedAt = row.updated_at;

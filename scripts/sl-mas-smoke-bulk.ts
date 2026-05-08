@@ -24,6 +24,7 @@ import {
   OutcomeIngestPayload,
 } from "../src/learning/outcomeIngest.js";
 import { EpisodicStore } from "../src/memory/episodicStore.js";
+import { AttributionEngine } from "../src/evaluation/attributionEngine.js";
 
 const DB_PATH = path.resolve("data/sl-mas-smoke-bulk.sqlite");
 
@@ -89,7 +90,8 @@ async function main(): Promise<void> {
 
   const store = new DecisionStore(DB_PATH);
   const episodes = new EpisodicStore(DB_PATH);
-  const ingester = new OutcomeIngester(store, episodes);
+  const attribution = new AttributionEngine(store, episodes);
+  const ingester = new OutcomeIngester(store, episodes, attribution);
 
   // ──────────────────────────────────────────────────────────────────
   header("STEP 1: Log 10 manual /build-demo decisions");
@@ -166,7 +168,7 @@ async function main(): Promise<void> {
       occurred_at: new Date(now - dayMs * 2).toISOString(),
       pitch_log_id: `nerve-${lead.slug}`,
     };
-    const r = ingester.ingest(payload);
+    const r = await ingester.ingest(payload);
     ingested += 1;
     console.log(
       `  ${lead.slug.padEnd(22)} ${lead.outcome.padEnd(9)} ${lead.reaction?.padEnd(11) ?? "-"} matched=${r.matched_decisions}`,
@@ -235,6 +237,31 @@ async function main(): Promise<void> {
   console.log(`\n  At n=8 pitched, every cell is statistical noise — but you can already see`);
   console.log(`  that scraped brand sources outperform vertical_default, and the heritage_green`);
   console.log(`  palette has 3/3 closes. That's the kind of read this dashboard exists for.`);
+
+  // ──────────────────────────────────────────────────────────────────
+  header("STEP 7: ATTRIBUTION ROLLUP — per-agent credit/blame");
+  // ──────────────────────────────────────────────────────────────────
+  // We added critic scores for two of the closed pitches so the attribution
+  // weights aren't all 0.5 — illustrates how high-scoring agents on closes
+  // accrue more credit than untraced ones.
+  for (const [runId, score] of [
+    [`manual-source-barber-${new Date(now - 9 * dayMs).toISOString().replace(/[:.]/g, "-")}`, 0.92],
+    [`manual-stoneham-cuts-${new Date(now - 8 * dayMs).toISOString().replace(/[:.]/g, "-")}`, 0.81],
+    [`manual-kent-fade-${new Date(now - 5 * dayMs).toISOString().replace(/[:.]/g, "-")}`, 0.85], // overconfident on a rejected
+  ] as const) {
+    const ep = episodes.listRecent(50).find((e) => e.pipeline_run_id === runId);
+    if (ep) episodes.recordNodeScore(runId, "manual-build", score);
+  }
+  // Re-run attribution now that scores landed
+  await attribution.attributePending();
+  const rollup = attribution.rollupByAgent();
+  console.log(`\n${"agent".padEnd(28)}${"n".padEnd(4)}${"avg_weight".padEnd(12)}${"won".padEnd(5)}lost`);
+  console.log("─".repeat(60));
+  for (const r of rollup) {
+    console.log(
+      `${r.agent_id.padEnd(28)}${String(r.n).padEnd(4)}${r.avg_weight.toFixed(2).padEnd(12)}${String(r.positive_count).padEnd(5)}${r.negative_count}`,
+    );
+  }
 
   console.log(`\n✓ Bulk smoke complete. DB at ${DB_PATH}`);
   console.log(`  inspect: sqlite3 ${DB_PATH}`);
