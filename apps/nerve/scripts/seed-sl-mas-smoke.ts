@@ -4,7 +4,14 @@
  * Idempotent — safe to re-run; existing rows are skipped via external_id.
  *
  *   cd apps/nerve
- *   DATABASE_URL=<prod_url> DIRECT_URL=<prod_direct_url> \
+ *
+ *   # Option A — pull env from Vercel:
+ *   vercel env pull .env.local
+ *   npx tsx scripts/seed-sl-mas-smoke.ts
+ *
+ *   # Option B — paste URLs directly (note the QUOTES):
+ *   DATABASE_URL='postgresql://user:pass@ep-...neon.tech/db?sslmode=require' \
+ *   DIRECT_URL='postgresql://user:pass@ep-...neon.tech/db?sslmode=require' \
  *     npx tsx scripts/seed-sl-mas-smoke.ts
  *
  * Mirrors scripts/sl-mas-smoke-bulk.ts on the runtime side. 10 leads, 8
@@ -12,6 +19,20 @@
  * is the apparent champion at 3/3 (100%); cafe × service_strip × warm_neutral
  * underperforms at 0/1.
  */
+// Load .env.local + .env so `vercel env pull` outputs work without dotenv-cli.
+// Prisma's CLI loads these automatically; tsx scripts don't.
+import { config as loadEnv } from "dotenv";
+loadEnv({ path: ".env.local" });
+loadEnv({ path: ".env" });
+
+if (!process.env.DATABASE_URL) {
+  console.error(
+    "[seed] DATABASE_URL is not set. Either:\n" +
+      "  1. cd apps/nerve && vercel env pull .env.local && npx tsx scripts/seed-sl-mas-smoke.ts\n" +
+      "  2. DATABASE_URL='postgresql://...' DIRECT_URL='postgresql://...' npx tsx scripts/seed-sl-mas-smoke.ts",
+  );
+  process.exit(1);
+}
 import { decisionStore } from "../src/lib/sl-mas/decisionStore";
 import { episodicStore } from "../src/lib/sl-mas/episodicStore";
 import { outcomeIngester } from "../src/lib/sl-mas/outcomeIngest";
