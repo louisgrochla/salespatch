@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { getStripe } from '@/lib/stripe';
+import {
+  buildSalespersonEventId,
+  postSalespersonEvent,
+} from '@/lib/nerve-ingest';
 
 function getSupabase() {
   return createClient(
@@ -45,6 +49,32 @@ export async function POST(req: NextRequest) {
         .from('salesperson_metrics')
         .update({ stripe_connect_id: connectAccountId })
         .eq('id', salesperson_id);
+
+      // B3: mirror the Connect account creation to NERVE. Only on first
+      // creation — repeat hits of this route (e.g. SP clicks "connect"
+      // again to refresh the onboarding link) reuse the existing account
+      // and don't generate a new event.
+      const occurredAt = new Date().toISOString();
+      postSalespersonEvent({
+        event_id: buildSalespersonEventId(
+          salesperson_id,
+          'stripe_connect_created',
+          occurredAt,
+        ),
+        user_id: salesperson_id,
+        type: 'stripe_connect_created',
+        display_name: display_name ?? null,
+        stripe_connect_id: connectAccountId,
+        source: 'payments_connect',
+        occurred_at: occurredAt,
+      }).then((r) => {
+        if (!r.ok) {
+          console.warn(
+            '[nerve-ingest] stripe_connect_created event failed:',
+            r.error,
+          );
+        }
+      });
     }
 
     const origin = req.headers.get('origin') ?? 'http://localhost:4300';

@@ -4,8 +4,8 @@
 # Hits the SL-MAS ingest endpoints on a NERVE deployment with HMAC-signed
 # test payloads. Currently covers A1 (composer-iteration), A2 (site-brief +
 # brand-analysis), A3 (demo-artefact), A4 (lead-profile), A5 (qa-result),
-# A6 (spend), B1 (lead-assignment events), B2 (stripe events). Prints
-# HTTP status + response body for each.
+# A6 (spend), B1 (lead-assignment events), B2 (stripe events), B3
+# (salesperson events). Prints HTTP status + response body for each.
 #
 # Usage:
 #   scripts/nerve/simulate-ingest.sh                 # production (default)
@@ -49,6 +49,9 @@ EVENT_ID_PITCHED="$ASSIGNMENT_ID:pitched:${STAMP}-p"
 EVENT_ID_SOLD="$ASSIGNMENT_ID:sold:${STAMP}-s"
 STRIPE_EVENT_ID="evt_verify_$STAMP"
 STRIPE_SESSION_ID="cs_verify_$STAMP"
+SP_ID="verify-sp-$STAMP"
+SP_EVENT_SIGNUP_ID="$SP_ID:signup:$STAMP"
+SP_EVENT_CONNECT_ID="$SP_ID:stripe_connect_created:${STAMP}-c"
 
 echo "Target: $NERVE_BASE_URL"
 echo "Stamp:  $STAMP"
@@ -364,8 +367,40 @@ JSON
 )
 sign_and_post "/api/ingest/stripe-event" "$STRIPE_EVENT_BODY"
 
+# ── B3 salesperson events (signup + stripe_connect_created) ──────────────
+SP_SIGNUP_BODY=$(cat <<JSON
+{
+  "event_id": "$SP_EVENT_SIGNUP_ID",
+  "user_id": "$SP_ID",
+  "type": "signup",
+  "display_name": "Verify Test SP",
+  "area_postcode": "AB10",
+  "source": "test",
+  "metadata": { "source": "simulate-ingest.sh", "stamp": "$STAMP", "has_email": true, "has_phone": false },
+  "occurred_at": "$ISO"
+}
+JSON
+)
+sign_and_post "/api/ingest/salesperson-event" "$SP_SIGNUP_BODY"
+
+SP_CONNECT_BODY=$(cat <<JSON
+{
+  "event_id": "$SP_EVENT_CONNECT_ID",
+  "user_id": "$SP_ID",
+  "type": "stripe_connect_created",
+  "display_name": "Verify Test SP",
+  "stripe_connect_id": "acct_verify_$STAMP",
+  "source": "test",
+  "metadata": { "source": "simulate-ingest.sh", "stamp": "$STAMP" },
+  "occurred_at": "$ISO"
+}
+JSON
+)
+sign_and_post "/api/ingest/salesperson-event" "$SP_CONNECT_BODY"
+
 echo "── Cleanup SQL (run against NERVE Postgres if you want the test rows gone) ──"
 cat <<SQL
+DELETE FROM "salesperson_events" WHERE user_id = '$SP_ID';
 DELETE FROM "stripe_events" WHERE stripe_event_id = '$STRIPE_EVENT_ID';
 DELETE FROM "lead_assignment_events" WHERE assignment_id = '$ASSIGNMENT_ID';
 DELETE FROM "qa_results" WHERE qa_id = '$QA_ID';

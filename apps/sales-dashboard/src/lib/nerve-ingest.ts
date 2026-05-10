@@ -82,6 +82,64 @@ export async function postLeadAssignmentEvent(
   return postSigned('/api/ingest/lead-assignment', payload);
 }
 
+// ─── Salesperson events (B3) ───────────────────────────────────────────
+
+export type SalespersonEventType =
+  | 'signup'
+  | 'profile_update'
+  | 'stripe_connect_created'
+  | 'stripe_connect_completed'
+  | 'pin_reset'
+  | 'deactivated'
+  | 'reactivated'
+  // String union escape hatch — let producers record types we haven't
+  // formalised yet without forcing a helper update.
+  | (string & {});
+
+export type SalespersonEventSource =
+  | 'signup_handler'
+  | 'admin_panel'
+  | 'payments_connect'
+  | 'auth_demo'
+  | 'test'
+  | (string & {});
+
+export interface SalespersonEventPayload {
+  event_id: string;
+  user_id: string;
+  type: SalespersonEventType;
+  display_name?: string | null;
+  area_postcode?: string | null;
+  stripe_connect_id?: string | null;
+  source?: SalespersonEventSource;
+  notes?: string | null;
+  metadata?: Record<string, unknown>;
+  occurred_at: string;
+}
+
+/**
+ * Build a stable salesperson event_id. Same user / type / instant ⇒
+ * same id ⇒ NERVE deduplicates. Colons stripped from the timestamp
+ * because event_ids appear in URLs.
+ */
+export function buildSalespersonEventId(
+  userId: string,
+  type: SalespersonEventType,
+  occurredAtIso: string,
+): string {
+  const stamp = occurredAtIso.replace(/[:.]/g, '').replace(/[-]/g, '');
+  return `${userId}:${type}:${stamp}`;
+}
+
+/**
+ * Post a salesperson event to NERVE. Fire-and-forget — never throws.
+ */
+export async function postSalespersonEvent(
+  payload: SalespersonEventPayload,
+): Promise<NerveIngestResult> {
+  return postSigned('/api/ingest/salesperson-event', payload);
+}
+
 // ─── Stripe events (B2) ────────────────────────────────────────────────
 
 export interface StripeEventPayload {

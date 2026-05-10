@@ -3,6 +3,10 @@ import { randomUUID } from 'crypto';
 import { hashPin, createToken } from '@/lib/auth';
 import { checkRateLimit } from '@/lib/rate-limit';
 import { findUserByName, createUser } from '@/lib/auth-db';
+import {
+  buildSalespersonEventId,
+  postSalespersonEvent,
+} from '@/lib/nerve-ingest';
 
 const TOKEN_EXPIRY_DAYS = 30;
 
@@ -54,6 +58,25 @@ export async function POST(req: NextRequest) {
       console.error('Signup: insert failed', dbErr);
       return NextResponse.json({ error: 'Failed to create account' }, { status: 500 });
     }
+
+    // B3: mirror the signup to NERVE for the per-SP timeline. Fire-and-
+    // forget; the account is already created, the token is already issued,
+    // NERVE failure must not surface to the new SP.
+    const signupAt = new Date().toISOString();
+    postSalespersonEvent({
+      event_id: buildSalespersonEventId(id, 'signup', signupAt),
+      user_id: id,
+      type: 'signup',
+      display_name: name,
+      area_postcode,
+      source: 'signup_handler',
+      metadata: { has_email: !!email, has_phone: !!phone },
+      occurred_at: signupAt,
+    }).then((r) => {
+      if (!r.ok) {
+        console.warn('[nerve-ingest] signup event failed:', r.error);
+      }
+    });
 
     const exp = Math.floor(Date.now() / 1000) + TOKEN_EXPIRY_DAYS * 24 * 60 * 60;
     const token = createToken({ user_id: id, name, exp });
