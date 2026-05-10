@@ -23,6 +23,7 @@ import { getStripe, getStripeWebhookSecret, getStripeHostingPriceId } from '@/li
 import { claimStripeEvent, markStripeEventProcessed } from '@/lib/stripe-events';
 import { sendCustomerWelcome } from '@/lib/email';
 import { formatPenceAsPounds, getMonthlyPence } from '@/lib/payments';
+import { buildStripeEventPayload, postStripeEvent } from '@/lib/nerve-ingest';
 
 function getSupabase() {
   return createClient(
@@ -56,6 +57,19 @@ export async function POST(req: NextRequest) {
     console.error('[payments/webhook] Signature verification failed:', message);
     return NextResponse.json({ error: message }, { status: 400 });
   }
+
+  // B2: mirror every signature-verified event to NERVE. Fire-and-forget —
+  // happens before the local idempotency claim + dispatch, so even events
+  // whose handlers crash still show up in the warehouse. NERVE's own
+  // idempotency on stripe_event_id deduplicates Stripe retries.
+  const nervePayload = buildStripeEventPayload(event);
+  postStripeEvent(nervePayload).then((r) => {
+    if (!r.ok) {
+      console.warn(
+        `[nerve-ingest] stripe-event ${event.id} (${event.type}) failed: ${r.error}`,
+      );
+    }
+  });
 
   const supabase = getSupabase();
   let claim: 'claimed' | 'already_processed';
