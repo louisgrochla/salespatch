@@ -3,8 +3,8 @@
 #
 # Hits the SL-MAS ingest endpoints on a NERVE deployment with HMAC-signed
 # test payloads. Currently covers A1 (composer-iteration), A2 (site-brief +
-# brand-analysis), A3 (demo-artefact), A4 (lead-profile), A6 (spend).
-# Prints HTTP status + response body for each.
+# brand-analysis), A3 (demo-artefact), A4 (lead-profile), A5 (qa-result),
+# A6 (spend). Prints HTTP status + response body for each.
 #
 # Usage:
 #   scripts/nerve/simulate-ingest.sh                 # production (default)
@@ -41,6 +41,7 @@ ITER_ID="verify-iter-$STAMP"
 BRIEF_ID="verify-brief-$STAMP"
 ANALYSIS_ID="verify-analysis-$STAMP"
 ARTEFACT_ID="verify-artefact-$STAMP"
+QA_ID="verify-qa-$STAMP"
 
 echo "Target: $NERVE_BASE_URL"
 echo "Stamp:  $STAMP"
@@ -233,8 +234,36 @@ JSON
 )
 sign_and_post "/api/ingest/demo-artefact" "$ARTEFACT_BODY"
 
+# ── A5 qa-result ─────────────────────────────────────────────────────────
+QA_BODY=$(cat <<JSON
+{
+  "qa_id": "$QA_ID",
+  "artefact_id": "$ARTEFACT_ID",
+  "lead_id": "$LEAD_ID",
+  "score": 84,
+  "passed": true,
+  "html_valid": true,
+  "html_warnings": 1,
+  "html_errors": 0,
+  "accessibility_score": 92,
+  "contrast_score": 88,
+  "performance_score": 76,
+  "issues": [
+    { "severity": "warning", "area": "html", "message": "preview probe stub warning" }
+  ],
+  "notes": "Stub QA result from simulate-ingest.sh probe.",
+  "agent_id": "simulate-ingest",
+  "agent_version": "stub-1",
+  "metadata": { "source": "simulate-ingest.sh", "stamp": "$STAMP" },
+  "ran_at": "$ISO"
+}
+JSON
+)
+sign_and_post "/api/ingest/qa-result" "$QA_BODY"
+
 echo "── Cleanup SQL (run against NERVE Postgres if you want the test rows gone) ──"
 cat <<SQL
+DELETE FROM "qa_results" WHERE qa_id = '$QA_ID';
 DELETE FROM "demo_artefacts" WHERE artefact_id = '$ARTEFACT_ID';
 DELETE FROM "brand_analyses" WHERE analysis_id = '$ANALYSIS_ID';
 DELETE FROM "site_briefs" WHERE brief_id = '$BRIEF_ID';
