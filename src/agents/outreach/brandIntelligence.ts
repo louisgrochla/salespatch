@@ -16,6 +16,7 @@
 
 import { createLogger } from "../../lib/logger.js";
 import { AgentHandler } from "../../pipeline/agentRuntime.js";
+import { reportSpend } from "../../lib/spendReporter.js";
 import type { ProfileResult } from "./leadProfilerAgent.js";
 import type { BrandAnalysis } from "./brandAnalyser.js";
 
@@ -187,6 +188,22 @@ async function analyseWithAI(
     const inputTokens = payload.usage?.prompt_tokens ?? 0;
     const outputTokens = payload.usage?.completion_tokens ?? 0;
     const cost = (inputTokens * 0.4 + outputTokens * 1.6) / 1_000_000; // gpt-4.1-mini pricing
+
+    // Mirror spend to NERVE — fire-and-forget.
+    reportSpend({
+      provider: "openrouter",
+      model: BRAND_INTELLIGENCE_MODEL,
+      agent_id: "brand-intelligence-agent",
+      lead_id: profile.lead_id ?? profile.business_name,
+      cost_usd: cost,
+      input_tokens: inputTokens,
+      output_tokens: outputTokens,
+      total_tokens: inputTokens + outputTokens,
+      request_kind: "completion",
+      success: true,
+      metadata: { business_name: profile.business_name },
+      occurred_at: new Date().toISOString(),
+    });
 
     return {
       lead_id: profile.lead_id ?? profile.business_name,

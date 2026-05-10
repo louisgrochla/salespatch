@@ -2,6 +2,7 @@ import { createLogger } from "../../lib/logger.js";
 import { pLimit } from "../../lib/concurrency.js";
 import { ensureLeadDir, saveFromUrl } from "../../lib/assetStore.js";
 import { AgentHandler } from "../../pipeline/agentRuntime.js";
+import { reportSpend } from "../../lib/spendReporter.js";
 
 const log = createLogger("lead-scout");
 
@@ -211,10 +212,46 @@ export const leadScoutAgent: AgentHandler = async (input) => {
       if (!response.ok) {
         const body = await response.text();
         errors.push(`Apify Google Maps error: ${response.status} — ${body.slice(0, 200)}`);
+        // Mirror failed call to NERVE so failures show up in spend rollups.
+        reportSpend({
+          provider: "apify",
+          model: "compass~crawler-google-places",
+          agent_id: "lead-scout-agent",
+          run_id: input.run_id,
+          node_id: input.node_id,
+          cost_usd: 0,
+          request_kind: "places_search",
+          success: false,
+          error_message: `${response.status}: ${body.slice(0, 200)}`,
+          metadata: { location, queries: searchStrings.length },
+          occurred_at: new Date().toISOString(),
+        });
       } else {
         const results = (await response.json()) as ApifyPlaceResult[];
 
         log.info(`Apify returned ${results.length} places`);
+
+        // Apify Google Maps scraper: ~$4 per 1k places (rough rate, varies
+        // by actor + caching). Recorded as a single ledger row per scout
+        // operation rather than per-result.
+        const apifyMapsCostPerResult = 0.004;
+        reportSpend({
+          provider: "apify",
+          model: "compass~crawler-google-places",
+          agent_id: "lead-scout-agent",
+          run_id: input.run_id,
+          node_id: input.node_id,
+          cost_usd: results.length * apifyMapsCostPerResult,
+          request_kind: "places_search",
+          success: true,
+          metadata: {
+            location,
+            queries: searchStrings.length,
+            results_count: results.length,
+            cost_per_result_usd: apifyMapsCostPerResult,
+          },
+          occurred_at: new Date().toISOString(),
+        });
 
         for (const place of results) {
           if (!place.title) continue;
