@@ -36,6 +36,82 @@ Keep entries terse. One screen each is plenty.
 
 ---
 
+## 2026-05-11 — Onboarding response uses UPSERT, not event-stream
+
+**Context:** B4 — mirror the customer's post-sale onboarding form into NERVE. B1/B2/B3 all use append-only event tables, so the obvious move was a fourth event table.
+
+**Tried:** Designing `OnboardingEvent` with one row per save, `event_id = lead_assignment_id:<seq>:<iso>`.
+
+**Result:** The onboarding form auto-saves on every keystroke (`/api/onboarding/[leadId]` POST debounced client-side). Estimating 50–200 keystrokes per customer × 50 closed customers/summer = 2,500–10,000 rows for what should be ~50 logical records. Indexes bloat for no analytical gain — nobody wants to query "what did the customer type at keystroke 47".
+
+**Decision:** UPSERT on `lead_assignment_id` (unique). Each save replaces the prior row with the cumulative latest state. `save_count` increments per ingest so the activity dimension is preserved as a scalar instead of a row count. `completed_at` is sticky once set so a partial late-save can't unset completion. Matches the A4 `lead_profiles` pattern, not the B1/B2/B3 pattern.
+
+**Watch out for:**
+- The `pickNullable` / `jsonPickNullable` helpers in the store are load-bearing — they encode "caller sent `undefined` ⇒ keep current; caller sent `null` ⇒ clear; caller sent a value ⇒ set". Naive `value ?? existing` would treat explicit-null as "no change", which is wrong (customer should be able to delete their phone number).
+- Sticky completion is enforced server-side (`completedAt ?? existing.completedAt`). Don't move that logic to the producer — the producer just forwards the Supabase row verbatim.
+- If a producer ever wants the keystroke-by-keystroke history (e.g. for UX research), the existing `lead_onboarding_responses` Supabase table is the source — not NERVE. NERVE intentionally collapses.
+
+**Related:** PR #59. Files: `apps/nerve/src/lib/sl-mas/onboardingResponseStore.ts`, `apps/nerve/prisma/migrations/15_onboarding_responses/`.
+
+---
+
+## 2026-05-11 — Stripe webhook fan-out fires BEFORE local dispatch
+
+**Context:** B2 — mirror every signature-verified Stripe webhook event into NERVE. Two natural places to fan out: (a) right after `constructEvent` verifies the signature; (b) after the local handler successfully processes the event.
+
+**Tried:** Initial sketch placed the fan-out at (b), after `markStripeEventProcessed` succeeded. Cleaner semantically — "NERVE sees events we actually handled".
+
+**Result:** Would silently lose any event whose local handler crashes. Stripe re-fires after a 500 with the same `evt_id`; if the handler keeps crashing, NERVE never sees that event at all. Worst possible outcome: analytics divergence between "what Stripe sent" and "what NERVE recorded".
+
+**Decision:** Fan-out at (a) — immediately after `constructEvent` verifies the signature, before any local idempotency claim or dispatch. NERVE captures every signature-verified event the dashboard received. Stripe retries dedupe against NERVE's `stripe_event_id` unique index (Stripe's `evt_id` is globally unique). Crashed handlers become an *observable* divergence — "Stripe sent us X, dashboard never handled X" is a query — rather than a silent gap.
+
+**Watch out for:**
+- Any future webhook integration in the dashboard (TikTok, Mailchimp, etc.) should follow the same "verify-then-mirror, before dispatch" rule for the same reason.
+- The `body_json` JSONB column holds the full event verbatim. Stripe events are typically <50KB but `invoice.payment_succeeded` for large invoices can approach 100KB — fine for JSONB, but don't add a `text` column expecting it to be tiny.
+- The `buildStripeEventPayload` extractor uses duck-typing (`obj.customer`, `obj.subscription`, etc.) across all Stripe resource shapes. Don't switch to per-event-type extraction — it's worse code for the same output and breaks when Stripe adds new event types.
+
+**Related:** PR #55. Files: `apps/sales-dashboard/src/app/api/payments/webhook/route.ts`, `apps/sales-dashboard/src/lib/nerve-ingest.ts` (`buildStripeEventPayload`).
+
+---
+
+## 2026-05-11 — D2 reads NERVE over REST, not Prisma-on-Pi
+
+**Context:** D2 — autumn Pi `withLearning(...)` wrapper should read prior decisions+outcomes from NERVE instead of local SQLite. Roadmap text suggested "Pi runtime gets a thin Prisma client that points at NERVE Postgres for reads only".
+
+**Tried:** Reading the suggestion at face value would mean shipping NERVE's Prisma client to the Pi, plus the prod `DATABASE_URL` and `pgvector` schema knowledge.
+
+**Result:** Two real problems. (1) Prod `DATABASE_URL` would have to live on a Raspberry Pi behind Tailscale — broader credential surface than necessary for a read-only consumer. (2) Schema duplication between NERVE (canonical) and Pi (replica via Prisma) — every NERVE migration would need a corresponding Pi-side regen step, otherwise the Pi crashes on prompt-injection time when Prisma can't decode a new column.
+
+**Decision:** REST endpoint `/api/read/decisions/learning-context?agent_id=X[&limit=N]` returning the same shape `DecisionStore.buildLearningContext` produces. Pi gets a tiny `NerveLearningClient` class that fetches + signs with the existing `OUTCOME_INGEST_SECRET`. One secret already on the Pi, zero schema duplication, NERVE owns the query plan.
+
+**Watch out for:**
+- `withLearning`'s read path is now `await`-able even though the legacy `DecisionStore` is sync — the `await Promise.resolve(reader.buildLearningContext(...))` pattern handles both. Don't strip the await thinking it's redundant.
+- On read failure the wrapper falls back to the **local** `DecisionStore` so a Tailscale blip never breaks the pipeline. Format always goes through the local store too, so the prompt section stays bit-identical regardless of read source (because both delegate to the shared `formatLearningContextForPrompt` in `contextFormat.ts`).
+- The write path stays on Pi-local SQLite — D2 is read-only. The Phase 1 outcome bridge separately ingests pitch outcomes into NERVE decisions; don't bolt write-side onto `NerveLearningClient`.
+
+**Related:** PR #51. Files: `src/learning/nerveLearningClient.ts`, `src/learning/learningAgent.ts`, `src/learning/contextFormat.ts`, `apps/nerve/src/lib/sl-mas/learningContext.ts`, `apps/nerve/src/app/api/read/decisions/learning-context/route.ts`.
+
+---
+
+## 2026-05-11 — Read endpoints sit under `/api/read/*` with HMAC, not `/api/public/*`
+
+**Context:** D1 — first read-side endpoints (`strategies`, `lead-profiles/winning-features`). NERVE already had `/api/public/metrics` as a precedent for read endpoints. Obvious move: extend that namespace.
+
+**Tried:** Putting the strategy endpoint under `/api/public/strategies` and the winning-features endpoint under `/api/public/lead-profiles/winning-features`.
+
+**Result:** `/api/public/metrics` exists explicitly for the dissertation research page — "everything returned must be safe to publish" is in the file header. Strategy parameters + close rates are competitive intelligence (e.g. "heritage_green/trophy_bar wins for barbers at 100% n=3"). Putting them under `/api/public` implies they're publishable when they aren't.
+
+**Decision:** New `/api/read/*` namespace, exempted from the founder NextAuth gate via a one-line addition to `apps/nerve/middleware.ts`. HMAC-signed with the existing `OUTCOME_INGEST_SECRET` (no new secret) and a separate `X-Read-Signature` header (so the read path is identifiable in logs). Canonical signed string is the sorted query string, mirroring how POST routes sign the JSON body.
+
+**Watch out for:**
+- The middleware exemption list (`api/auth|api/ingest|api/read|api/public|...`) is a single regex. Future additions must go here AND respect the same auth posture — `api/read` is HMAC-only at the route level, `api/public` is rate-limit-only.
+- Companion helper `~/.claude/scripts/nerve/get-ingest.sh` (sibling to `post-ingest.sh`, lives outside the repo) does the GET-side signing for skills. Back up alongside `post-ingest.sh` when reformatting `~/.claude`.
+- D2 read endpoint follows the same pattern — adding another read endpoint is route + HMAC verify + store wrapper. No middleware change needed once the regex includes `api/read`.
+
+**Related:** PR #49. Files: `apps/nerve/middleware.ts`, `apps/nerve/src/app/api/read/strategies/route.ts`, `apps/nerve/src/app/api/read/lead-profiles/winning-features/route.ts`.
+
+---
+
 ## 2026-05-10 — JSON-API validators must check both `undefined` AND `null`
 
 **Context:** Wiring the spec-site-brief skill to POST briefs into NERVE for the first time (A2 producer side). Noose & Needle backfill had a genuine research gap on `google_rating`, sent it as `null`.
