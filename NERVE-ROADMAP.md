@@ -127,8 +127,8 @@ _Last updated: 2026-05-10 (manual, post-A1/A2/A4/A6 sweep)_
 
 ### A5 — Site QA results ingest
 
-- **Status:** not started
-- **Owner:** _(unclaimed)_
+- **Status:** in progress (this branch)
+- **Owner:** feat/a5-qa-results
 - **Goal:** QA results from `siteQaAgent` (HTML validity, contrast, accessibility, score) land in NERVE keyed by demo_artefact_id.
 - **Files:**
   - `apps/nerve/prisma/schema.prisma` (new `QaResult` model)

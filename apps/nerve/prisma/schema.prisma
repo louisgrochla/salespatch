@@ -1219,3 +1219,44 @@ model DemoArtefact {
   @@index([aestheticPositioning])
   @@map("demo_artefacts")
 }
+
+
+// ─── site QA results ─────────────────────────────────────────────────────
+//
+// A5 of Phase A. Per-artefact QA scores from the autumn Pi siteQaAgent
+// (or any manual QA pass) — HTML validity, accessibility, contrast,
+// performance, plus an overall numeric score the analytics layer can
+// correlate against pitch outcomes ("do high-QA demos close better?").
+//
+// Soft FK to DemoArtefact.artefactId so a single artefact accumulates
+// QA history (re-runs after edits). The (artefactId, ranAt DESC) index
+// makes "latest QA for this artefact" a one-row lookup.
+
+model QaResult {
+  id                  String   @id @default(cuid())
+  qaId                String   @unique @map("qa_id") // caller-supplied natural key
+  artefactId          String   @map("artefact_id") // soft FK to demo_artefacts.artefactId
+  leadId              String   @map("lead_id") // denormalised for join-free analytics
+  score               Int // 0-100 overall
+  passed              Boolean // typically score >= 70 but the agent owns the rule
+  htmlValid           Boolean? @map("html_valid")
+  htmlWarnings        Int      @default(0) @map("html_warnings")
+  htmlErrors          Int      @default(0) @map("html_errors")
+  accessibilityScore  Int?     @map("accessibility_score") // 0-100
+  contrastScore       Int?     @map("contrast_score") // 0-100, WCAG
+  performanceScore    Int?     @map("performance_score") // 0-100, weight + render
+  issues              Json     @default("[]") // [{ severity, area, message, line }]
+  notes               String? // free-form qualitative summary
+  agentId             String?  @map("agent_id")
+  agentVersion        String?  @map("agent_version") // prompt version, model id, ruleset hash
+  source              String   @default("manual_skill") // "manual_skill" | "pi_qa_agent"
+  metadata            Json     @default("{}")
+  ranAt               DateTime @default(now()) @map("ran_at")
+  createdAt           DateTime @default(now()) @map("created_at")
+  updatedAt           DateTime @default(now()) @updatedAt @map("updated_at")
+
+  @@index([artefactId, ranAt(sort: Desc)])
+  @@index([leadId, ranAt(sort: Desc)])
+  @@index([passed, score(sort: Desc)])
+  @@map("qa_results")
+}
