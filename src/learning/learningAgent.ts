@@ -1,12 +1,35 @@
 import { createLogger } from "../lib/logger.js";
 import { AgentExecutionInput, AgentExecutionOutput, AgentHandler } from "../pipeline/agentRuntime.js";
 import { DecisionStore } from "./decisionStore.js";
+import type { DecisionContext } from "./contextFormat.js";
 
 const log = createLogger("learning-agent");
+
+/**
+ * Read-side surface withLearning consults before invoking the wrapped
+ * handler. Both the local `DecisionStore` and `NerveLearningClient`
+ * satisfy this; the latter sources the data from NERVE Postgres for the
+ * autumn pipeline swap (D2). Async return so HTTP-backed implementations
+ * work; sync `DecisionStore` resolves the await immediately.
+ */
+export interface LearningContextSource {
+  buildLearningContext(
+    agentId: string,
+    limit?: number,
+  ): DecisionContext | Promise<DecisionContext>;
+  formatContextForPrompt(context: DecisionContext): string;
+}
 
 export interface LearningAgentOptions {
   /** Tags to add to every decision from this agent */
   defaultTags?: string[];
+  /**
+   * Override the read source for learning context. When set, the wrapper
+   * fetches prior decisions+outcomes from this source instead of the
+   * write-side decisionStore. Writes still flow to decisionStore — D2
+   * keeps the write path on the Pi while moving reads to NERVE.
+   */
+  contextSource?: LearningContextSource;
 }
 
 /**
@@ -29,9 +52,25 @@ export function withLearning(
   decisionStore: DecisionStore,
   options: LearningAgentOptions = {},
 ): AgentHandler {
+  const reader: LearningContextSource = options.contextSource ?? decisionStore;
   return async (input: AgentExecutionInput): Promise<AgentExecutionOutput> => {
-    // 1. Build learning context from past decisions
-    const context = decisionStore.buildLearningContext(agentId, 10);
+    // 1. Build learning context from past decisions. Read source may be the
+    // local DecisionStore (sync) or a remote NerveLearningClient (async) —
+    // await unifies both. Read failure must not break the pipeline: fall
+    // back to the local store if the remote source threw.
+    let context: DecisionContext;
+    try {
+      context = await Promise.resolve(reader.buildLearningContext(agentId, 10));
+    } catch (err) {
+      log.warn("learning-context read failed, falling back to local store", {
+        agent: agentId,
+        error: String(err),
+      });
+      context = decisionStore.buildLearningContext(agentId, 10);
+    }
+    // Format via the local store — it delegates to the shared pure formatter,
+    // and we want consistent output even when the remote reader is what
+    // failed above.
     const contextPrompt = decisionStore.formatContextForPrompt(context);
 
     // Inject into upstream artifacts so the agent can use it

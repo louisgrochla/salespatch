@@ -4,6 +4,7 @@ import { randomUUID } from "node:crypto";
 import Database from "better-sqlite3";
 import { applyProductionPragmas } from "../lib/sqliteDefaults.js";
 import { createLogger } from "../lib/logger.js";
+import { formatLearningContextForPrompt } from "./contextFormat.js";
 
 const log = createLogger("decision-store");
 
@@ -264,40 +265,7 @@ export class DecisionStore {
 
   /** Format learning context into a prompt section for AI agents */
   formatContextForPrompt(context: DecisionContext): string {
-    if (context.totalDecisions === 0) {
-      return "No prior decisions recorded. This is the first run.";
-    }
-
-    const parts: string[] = [];
-    parts.push(
-      `## Learning Context (${context.totalDecisions} prior decisions, ${(context.successRate * 100).toFixed(0)}% success rate)`,
-    );
-
-    if (context.insights.length > 0) {
-      parts.push("\n### Key Insights:");
-      for (const insight of context.insights) {
-        parts.push(
-          `- ${insight.pattern} → ${insight.recommendation} (based on ${insight.sample_size} decisions)`,
-        );
-      }
-    }
-
-    const withOutcomes = context.recentDecisions.filter(
-      (d) => d.outcomes.length > 0,
-    );
-    if (withOutcomes.length > 0) {
-      parts.push("\n### Recent Decisions & Outcomes:");
-      for (const d of withOutcomes.slice(0, 5)) {
-        const outcomeStr = d.outcomes
-          .map((o) => `${o.result}${o.metric_value ? ` (${o.metric_name}: ${o.metric_value})` : ""}`)
-          .join(", ");
-        parts.push(
-          `- Decision: ${d.action} (confidence: ${d.confidence})\n  Reasoning: ${d.reasoning}\n  Outcome: ${outcomeStr}`,
-        );
-      }
-    }
-
-    return parts.join("\n");
+    return formatLearningContextForPrompt(context);
   }
 
   close(): void {
