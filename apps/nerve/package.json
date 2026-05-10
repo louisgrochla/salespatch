@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "next dev --port 4400",
     "dev:safe": "next dev --hostname 127.0.0.1 --port 4400",
-    "build": "prisma generate && next build",
+    "build": "prisma generate && prisma migrate deploy && next build",
     "start": "next start --port 4400",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
