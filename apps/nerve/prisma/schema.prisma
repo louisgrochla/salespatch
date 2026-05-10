@@ -1404,3 +1404,55 @@ model SalespersonEvent {
   @@index([type, occurredAt(sort: Desc)])
   @@map("salesperson_events")
 }
+
+// ─── onboarding responses (Tier 2 post-sale signal) ──────────────────────
+//
+// B4 of Phase B — closes Phase B. Mirrors the customer's post-sale
+// onboarding form into NERVE so the warehouse can join "we sold a
+// demo to a barber" with "the customer actually said they want X, Y,
+// and Z changed about it". Without this row, the warehouse only sees
+// the close — not what the customer thought of the demo when they
+// finally had time to look at it.
+//
+// Producer: `apps/sales-dashboard/src/app/api/onboarding/[leadId]/
+// route.ts` POST handler fans out after the Supabase upsert returns
+// the cumulative row. Fire-and-forget — Supabase write is source of
+// truth, NERVE failure must not surface to the customer.
+//
+// Idempotency: natural key is `leadAssignmentId` (unique). The form
+// auto-saves on every keystroke, so each save upserts in place — the
+// row always reflects the cumulative latest state. `saveCount`
+// increments on each ingest so analytics can spot drop-off ("they
+// made 12 saves but never hit complete").
+
+model OnboardingResponse {
+  id                  String   @id @default(cuid())
+  leadAssignmentId    String   @unique @map("lead_assignment_id")
+  // Mirror of the customer-supplied fields on `lead_onboarding_responses`.
+  contactPhone        String?  @map("contact_phone")
+  contactEmail        String?  @map("contact_email")
+  topChanges          String?  @map("top_changes")
+  anythingElse        String?  @map("anything_else")
+  hasExistingDomain   Boolean? @map("has_existing_domain")
+  existingDomain      String?  @map("existing_domain")
+  domainPreferences   Json?    @map("domain_preferences") // string[]
+  photos              Json?    @default("[]") // [{ url, filename, content_type, uploaded_at }]
+  completedAt         DateTime? @map("completed_at") // populated when mark_completed:true was last sent
+  welcomeSentAt       DateTime? @map("welcome_sent_at") // mirrors Supabase column
+  // Server-side bookkeeping for drop-off analytics.
+  saveCount           Int      @default(0) @map("save_count")
+  firstSavedAt        DateTime @default(now()) @map("first_saved_at")
+  lastSavedAt         DateTime @default(now()) @map("last_saved_at")
+  // Full Supabase row verbatim so future analytics can re-derive without
+  // hitting Supabase — including any columns we haven't promoted to
+  // first-class fields yet.
+  rawPayload          Json?    @map("raw_payload")
+  metadata            Json     @default("{}")
+  createdAt           DateTime @default(now()) @map("created_at")
+  updatedAt           DateTime @default(now()) @updatedAt @map("updated_at")
+
+  @@index([completedAt(sort: Desc)])
+  @@index([welcomeSentAt(sort: Desc)])
+  @@index([lastSavedAt(sort: Desc)])
+  @@map("onboarding_responses")
+}
