@@ -139,8 +139,8 @@ _Last updated: 2026-05-10 (manual)_
 
 ### A6 — API spend ledger ingest
 
-- **Status:** not started
-- **Owner:** _(unclaimed)_
+- **Status:** in progress (this branch)
+- **Owner:** feat/a6-spend-ledger
 - **Goal:** Each external API call (OpenRouter, Apify, Google Places) writes a `spend_ledger` row to NERVE with provider, cost_usd, run_id, agent_id, tokens.
 - **Files:**
   - `apps/nerve/prisma/schema.prisma` (new `SpendLedger` model)

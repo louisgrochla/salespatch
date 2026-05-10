@@ -961,6 +961,7 @@ model ModelRegistration {
   @@map("model_registrations")
 }
 
+ feat/a1-composer-iterations
 // ─── composer workbench iterations ───────────────────────────────────────
 //
 // Founder's manual demo-iteration trail from `tools/workbench/`. Every save
@@ -994,4 +995,38 @@ model ComposerIteration {
   @@index([editKind, createdAt(sort: Desc)])
   @@index([parentIterationId])
   @@map("composer_iterations")
+
+// Per-call API spend ledger. Each successful (or failed) outbound call to a
+// paid external API — OpenRouter, Apify, Google Places, etc. — writes one
+// row. Lets the founder answer "how much did vertical=barber cost in
+// May?" from a single query without scraping provider dashboards.
+//
+// Written by the Pi runtime via fire-and-forget POST to
+// /api/ingest/spend (see src/lib/spendReporter.ts on the runtime side).
+model SpendLedger {
+  id            String   @id @default(cuid())
+  provider      String // "openrouter" | "apify" | "google_places" | other
+  model         String? // e.g. "anthropic/claude-sonnet-4-20250514"
+  agentId       String?  @map("agent_id") // e.g. "site-composer-agent"
+  runId         String?  @map("run_id") // pipeline run ID when known
+  nodeId        String?  @map("node_id") // pipeline node ID when known
+  leadId        String?  @map("lead_id") // lead slug when known
+  vertical      String? // "barber" | "cafe" | etc.
+  costUsd       Float    @map("cost_usd") // non-zero, in USD
+  inputTokens   Int?     @map("input_tokens") // LLM input tokens
+  outputTokens  Int?     @map("output_tokens") // LLM output tokens
+  totalTokens   Int?     @map("total_tokens")
+  requestKind   String?  @map("request_kind") // "completion" | "embedding" | "scrape" | "places_search" | etc.
+  success       Boolean  @default(true)
+  errorMessage  String?  @map("error_message") // populated on failure
+  metadata      Json     @default("{}") // provider-specific (response_id, finish_reason, ...)
+  occurredAt    DateTime @map("occurred_at") // when the API call happened
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  @@index([provider, occurredAt(sort: Desc)])
+  @@index([agentId, occurredAt(sort: Desc)])
+  @@index([leadId, occurredAt(sort: Desc)])
+  @@index([runId])
+  @@map("spend_ledger")
+ main
 }
