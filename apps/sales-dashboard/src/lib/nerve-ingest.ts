@@ -82,6 +82,70 @@ export async function postLeadAssignmentEvent(
   return postSigned('/api/ingest/lead-assignment', payload);
 }
 
+// ─── Onboarding responses (B4) ─────────────────────────────────────────
+
+export interface OnboardingPhotoEntry {
+  url: string;
+  filename: string;
+  content_type?: string;
+  uploaded_at: string;
+}
+
+export interface OnboardingResponsePayload {
+  lead_assignment_id: string;
+  contact_phone?: string | null;
+  contact_email?: string | null;
+  top_changes?: string | null;
+  anything_else?: string | null;
+  has_existing_domain?: boolean | null;
+  existing_domain?: string | null;
+  domain_preferences?: string[] | null;
+  photos?: OnboardingPhotoEntry[] | null;
+  completed_at?: string | null;
+  welcome_sent_at?: string | null;
+  raw_payload?: Record<string, unknown> | null;
+  metadata?: Record<string, unknown>;
+}
+
+/**
+ * Build an OnboardingResponsePayload from a Supabase
+ * lead_onboarding_responses row. Used by the onboarding POST handler
+ * after its upsert returns the cumulative latest state.
+ *
+ * Unlike B1/B2/B3 which build payloads from event arguments, this
+ * helper takes the FULL row so the cumulative snapshot is what flows
+ * to NERVE. The form auto-saves on every keystroke so NERVE sees the
+ * running state, not deltas.
+ */
+export function buildOnboardingResponsePayload(
+  leadAssignmentId: string,
+  row: Record<string, unknown>,
+): OnboardingResponsePayload {
+  return {
+    lead_assignment_id: leadAssignmentId,
+    contact_phone: (row.contact_phone as string | null) ?? null,
+    contact_email: (row.contact_email as string | null) ?? null,
+    top_changes: (row.top_changes as string | null) ?? null,
+    anything_else: (row.anything_else as string | null) ?? null,
+    has_existing_domain: (row.has_existing_domain as boolean | null) ?? null,
+    existing_domain: (row.existing_domain as string | null) ?? null,
+    domain_preferences: (row.domain_preferences as string[] | null) ?? null,
+    photos: (row.photos as OnboardingPhotoEntry[] | null) ?? null,
+    completed_at: (row.completed_at as string | null) ?? null,
+    welcome_sent_at: (row.welcome_sent_at as string | null) ?? null,
+    raw_payload: row,
+  };
+}
+
+/**
+ * Post an onboarding response snapshot to NERVE. Fire-and-forget — never throws.
+ */
+export async function postOnboardingResponse(
+  payload: OnboardingResponsePayload,
+): Promise<NerveIngestResult> {
+  return postSigned('/api/ingest/onboarding-response', payload);
+}
+
 // ─── Salesperson events (B3) ───────────────────────────────────────────
 
 export type SalespersonEventType =

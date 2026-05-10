@@ -5,7 +5,8 @@
 # test payloads. Currently covers A1 (composer-iteration), A2 (site-brief +
 # brand-analysis), A3 (demo-artefact), A4 (lead-profile), A5 (qa-result),
 # A6 (spend), B1 (lead-assignment events), B2 (stripe events), B3
-# (salesperson events). Prints HTTP status + response body for each.
+# (salesperson events), B4 (onboarding response). Prints HTTP status +
+# response body for each.
 #
 # Usage:
 #   scripts/nerve/simulate-ingest.sh                 # production (default)
@@ -398,8 +399,34 @@ JSON
 )
 sign_and_post "/api/ingest/salesperson-event" "$SP_CONNECT_BODY"
 
+# ── B4 onboarding response (two saves to exercise the increment path) ────
+ONBOARDING_BODY_1=$(cat <<JSON
+{
+  "lead_assignment_id": "$ASSIGNMENT_ID",
+  "contact_phone": "07123456789",
+  "top_changes": "Make the hero photo bigger.",
+  "has_existing_domain": false,
+  "domain_preferences": ["verify-test-cafe.co.uk", "verifycafe.co.uk"],
+  "metadata": { "source": "simulate-ingest.sh", "stamp": "$STAMP", "pass": 1 }
+}
+JSON
+)
+sign_and_post "/api/ingest/onboarding-response" "$ONBOARDING_BODY_1"
+
+ONBOARDING_BODY_2=$(cat <<JSON
+{
+  "lead_assignment_id": "$ASSIGNMENT_ID",
+  "anything_else": "We are open Sundays too.",
+  "completed_at": "$ISO",
+  "metadata": { "source": "simulate-ingest.sh", "stamp": "$STAMP", "pass": 2 }
+}
+JSON
+)
+sign_and_post "/api/ingest/onboarding-response" "$ONBOARDING_BODY_2"
+
 echo "── Cleanup SQL (run against NERVE Postgres if you want the test rows gone) ──"
 cat <<SQL
+DELETE FROM "onboarding_responses" WHERE lead_assignment_id = '$ASSIGNMENT_ID';
 DELETE FROM "salesperson_events" WHERE user_id = '$SP_ID';
 DELETE FROM "stripe_events" WHERE stripe_event_id = '$STRIPE_EVENT_ID';
 DELETE FROM "lead_assignment_events" WHERE assignment_id = '$ASSIGNMENT_ID';

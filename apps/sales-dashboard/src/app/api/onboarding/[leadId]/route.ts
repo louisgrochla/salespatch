@@ -23,6 +23,10 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { sendCustomerInterest } from '@/lib/email';
 import { formatPenceAsPounds, getMonthlyPence, getSetupFeePence } from '@/lib/payments';
+import {
+  buildOnboardingResponsePayload,
+  postOnboardingResponse,
+} from '@/lib/nerve-ingest';
 
 export const dynamic = 'force-dynamic';
 
@@ -147,6 +151,21 @@ export async function POST(
     .select('*')
     .single();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  // B4: mirror the cumulative snapshot to NERVE. Fire-and-forget.
+  // Each save (the form auto-saves on every keystroke) upserts the
+  // same NERVE row in place; save_count increments so drop-off
+  // analytics ("they saved 12 times but never marked complete") works
+  // out of the box.
+  if (data) {
+    postOnboardingResponse(
+      buildOnboardingResponsePayload(leadId, data as Record<string, unknown>),
+    ).then((r) => {
+      if (!r.ok) {
+        console.warn('[nerve-ingest] onboarding-response failed:', r.error);
+      }
+    });
+  }
 
   // If the customer just dropped their email AND we haven't sent the
   // soft welcome yet, fire it now + stamp welcome_sent_at so we don't
