@@ -1179,3 +1179,43 @@ model BrandAnalysis {
   @@index([positioningReference])
   @@map("brand_analyses")
 }
+
+
+// ─── demo HTML artefacts ─────────────────────────────────────────────────
+//
+// A3 of Phase A. Stores every generated demo HTML inline so the artefact
+// trail is replayable and queryable from NERVE without going back to the
+// filesystem or Supabase Storage. Pairs with A1 (composer iterations) and
+// A2 (site_briefs) — soft FKs to both let the AI layer trace
+// brief → iterations → final artefact for any lead.
+//
+// Caller-supplied artefactId so the build-demo skill / Pi composer can
+// retry on transient failure without double-inserting. Indexed on
+// (leadId, generatedAt DESC) for "latest demo for X" lookups; history is
+// preserved by appending new rows on each rebuild.
+
+model DemoArtefact {
+  id                    String   @id @default(cuid())
+  artefactId            String   @unique @map("artefact_id") // caller-supplied natural key
+  leadId                String   @map("lead_id")
+  briefId               String?  @map("brief_id") // soft FK to site_briefs.briefId
+  composerIterationId   String?  @map("composer_iteration_id") // soft FK to composer_iterations.iterationId
+  businessName          String   @map("business_name")
+  vertical              String?
+  htmlInline            String   @map("html_inline") // full demo.html, base64 photos already embedded upstream
+  htmlSizeBytes         Int      @map("html_size_bytes") // denormalised size for queries / billing
+  photoCount            Int      @default(0) @map("photo_count") // count of <img data:...> embeds
+  aestheticPositioning  String?  @map("aesthetic_positioning") // mirrored from brand_analyses for join-free queries
+  dominantHex           String?  @map("dominant_hex")
+  source                String   @default("manual_skill") // "manual_skill" | "pi_composer"
+  metadata              Json     @default("{}")
+  generatedAt           DateTime @default(now()) @map("generated_at")
+  createdAt             DateTime @default(now()) @map("created_at")
+  updatedAt             DateTime @default(now()) @updatedAt @map("updated_at")
+
+  @@index([leadId, generatedAt(sort: Desc)])
+  @@index([briefId])
+  @@index([vertical, generatedAt(sort: Desc)])
+  @@index([aestheticPositioning])
+  @@map("demo_artefacts")
+}

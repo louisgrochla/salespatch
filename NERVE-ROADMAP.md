@@ -100,8 +100,8 @@ _Last updated: 2026-05-10 (manual, post-A1/A2/A4/A6 sweep)_
 
 ### A3 — Demo HTML artefacts ingest
 
-- **Status:** not started
-- **Owner:** _(unclaimed)_
+- **Status:** in progress (this branch)
+- **Owner:** feat/a3-demo-artefacts
 - **Goal:** Every generated demo HTML (manual or Pi-composer) saved to NERVE as a `DemoArtefact` row, JSONB inline.
 - **Files:**
   - `apps/nerve/prisma/schema.prisma` (new `DemoArtefact` model)
