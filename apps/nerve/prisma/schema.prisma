@@ -37,13 +37,13 @@ model User {
 // ─── phase boundaries (dissertation methodology timeline) ────────────────
 
 model PhaseBoundary {
-  id                      String    @id @default(cuid())
-  name                    String    @unique
-  startDate               DateTime
-  endDate                 DateTime?
-  operationalDescription  String
-  createdAt               DateTime  @default(now())
-  updatedAt               DateTime  @updatedAt
+  id                     String    @id @default(cuid())
+  name                   String    @unique
+  startDate              DateTime
+  endDate                DateTime?
+  operationalDescription String
+  createdAt              DateTime  @default(now())
+  updatedAt              DateTime  @updatedAt
 
   @@index([startDate])
 }
@@ -51,7 +51,7 @@ model PhaseBoundary {
 // ─── sales intelligence ──────────────────────────────────────────────────
 
 enum PitchOutcome {
-  closed             // legacy alias for closed_now (kept for back-compat)
+  closed // legacy alias for closed_now (kept for back-compat)
   rejected
   follow_up
   closed_now
@@ -97,49 +97,49 @@ enum PitchQualityFlag {
 }
 
 model PitchLog {
-  id                       String           @id @default(cuid())
-  date                     DateTime
-  businessName             String
-  businessType             String?
-  sector                   String?
-  location                 String?
-  leadSource               String?
-  demoVersion              String?
-  outcome                  PitchOutcome
-  contractorId             String?
-  pitchDuration            Int?             // seconds, auto from iOS timer
-  pitchAttemptNumber       Int              @default(1)
+  id                   String           @id @default(cuid())
+  date                 DateTime
+  businessName         String
+  businessType         String?
+  sector               String?
+  location             String?
+  leadSource           String?
+  demoVersion          String?
+  outcome              PitchOutcome
+  contractorId         String?
+  pitchDuration        Int? // seconds, auto from iOS timer
+  pitchAttemptNumber   Int              @default(1)
   // Questionnaire — required fields
-  decisionMakerPresent     Boolean?
-  demoShown                Boolean?
-  interestLevel            InterestLevel?
-  consentToRecord          Boolean          @default(false)
+  decisionMakerPresent Boolean?
+  demoShown            Boolean?
+  interestLevel        InterestLevel?
+  consentToRecord      Boolean          @default(false)
   // Questionnaire — conditional fields
-  demoReaction             DemoReaction?
-  agreedPrice              Decimal?         @db.Decimal(10, 2)
-  paymentMethod            PaymentMethod?
-  bestFollowupTime         FollowupTime?
-  agreedNextStep           AgreedNextStep?
+  demoReaction         DemoReaction?
+  agreedPrice          Decimal?         @db.Decimal(10, 2)
+  paymentMethod        PaymentMethod?
+  bestFollowupTime     FollowupTime?
+  agreedNextStep       AgreedNextStep?
   // Questionnaire — optional gold
-  gutFeelClosePct          Int?             // 0-100
-  firstResponsePhrase      String?
-  competitorMentioned      String?
+  gutFeelClosePct      Int? // 0-100
+  firstResponsePhrase  String?
+  competitorMentioned  String?
   // Auto-captured location
-  gpsLat                   Float?
-  gpsLng                   Float?
+  gpsLat               Float?
+  gpsLng               Float?
   // Quality control — derived server-side at ingest time. Dissertation
   // queries scope to qualityFlag=ok; ops queries see everything.
-  qualityFlag              PitchQualityFlag @default(ok)
+  qualityFlag          PitchQualityFlag @default(ok)
   // Legacy / housekeeping
-  consentFlag              Boolean          @default(false) // pre-questionnaire field; kept for back-compat
-  notes                    String?
-  supabasePitchId          String?          @unique // idempotency key for webhook
-  source                   String           @default("manual") // manual | webhook | mobile-api
-  phaseLabel               String
-  createdAt                DateTime         @default(now())
-  updatedAt                DateTime         @updatedAt
+  consentFlag          Boolean          @default(false) // pre-questionnaire field; kept for back-compat
+  notes                String?
+  supabasePitchId      String?          @unique // idempotency key for webhook
+  source               String           @default("manual") // manual | webhook | mobile-api
+  phaseLabel           String
+  createdAt            DateTime         @default(now())
+  updatedAt            DateTime         @updatedAt
 
-  objections               PitchObjection[]
+  objections PitchObjection[]
 
   @@index([date])
   @@index([phaseLabel])
@@ -162,10 +162,10 @@ model ObjectionTag {
 }
 
 model PitchObjection {
-  pitchId    String
+  pitchId     String
   objectionId String
-  pitch      PitchLog     @relation(fields: [pitchId], references: [id], onDelete: Cascade)
-  objection  ObjectionTag @relation(fields: [objectionId], references: [id], onDelete: Cascade)
+  pitch       PitchLog     @relation(fields: [pitchId], references: [id], onDelete: Cascade)
+  objection   ObjectionTag @relation(fields: [objectionId], references: [id], onDelete: Cascade)
 
   @@id([pitchId, objectionId])
   @@index([objectionId])
@@ -181,24 +181,24 @@ enum OperationsLogType {
 }
 
 model OperationsLog {
-  id            String            @id @default(cuid())
-  date          DateTime
-  type          OperationsLogType
+  id          String            @id @default(cuid())
+  date        DateTime
+  type        OperationsLogType
   // weekly: body. decision: decision/reasoning/outcome. failure:
   // whatFailed/why/whatChanged. iteration: whatChanged/beforeState/afterState.
-  body          String?
-  decision      String?
-  reasoning     String?
-  outcome       String?
-  whatFailed    String?
-  why           String?
-  whatChanged   String?
-  beforeState   String?
-  afterState    String?
-  tags          String[]          @default([])
-  phaseLabel    String
-  createdAt     DateTime          @default(now())
-  updatedAt     DateTime          @updatedAt
+  body        String?
+  decision    String?
+  reasoning   String?
+  outcome     String?
+  whatFailed  String?
+  why         String?
+  whatChanged String?
+  beforeState String?
+  afterState  String?
+  tags        String[]          @default([])
+  phaseLabel  String
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
 
   @@index([date])
   @@index([type])
@@ -248,7 +248,7 @@ model CostEntry {
 model ArchitectureDocument {
   id         String   @id @default(cuid())
   title      String
-  body       String   // markdown
+  body       String // markdown
   version    String
   date       DateTime
   tags       String[] @default([])
@@ -271,30 +271,30 @@ model SystemChangelog {
 }
 
 model PromptLibraryEntry {
-  id               String           @id @default(cuid())
-  name             String           @unique
-  fullText         String           // current value
+  id               String   @id @default(cuid())
+  name             String   @unique
+  fullText         String // current value
   model            String
-  versionNumber    Int              @default(1)
+  versionNumber    Int      @default(1)
   performanceNotes String?
-  tags             String[]         @default([])
+  tags             String[] @default([])
   phaseLabel       String
-  createdAt        DateTime         @default(now())
-  updatedAt        DateTime         @updatedAt
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 
-  versions         PromptVersion[]
+  versions PromptVersion[]
 }
 
 model PromptVersion {
-  id               String             @id @default(cuid())
+  id               String   @id @default(cuid())
   promptId         String
   fullText         String
   model            String
   versionNumber    Int
   performanceNotes String?
-  createdAt        DateTime           @default(now())
+  createdAt        DateTime @default(now())
 
-  prompt           PromptLibraryEntry @relation(fields: [promptId], references: [id], onDelete: Cascade)
+  prompt PromptLibraryEntry @relation(fields: [promptId], references: [id], onDelete: Cascade)
 
   @@unique([promptId, versionNumber])
   @@index([promptId])
@@ -343,7 +343,7 @@ model DemoRecord {
   fileReference     String?
   dateBuilt         DateTime
   templateVersion   String?
-  conversionOutcome String?  // closed | rejected | follow_up | unpitched
+  conversionOutcome String? // closed | rejected | follow_up | unpitched
   notes             String?
   phaseLabel        String
   createdAt         DateTime @default(now())
@@ -399,102 +399,102 @@ enum LiteraturePosition {
 
 // Single-row table — there is one dissertation. Use id = "main".
 model DissertationMeta {
-  id                          String   @id @default("main")
-  workingTitle                String
-  researchQuestion            String
-  supervisor                  String?
-  submissionDeadline          DateTime?
-  submissionDeadlineNote      String?  // free text when the deadline isn't yet known
-  overallStatus               DissertationStatus @default(in_progress)
-  degree                      String?  // e.g. "BA (Hons) Digital Marketing and Business Analytics"
-  institution                 String?  // e.g. "Robert Gordon University, Aberdeen"
-  wordCountTargetMin          Int?
-  wordCountTargetMax          Int?
+  id                       String             @id @default("main")
+  workingTitle             String
+  researchQuestion         String
+  supervisor               String?
+  submissionDeadline       DateTime?
+  submissionDeadlineNote   String? // free text when the deadline isn't yet known
+  overallStatus            DissertationStatus @default(in_progress)
+  degree                   String? // e.g. "BA (Hons) Digital Marketing and Business Analytics"
+  institution              String? // e.g. "Robert Gordon University, Aberdeen"
+  wordCountTargetMin       Int?
+  wordCountTargetMax       Int?
   // The academic framing paragraph — describes the study to a supervisor in
   // the right register. Surfaced by /ask in Stage 5 whenever the dissertation
   // topic or framing is queried.
-  academicFraming             String?
+  academicFraming          String?
   // Markdown bullet lists of how this study connects to each half of the
   // degree.
-  degreeRelevanceMarketing    String?
-  degreeRelevanceAnalytics    String?
-  phaseLabel                  String
-  createdAt                   DateTime @default(now())
-  updatedAt                   DateTime @updatedAt
+  degreeRelevanceMarketing String?
+  degreeRelevanceAnalytics String?
+  phaseLabel               String
+  createdAt                DateTime           @default(now())
+  updatedAt                DateTime           @updatedAt
 
-  workingTitleVersions        WorkingTitleVersion[]
-  researchQuestionVersions    ResearchQuestionVersion[]
+  workingTitleVersions     WorkingTitleVersion[]
+  researchQuestionVersions ResearchQuestionVersion[]
 }
 
 model WorkingTitleVersion {
-  id                String           @id @default(cuid())
-  dissertationId    String
-  value             String
-  createdAt         DateTime         @default(now())
+  id             String   @id @default(cuid())
+  dissertationId String
+  value          String
+  createdAt      DateTime @default(now())
 
-  dissertation      DissertationMeta @relation(fields: [dissertationId], references: [id], onDelete: Cascade)
+  dissertation DissertationMeta @relation(fields: [dissertationId], references: [id], onDelete: Cascade)
 
   @@index([dissertationId])
 }
 
 model ResearchQuestionVersion {
-  id                String           @id @default(cuid())
-  dissertationId    String
-  value             String
-  createdAt         DateTime         @default(now())
+  id             String   @id @default(cuid())
+  dissertationId String
+  value          String
+  createdAt      DateTime @default(now())
 
-  dissertation      DissertationMeta @relation(fields: [dissertationId], references: [id], onDelete: Cascade)
+  dissertation DissertationMeta @relation(fields: [dissertationId], references: [id], onDelete: Cascade)
 
   @@index([dissertationId])
 }
 
 model LiteratureEntry {
-  id            String                          @id @default(cuid())
+  id            String              @id @default(cuid())
   title         String
   authors       String
   year          Int?
   url           String?
   doi           String?
   abstract      String?
-  themeTags     String[]                        @default([])
+  themeTags     String[]            @default([])
   personalNotes String?
   position      LiteraturePosition?
   phaseLabel    String
-  createdAt     DateTime                        @default(now())
-  updatedAt     DateTime                        @updatedAt
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
 
-  sectionLinks  DissertationSectionLiterature[]
+  sectionLinks DissertationSectionLiterature[]
 
   @@index([year])
   @@index([themeTags], type: Gin)
 }
 
 model DissertationSection {
-  id                  String                          @id @default(cuid())
-  chapter             String                          @unique
-  content             String                          @default("")
-  status              DissertationStatus              @default(not_started)
-  wordCountTarget     Int?
-  wordCount           Int                             @default(0)
-  supervisorFeedback  String?
-  phaseLabel          String
-  createdAt           DateTime                        @default(now())
-  updatedAt           DateTime                        @updatedAt
+  id                 String             @id @default(cuid())
+  chapter            String             @unique
+  content            String             @default("")
+  status             DissertationStatus @default(not_started)
+  wordCountTarget    Int?
+  wordCount          Int                @default(0)
+  supervisorFeedback String?
+  phaseLabel         String
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
 
-  versions            DissertationSectionVersion[]
-  literatureLinks     DissertationSectionLiterature[]
-  evidenceItems       EvidenceLog[]
-  calendarItems       AcademicCalendarItem[]
+  versions        DissertationSectionVersion[]
+  literatureLinks DissertationSectionLiterature[]
+  evidenceItems   EvidenceLog[]
+  calendarItems   AcademicCalendarItem[]
 }
 
 model DissertationSectionVersion {
-  id            String              @id @default(cuid())
-  sectionId     String
-  content       String
-  wordCount     Int
-  createdAt     DateTime            @default(now())
+  id        String   @id @default(cuid())
+  sectionId String
+  content   String
+  wordCount Int
+  createdAt DateTime @default(now())
 
-  section       DissertationSection @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  section DissertationSection @relation(fields: [sectionId], references: [id], onDelete: Cascade)
 
   @@index([sectionId])
 }
@@ -510,61 +510,61 @@ model DissertationSectionLiterature {
 }
 
 model MethodologyDoc {
-  id                       String   @id @default(cuid())
-  phaseName                String   @unique
-  formalDescription        String
+  id                        String   @id @default(cuid())
+  phaseName                 String   @unique
+  formalDescription         String
   mixedMethodsJustification String?
-  sampleSizeNotes          String?
-  statisticalApproach      String?
-  gdprHandling             String?
-  nerveAsInfrastructure    String?
-  phaseLabel               String
-  createdAt                DateTime @default(now())
-  updatedAt                DateTime @updatedAt
+  sampleSizeNotes           String?
+  statisticalApproach       String?
+  gdprHandling              String?
+  nerveAsInfrastructure     String?
+  phaseLabel                String
+  createdAt                 DateTime @default(now())
+  updatedAt                 DateTime @updatedAt
 }
 
 // Polymorphic — sourceType refers to a model name (e.g. "PitchLog").
 model EvidenceLog {
-  id                    String              @id @default(cuid())
+  id                    String   @id @default(cuid())
   sourceType            String
   sourceId              String
   dissertationSectionId String?
   annotation            String
   phaseLabel            String
-  createdAt             DateTime            @default(now())
-  updatedAt             DateTime            @updatedAt
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
 
-  dissertationSection   DissertationSection? @relation(fields: [dissertationSectionId], references: [id], onDelete: SetNull)
+  dissertationSection DissertationSection? @relation(fields: [dissertationSectionId], references: [id], onDelete: SetNull)
 
   @@index([sourceType, sourceId])
   @@index([dissertationSectionId])
 }
 
 model SupervisorMeeting {
-  id              String   @id @default(cuid())
-  date            DateTime
-  notes           String?
-  feedback        String?
-  agreedActions   String?
-  followUpStatus  String?
-  phaseLabel      String
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  id             String   @id @default(cuid())
+  date           DateTime
+  notes          String?
+  feedback       String?
+  agreedActions  String?
+  followUpStatus String?
+  phaseLabel     String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
   @@index([date])
 }
 
 model AcademicCalendarItem {
-  id                    String              @id @default(cuid())
+  id                    String   @id @default(cuid())
   milestone             String
   deadline              DateTime
-  status                String              @default("pending")
+  status                String   @default("pending")
   dissertationSectionId String?
   phaseLabel            String
-  createdAt             DateTime            @default(now())
-  updatedAt             DateTime            @updatedAt
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
 
-  dissertationSection   DissertationSection? @relation(fields: [dissertationSectionId], references: [id], onDelete: SetNull)
+  dissertationSection DissertationSection? @relation(fields: [dissertationSectionId], references: [id], onDelete: SetNull)
 
   @@index([deadline])
 }
@@ -583,7 +583,7 @@ model BrandDocument {
 model ProcessGuide {
   id          String   @id @default(cuid())
   name        String
-  steps       String   // markdown
+  steps       String // markdown
   lastUpdated DateTime
   phaseLabel  String
   createdAt   DateTime @default(now())
@@ -660,7 +660,7 @@ model CompaniesHouseRecord {
 
 model IpDocument {
   id          String   @id @default(cuid())
-  type        String   // trademark | patent | copyright | trade_secret | other
+  type        String // trademark | patent | copyright | trade_secret | other
   title       String
   description String?
   date        DateTime
@@ -677,19 +677,19 @@ model IpDocument {
 // "I asked the system X on date Y" is citable.
 
 model ChatSession {
-  id          String        @id @default(cuid())
-  title       String?
-  phaseLabel  String
-  createdAt   DateTime      @default(now())
-  updatedAt   DateTime      @updatedAt
+  id         String   @id @default(cuid())
+  title      String?
+  phaseLabel String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 
-  messages    ChatMessage[]
+  messages ChatMessage[]
 
   @@index([createdAt])
 }
 
 model ChatMessage {
-  id           String      @id @default(cuid())
+  id           String   @id @default(cuid())
   sessionId    String
   // "user" | "assistant" | "system" — the system message is built fresh
   // per turn from current vault state, never persisted as a row.
@@ -701,9 +701,9 @@ model ChatMessage {
   model        String?
   inputTokens  Int?
   outputTokens Int?
-  createdAt    DateTime    @default(now())
+  createdAt    DateTime @default(now())
 
-  session      ChatSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  session ChatSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
 
   @@index([sessionId])
   @@index([createdAt])
@@ -778,17 +778,185 @@ model WebhookIngestion {
 // queries in src/lib/embeddings.ts.
 
 model Embedding {
-  id          String                       @id @default(cuid())
-  sourceType  String                       // model name, e.g. "PitchLog"
-  sourceId    String
-  chunkText   String
-  chunkIndex  Int                          @default(0)
-  metadata    Json
-  embedding   Unsupported("vector(1536)")?
-  phaseLabel  String
-  createdAt   DateTime                     @default(now())
+  id         String                       @id @default(cuid())
+  sourceType String // model name, e.g. "PitchLog"
+  sourceId   String
+  chunkText  String
+  chunkIndex Int                          @default(0)
+  metadata   Json
+  embedding  Unsupported("vector(1536)")?
+  phaseLabel String
+  createdAt  DateTime                     @default(now())
 
   @@index([sourceType, sourceId])
   @@index([phaseLabel])
   @@index([sourceType])
+}
+
+// ─── SL-MAS pipeline learning ────────────────────────────────────────────
+//
+// Mirrors the better-sqlite3 schemas in src/learning/decisionStore.ts,
+// src/memory/episodicStore.ts, src/memory/strategicStore.ts,
+// src/runtime/modelRegistry.ts on the runtime side. Migrated to Postgres
+// so the SL-MAS data layer co-locates with NERVE — collapses the Pi-as-
+// data-host hop and lets pitch outcome ingest write atomically alongside
+// PitchLog upsert.
+//
+// Naming: snake_case in DB via @map() so existing SQL queries written
+// against the runtime tables (smoke scripts, ad-hoc psql) translate
+// cleanly; Prisma client uses camelCase as is house style.
+
+model Decision {
+  id            String   @id @default(cuid())
+  agentId       String   @map("agent_id")
+  runId         String   @map("run_id")
+  nodeId        String   @map("node_id")
+  action        String
+  reasoning     String
+  alternatives  Json // JSON array of strings
+  confidence    Float
+  inputsSummary String   @map("inputs_summary")
+  outputSummary String   @map("output_summary")
+  tags          String[] // Postgres native array; runtime side uses tags_json TEXT
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  outcomes Outcome[]
+
+  @@index([agentId, createdAt(sort: Desc)])
+  @@index([runId, createdAt(sort: Asc)])
+  @@index([tags], type: Gin)
+  @@map("decisions")
+}
+
+model Outcome {
+  id                   String   @id @default(cuid())
+  decisionId           String   @map("decision_id")
+  outcomeType          String   @map("outcome_type")
+  result               String // "positive" | "negative" | "neutral"
+  metricValue          Float?   @map("metric_value")
+  metricName           String?  @map("metric_name")
+  notes                String
+  lagHours             Float?   @map("lag_hours")
+  recordedAt           DateTime @default(now()) @map("recorded_at")
+  // Attribution columns (populated by AttributionEngine after ingest)
+  attributionWeight    Float?   @map("attribution_weight")
+  attributionReasoning String?  @map("attribution_reasoning")
+
+  decision Decision @relation(fields: [decisionId], references: [id], onDelete: Cascade)
+
+  @@index([decisionId])
+  @@index([recordedAt(sort: Desc)])
+  @@map("outcomes")
+}
+
+model LearningInsight {
+  id             String   @id @default(cuid())
+  agentId        String   @map("agent_id")
+  pattern        String
+  sampleSize     Int      @map("sample_size")
+  avgMetric      Float?   @map("avg_metric")
+  recommendation String
+  generatedAt    DateTime @default(now()) @map("generated_at")
+
+  @@index([agentId, generatedAt(sort: Desc)])
+  @@map("learning_insights")
+}
+
+model OutcomeIngestLog {
+  // externalId is the idempotency key — NERVE pitchLog.id, Supabase
+  // assignment_id:status, or build-demo slug:ts. Kept as the primary key
+  // (not a generated cuid) so duplicate ingests are caught at INSERT time.
+  externalId       String   @id @map("external_id")
+  source           String // "nerve_webhook" | "supabase_poll" | "manual_skill" | "test"
+  payload          Json // OutcomeIngestPayload
+  matchedDecisions Int      @map("matched_decisions")
+  matchStrategy    String   @map("match_strategy") // "lead_id" | "business_name_date" | "none"
+  episodeId        String?  @map("episode_id")
+  ingestedAt       DateTime @default(now()) @map("ingested_at")
+
+  @@index([source, ingestedAt(sort: Desc)])
+  @@map("outcome_ingest_log")
+}
+
+model SlMasKv {
+  // Renamed from `kv` to avoid namespace collision with anything NERVE
+  // might later add. Used by SupabaseOutcomePoller cursor and similar
+  // bookkeeping. Tiny table.
+  key       String   @id
+  value     String
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
+
+  @@map("sl_mas_kv")
+}
+
+model Episode {
+  id                    String    @id @default(cuid())
+  pipelineRunId         String    @unique @map("pipeline_run_id")
+  pipelineDefinitionId  String    @map("pipeline_definition_id")
+  trigger               String?
+  leadId                String?   @map("lead_id")
+  businessName          String?   @map("business_name")
+  vertical              String?
+  region                String?
+  startedAt             DateTime  @map("started_at")
+  endedAt               DateTime? @map("ended_at")
+  status                String // "running" | "completed" | "failed" | "blocked" | "cancelled"
+  totalCostUsd          Float     @default(0) @map("total_cost_usd")
+  reflectionIterations  Int       @default(0) @map("reflection_iterations")
+  agentOutputsSummary   Json      @map("agent_outputs_summary") // node_id -> summary string
+  criticScores          Json      @map("critic_scores") // node_id -> score
+  workingMemorySnapshot Json      @map("working_memory_snapshot")
+  strategiesUsed        String[]  @map("strategies_used")
+  pivotTags             String[]  @map("pivot_tags")
+  // Outcome (filled later)
+  pitchOutcome          String?   @map("pitch_outcome") // "closed" | "rejected" | "follow_up" | "no_outcome"
+  outcomeReceivedAt     DateTime? @map("outcome_received_at")
+  closeAmountGbp        Float?    @map("close_amount_gbp")
+  daysToOutcome         Float?    @map("days_to_outcome")
+  outcomeNotes          String?   @map("outcome_notes")
+  createdAt             DateTime  @default(now()) @map("created_at")
+
+  @@index([leadId, startedAt(sort: Desc)])
+  @@index([pitchOutcome, startedAt(sort: Desc)])
+  @@index([vertical, startedAt(sort: Desc)])
+  @@index([pivotTags], type: Gin)
+  @@map("episodes")
+}
+
+model Strategy {
+  id              String    @id @default(cuid())
+  vertical        String
+  region          String?
+  strategyType    String    @map("strategy_type")
+  parameters      Json // design_combination params (hero, palette, cta, ...)
+  sampleSize      Int       @default(0) @map("sample_size")
+  closeRate       Float?    @map("close_rate")
+  confidenceLower Float?    @map("confidence_lower")
+  confidenceUpper Float?    @map("confidence_upper")
+  status          String    @default("new") // "new"|"testing"|"active"|"champion"|"deprecated"
+  lastEvaluatedAt DateTime? @map("last_evaluated_at")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @default(now()) @updatedAt @map("updated_at")
+
+  @@index([vertical, status, closeRate(sort: Desc)])
+  // Note: uniqueness on (vertical, region, parameters) is enforced in the
+  // StrategicStore layer via findFirst; Prisma can't put a unique constraint
+  // directly on a Json column without a generated stable hash.
+  @@map("strategies")
+}
+
+model ModelRegistration {
+  id          String   @id @default(cuid())
+  kind        String // "critic" | "agent"
+  agentId     String?  @map("agent_id") // null = global slot
+  version     String
+  source      String // "heuristic" | "llm" | "lora" | "external"
+  endpoint    String?
+  weightsPath String?  @map("weights_path")
+  active      Boolean  @default(false)
+  metadata    Json     @default("{}")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@index([kind, agentId, active])
+  @@map("model_registrations")
 }
