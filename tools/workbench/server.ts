@@ -15,6 +15,7 @@ import { createServer, IncomingMessage, ServerResponse } from "node:http";
 import { readFileSync, existsSync, readdirSync, mkdirSync, writeFileSync } from "node:fs";
 import { join, extname } from "node:path";
 import { homedir } from "node:os";
+import { createHmac } from "node:crypto";
 import Database from "better-sqlite3";
 import { fileURLToPath } from "node:url";
 import { dirname } from "node:path";
@@ -350,7 +351,74 @@ function saveOutput(leadId: string, html: string, meta: Record<string, unknown>)
   if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
   writeFileSync(join(dir, `${ts}.html`), html);
   writeFileSync(join(dir, `${ts}.json`), JSON.stringify(meta, null, 2));
+
+  // Fire-and-forget NERVE ingest. Failures must NOT break the local save —
+  // the workbench is the founder's primary editing surface and works offline.
+  void postIterationToNerve({
+    iteration_id: `${leadId}-${ts}`,
+    lead_id: leadId,
+    business_name: typeof meta.business_name === "string" ? meta.business_name : undefined,
+    vertical: typeof meta.vertical === "string" ? meta.vertical : undefined,
+    html_output: html,
+    prompt: typeof meta.prompt === "string" ? meta.prompt : undefined,
+    response: typeof meta.response === "string" ? meta.response : undefined,
+    edit_kind: typeof meta.edit_kind === "string" ? meta.edit_kind : "save",
+    editor_notes: typeof meta.editor_notes === "string" ? meta.editor_notes : undefined,
+    parent_iteration_id:
+      typeof meta.parent_iteration_id === "string" ? meta.parent_iteration_id : undefined,
+    metadata: meta,
+  }).catch((e) => {
+    console.warn("[workbench] iteration ingest failed", String(e));
+  });
+
   return { path: join(dir, `${ts}.html`) };
+}
+
+// ---------------------------------------------------------------------------
+// NERVE iteration ingest (fire-and-forget)
+// ---------------------------------------------------------------------------
+
+interface ComposerIterationPayload {
+  iteration_id: string;
+  lead_id?: string;
+  business_name?: string;
+  vertical?: string;
+  html_output: string;
+  css_output?: string;
+  prompt?: string;
+  response?: string;
+  edit_kind: string;
+  editor_notes?: string;
+  parent_iteration_id?: string;
+  metadata?: Record<string, unknown>;
+}
+
+async function postIterationToNerve(payload: ComposerIterationPayload): Promise<void> {
+  const url = process.env.NERVE_API_URL;
+  const secret = process.env.OUTCOME_INGEST_SECRET;
+  if (!url || !secret) {
+    console.warn(
+      "[workbench] skipping NERVE iteration ingest: NERVE_API_URL or OUTCOME_INGEST_SECRET not set",
+    );
+    return;
+  }
+
+  const body = JSON.stringify(payload);
+  const signature = `sha256=${createHmac("sha256", secret).update(body).digest("hex")}`;
+  const endpoint = `${url.replace(/\/+$/, "")}/api/ingest/composer-iteration`;
+
+  const res = await fetch(endpoint, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-ingest-signature": signature,
+    },
+    body,
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`NERVE ingest ${res.status}: ${text.slice(0, 200)}`);
+  }
 }
 
 function listSaves(): Array<{ leadId: string; files: string[] }> {

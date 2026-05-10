@@ -961,6 +961,41 @@ model ModelRegistration {
   @@map("model_registrations")
 }
 
+ 
+// ─── composer workbench iterations ───────────────────────────────────────
+//
+// Founder's manual demo-iteration trail from `tools/workbench/`. Every save
+// (AI generate, manual edit, rename, delete) writes a row here so the
+// "this is what we tried, this is what worked" history is captured outside
+// the local filesystem. Inline HTML — full snapshot, not a delta. Cheap at
+// the volume the founder produces (handful per lead per day) and lets the
+// next /build-demo skill consult prior iterations for the same vertical.
+//
+// Idempotency key: `iteration_id` (caller-supplied, format
+// `<lead_slug>-<iso_no_colons>`) so retries from the workbench don't double-
+// insert when the network round-trip fails.
+
+model ComposerIteration {
+  id                 String   @id @default(cuid())
+  iterationId        String   @unique @map("iteration_id") // <lead_slug>-<iso_no_colons>
+  leadId             String?  @map("lead_id")
+  businessName       String?  @map("business_name")
+  vertical           String?
+  htmlOutput         String   @map("html_output") // full HTML, inline
+  cssOutput          String?  @map("css_output")
+  prompt             String? // system + user prompt that produced this if AI-generated
+  response           String? // raw AI response if applicable
+  editKind           String   @map("edit_kind") // "ai_generate" | "manual_edit" | "save" | "delete" | "rename"
+  editorNotes        String?  @map("editor_notes")
+  parentIterationId  String?  @map("parent_iteration_id")
+  metadata           Json     @default("{}")
+  createdAt          DateTime @default(now()) @map("created_at")
+
+  @@index([leadId, createdAt(sort: Desc)])
+  @@index([editKind, createdAt(sort: Desc)])
+  @@index([parentIterationId])
+  @@map("composer_iterations")
+
 // Per-call API spend ledger. Each successful (or failed) outbound call to a
 // paid external API — OpenRouter, Apify, Google Places, etc. — writes one
 // row. Lets the founder answer "how much did vertical=barber cost in
