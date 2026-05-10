@@ -78,20 +78,25 @@ function validatePayload(p: Partial<BrandAnalysisInput>): string | undefined {
     return "analysis_id required";
   if (typeof p.lead_id !== "string" || p.lead_id.length === 0)
     return "lead_id required";
+  // Optional fields: null and undefined both mean "not supplied".
   if (
-    p.analyzed_at !== undefined &&
+    isPresent(p.analyzed_at) &&
     (typeof p.analyzed_at !== "string" || Number.isNaN(Date.parse(p.analyzed_at)))
   )
     return "analyzed_at must be ISO timestamp";
   for (const k of ["dominant_pct", "neutral_pct", "accent_pct"] as const) {
     const v = p[k];
-    if (v !== undefined && (typeof v !== "number" || v < 0 || v > 100))
+    if (isPresent(v) && (typeof v !== "number" || v < 0 || v > 100))
       return `${k} must be number in [0,100]`;
   }
   for (const k of ["dominant_hex", "neutral_hex", "accent_hex"] as const) {
     const v = p[k];
-    if (v !== undefined && (typeof v !== "string" || !/^#[0-9A-Fa-f]{3,8}$/.test(v)))
+    if (isPresent(v) && (typeof v !== "string" || !/^#[0-9A-Fa-f]{3,8}$/.test(v)))
       return `${k} must be a hex string starting with #`;
   }
   return undefined;
+}
+
+function isPresent<T>(v: T | undefined | null): v is T {
+  return v !== undefined && v !== null;
 }

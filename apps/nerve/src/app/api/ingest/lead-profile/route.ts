@@ -72,31 +72,38 @@ function validatePayload(p: Partial<LeadProfileInput>): string | undefined {
     return "lead_id required";
   if (typeof p.business_name !== "string" || p.business_name.length === 0)
     return "business_name required";
+  // Optional fields: treat null and undefined as "not supplied". Without the
+  // null check, callers get a 400 for sending JSON nulls (idiomatic for
+  // unknown values), which the type contract permits.
   if (
-    p.qualifier_verdict !== undefined &&
+    isPresent(p.qualifier_verdict) &&
     p.qualifier_verdict !== "qualified" &&
     p.qualifier_verdict !== "rejected" &&
     p.qualifier_verdict !== "uncertain"
   )
     return "qualifier_verdict must be qualified|rejected|uncertain";
   if (
-    p.profiled_at !== undefined &&
+    isPresent(p.profiled_at) &&
     (typeof p.profiled_at !== "string" || Number.isNaN(Date.parse(p.profiled_at)))
   )
     return "profiled_at must be ISO timestamp";
   if (
-    p.qualification_score !== undefined &&
+    isPresent(p.qualification_score) &&
     (typeof p.qualification_score !== "number" ||
       p.qualification_score < 0 ||
       p.qualification_score > 1)
   )
     return "qualification_score must be number in [0,1]";
   if (
-    p.website_quality_score !== undefined &&
+    isPresent(p.website_quality_score) &&
     (typeof p.website_quality_score !== "number" ||
       p.website_quality_score < 0 ||
       p.website_quality_score > 100)
   )
     return "website_quality_score must be number in [0,100]";
   return undefined;
+}
+
+function isPresent<T>(v: T | undefined | null): v is T {
+  return v !== undefined && v !== null;
 }
