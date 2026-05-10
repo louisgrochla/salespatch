@@ -1017,6 +1017,7 @@ model LeadProfile {
   @@index([qualifierVerdict, profiledAt(sort: Desc)])
   @@index([postcode])
   @@map("lead_profiles")
+}
 
  
 // ─── composer workbench iterations ───────────────────────────────────────
