@@ -51,17 +51,18 @@ The **"self"** in self-learning is unlocked when (3) is complete: agents read NE
 
 ## Status Snapshot
 
-_Last updated: 2026-05-10 (manual, Phase A complete)_
+_Last updated: 2026-05-10 (Phase A complete + D1 read side live)_
 
 - Live: https://nerve.salespatch.co.uk/pipeline ✓
 - Postgres SL-MAS schema: 13 tables migrated (8 base + composer_iterations + lead_profiles + spend_ledger + site_briefs + brand_analyses + demo_artefacts + qa_results)
 - **Phase A complete** — 7 Tier 1 ingest endpoints live + verified in prod via `scripts/nerve/simulate-ingest.sh`: composer-iteration, lead-profile, spend, site-brief, brand-analysis, demo-artefact, qa-result
-- Producers wired today: tools/workbench (A1), outreach pipeline (A6 via spendReporter at 4 call sites), spec-site-brief skill (A2 + A4), build-demo skill (A3)
+- **D1 live** — `/api/read/strategies` + `/api/read/lead-profiles/winning-features` HMAC-signed read endpoints in prod; build-demo skill consults both before generating (first read-side of the self-learning loop)
+- Producers wired today: tools/workbench (A1), outreach pipeline (A6 via spendReporter at 4 call sites), spec-site-brief skill (A2 + A4), build-demo skill (A3 + D1 read-bias)
 - Producers awaiting wiring: Pi siteQaAgent (A5 — agent doesn't exist yet, manual posts work)
 - Pi runtime: dropped from data path, parked for autumn agents
-- Open phases: B (Tier 2 capture), C (Tier 3 archival), D (self-learning loop), E (MC retirement)
-- Tasks open: 12
-- Tasks complete: 33 (see Done log)
+- Open phases: B (Tier 2 capture), C (Tier 3 archival), D (D2/D3 remaining), E (MC retirement)
+- Tasks open: 11
+- Tasks complete: 34 (see Done log)
 
 ---
 
@@ -252,14 +253,17 @@ _Last updated: 2026-05-10 (manual, Phase A complete)_
 
 ### D1 — `/build-demo` skill consults NERVE strategies + lead profiles
 
-- **Status:** not started
-- **Owner:** _(unclaimed)_
-- **Goal:** Before generating, the `/build-demo` skill fetches `/api/strategies?vertical=<v>` and `/api/lead-profiles/winning-features?vertical=<v>` from NERVE. Skill markdown is updated to bias toward champion combinations.
-- **Files:**
-  - `~/.claude/skills/build-demo/SKILL.md` (or wherever the skill lives)
-  - `apps/nerve/src/app/api/lead-profiles/winning-features/route.ts` (read-side helper)
-  - `apps/nerve/src/app/api/strategies/route.ts` (already exists from Phase 7 — confirm public-readable for skills, or add a skill-friendly read endpoint)
-- **Acceptance:** A new `/build-demo` run for `vertical=barber` references "heritage_green is the current champion (n=3, 100%)" in its reasoning. Demo output reflects bias.
+- **Status:** complete (PR #49, merged 2026-05-10)
+- **Owner:** _(merged)_
+- **Goal:** Before generating, the `/build-demo` skill fetches NERVE strategies + winning-feature aggregates for the vertical. Skill markdown is updated to bias toward champion combinations.
+- **Files shipped:**
+  - `apps/nerve/middleware.ts` — `api/read` exempted from founder gate
+  - `apps/nerve/src/app/api/read/strategies/route.ts` — HMAC-signed GET, sorted by lifecycle priority
+  - `apps/nerve/src/app/api/read/lead-profiles/winning-features/route.ts` — HMAC-signed GET, returns medians/rates/top-categories
+  - `apps/nerve/src/lib/sl-mas/winningFeatures.ts` — join logic over `lead_profiles` × `pitch_log` on normalised business name
+  - `~/.claude/scripts/nerve/get-ingest.sh` — companion to post-ingest.sh, signs the canonical query string
+  - `~/.claude/commands/build-demo.md` — new "NERVE consultation" section + output line
+- **Verified:** `~/.claude/scripts/nerve/get-ingest.sh /api/read/strategies "vertical=barber"` returned the heritage_green/trophy_bar/book_now combo (n=3, close_rate=1.0). Cafe + bakery also return real strategies. Winning-features returns `data_available:false` for all verticals (lead_profiles table sparse) — the "no signal yet" path is exercised.
 - **Depends on:** A1, A2, A4 (so the data is rich enough for the skill to consume).
 - **Estimated effort:** 4–6 hours including testing.
 
@@ -337,6 +341,7 @@ _Last updated: 2026-05-10 (manual, Phase A complete)_
 
 > Tasks land here when their checkbox flips. Most recent at top.
 
+- **2026-05-10** PR #49 merged: D1 — first read side of the self-learning loop. `/api/read/strategies` + `/api/read/lead-profiles/winning-features` HMAC-signed GET endpoints under a new `api/read` middleware exemption; companion `get-ingest.sh` helper; build-demo skill consults both before generating and biases output toward champion combinations
 - **2026-05-10** **Phase A complete.** Seven Tier 1 ingest streams live in prod, all HMAC-secured, all idempotent on caller-supplied natural keys, all probed by simulate-ingest.sh
 - **2026-05-10** PR #47 merged: A5 — site QA results ingest (schema, migration 11_qa_results, route, store; Pi siteQaAgent autumn)
 - **2026-05-10** A3 producer wired: build-demo skill writes demo-artefact.json sidecar and posts to NERVE via post-ingest.sh
