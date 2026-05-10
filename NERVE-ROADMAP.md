@@ -84,8 +84,8 @@ _Last updated: 2026-05-10 (manual)_
 
 ### A2 — Site briefs + brand analysis ingest
 
-- **Status:** not started
-- **Owner:** _(unclaimed)_
+- **Status:** in progress (this branch)
+- **Owner:** feat/a2-site-briefs
 - **Goal:** Every site brief generated (manual `/build-demo` skill OR Pi `brief-generator-agent`) lands in NERVE with the full markdown body + structured fields. Brand analysis (palette/fonts/asset inventory) lands in NERVE alongside.
 - **Files:**
   - `apps/nerve/prisma/schema.prisma` (new `SiteBrief`, `BrandAnalysis` models)
