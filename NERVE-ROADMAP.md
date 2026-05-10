@@ -51,18 +51,19 @@ The **"self"** in self-learning is unlocked when (3) is complete: agents read NE
 
 ## Status Snapshot
 
-_Last updated: 2026-05-10 (Phase A complete + D1 read side live)_
+_Last updated: 2026-05-10 (Phase A + D1 + D2 complete)_
 
 - Live: https://nerve.salespatch.co.uk/pipeline ✓
 - Postgres SL-MAS schema: 13 tables migrated (8 base + composer_iterations + lead_profiles + spend_ledger + site_briefs + brand_analyses + demo_artefacts + qa_results)
 - **Phase A complete** — 7 Tier 1 ingest endpoints live + verified in prod via `scripts/nerve/simulate-ingest.sh`: composer-iteration, lead-profile, spend, site-brief, brand-analysis, demo-artefact, qa-result
 - **D1 live** — `/api/read/strategies` + `/api/read/lead-profiles/winning-features` HMAC-signed read endpoints in prod; build-demo skill consults both before generating (first read-side of the self-learning loop)
+- **D2 substrate ready** — `/api/read/decisions/learning-context` HMAC-signed read endpoint in prod; `NerveLearningClient` on Pi runtime side ready to drop into `withLearning(...)` via `options.contextSource` when the autumn pipeline restarts. 7/7 learning tests pass.
 - Producers wired today: tools/workbench (A1), outreach pipeline (A6 via spendReporter at 4 call sites), spec-site-brief skill (A2 + A4), build-demo skill (A3 + D1 read-bias)
-- Producers awaiting wiring: Pi siteQaAgent (A5 — agent doesn't exist yet, manual posts work)
+- Producers awaiting wiring: Pi siteQaAgent (A5 — agent doesn't exist yet, manual posts work); autumn pipeline (D2 contextSource swap)
 - Pi runtime: dropped from data path, parked for autumn agents
-- Open phases: B (Tier 2 capture), C (Tier 3 archival), D (D2/D3 remaining), E (MC retirement)
-- Tasks open: 11
-- Tasks complete: 34 (see Done log)
+- Open phases: B (Tier 2 capture), C (Tier 3 archival), D (D3 parked far-future), E (MC retirement)
+- Tasks open: 10
+- Tasks complete: 35 (see Done log)
 
 ---
 
@@ -269,14 +270,19 @@ _Last updated: 2026-05-10 (Phase A complete + D1 read side live)_
 
 ### D2 — `withLearning()` queries NERVE Postgres on autumn pipeline restart
 
-- **Status:** not started
-- **Owner:** _(unclaimed)_
+- **Status:** complete (PR #51, merged 2026-05-10) — substrate ready, autumn-swap deferred until Pi pipeline restarts
+- **Owner:** _(merged)_
 - **Goal:** When the auto pipeline runs again, `withLearning()` reads prior decisions+outcomes from NERVE (not Pi SQLite) when injecting context into agent prompts.
-- **Files:**
-  - `src/learning/learningAgent.ts` (or its NERVE equivalent)
-  - Pi runtime gets a thin Prisma client that points at NERVE Postgres for reads only
-- **Acceptance:** When `lead-scout-agent` runs, it sees historical decisions+outcomes for that vertical from NERVE in its prompt.
-- **Depends on:** A1–A6 + B1 (NERVE has enough data to be worth querying).
+- **Files shipped:**
+  - `apps/nerve/src/lib/sl-mas/learningContext.ts` — `buildLearningContextForAgent()` mirroring the Pi-side shape
+  - `apps/nerve/src/app/api/read/decisions/learning-context/route.ts` — HMAC-signed GET (matches D1's `api/read/*` pattern)
+  - `src/learning/contextFormat.ts` — pure formatter extracted from `DecisionStore` so both sources produce bit-identical prompt sections
+  - `src/learning/nerveLearningClient.ts` — `NerveLearningClient` drop-in read source for Pi `withLearning(...)`
+  - `src/learning/learningAgent.ts` — `LearningContextSource` interface + `options.contextSource` opt-in + safe fallback to local store on remote read failure
+  - `src/tests/nerveLearningClient.test.ts` — 3 tests covering wire signing, payload mapping, and the fallback path
+- **Verified:** prod endpoint returns the expected shape for all seven autumn agent IDs (all empty today — Pi is parked, no decisions logged yet). Local test suite 7/7. The chosen architecture is REST over HMAC (reuses `OUTCOME_INGEST_SECRET`) rather than a thin Prisma client on Pi — avoids putting prod `DATABASE_URL` on a Raspberry Pi.
+- **Autumn swap:** one block in `src/index.ts` enables it when the pipeline wakes up (block documented in PR #51).
+- **Depends on:** A1–A6 + B1 (NERVE has enough data to be worth querying). Note: shipped ahead of B1 because the substrate doesn't need rich data to be ready — it returns clean empty shapes today and will become useful as decisions accumulate.
 - **Estimated effort:** 1 day.
 
 ### D3 — Trained-critic LoRA pipeline (Q4 2026 / 2027)
@@ -341,6 +347,7 @@ _Last updated: 2026-05-10 (Phase A complete + D1 read side live)_
 
 > Tasks land here when their checkbox flips. Most recent at top.
 
+- **2026-05-10** PR #51 merged: D2 — `withLearning(...)` can source learning context from NERVE. `/api/read/decisions/learning-context` HMAC endpoint live; `NerveLearningClient` + extracted pure formatter; `LearningContextSource` interface on `withLearning` with safe fallback to local store. Pi swap is one block in `src/index.ts`, deferred to autumn pipeline restart.
 - **2026-05-10** PR #49 merged: D1 — first read side of the self-learning loop. `/api/read/strategies` + `/api/read/lead-profiles/winning-features` HMAC-signed GET endpoints under a new `api/read` middleware exemption; companion `get-ingest.sh` helper; build-demo skill consults both before generating and biases output toward champion combinations
 - **2026-05-10** **Phase A complete.** Seven Tier 1 ingest streams live in prod, all HMAC-secured, all idempotent on caller-supplied natural keys, all probed by simulate-ingest.sh
 - **2026-05-10** PR #47 merged: A5 — site QA results ingest (schema, migration 11_qa_results, route, store; Pi siteQaAgent autumn)
