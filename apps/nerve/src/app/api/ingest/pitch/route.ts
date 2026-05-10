@@ -12,7 +12,8 @@ import type {
 import { prisma } from "@/lib/db";
 import { embedRecord } from "@/lib/embeddings";
 import { phaseLabelFor } from "@/lib/phase";
-import { postOutcomeToRuntime, OutcomeIngestPayload } from "@/lib/outcomeRuntime";
+import { outcomeIngester } from "@/lib/sl-mas/outcomeIngest";
+import type { OutcomeIngestPayload } from "@/lib/sl-mas/types";
 
 // Pitch ingestion. Accepts both:
 //   1. Supabase Database Webhook envelope { type, table, record, … }
@@ -332,21 +333,26 @@ export async function POST(req: NextRequest) {
       },
     );
 
-    // Fan out to the runtime so the outcome lands on the matching decision.
-    // Fire-and-forget — failures here must never break the pitch ingest.
-    void postOutcomeToRuntime(
-      buildOutcomePayload({
-        pitchId: pitch.id,
-        outcome,
-        businessName,
-        agreedPrice,
-        interestLevel,
-        demoReaction,
-        objections: record.objections ?? null,
-        notes: record.notes ?? null,
-        pitchDate,
-      }),
-    ).catch((e) => console.warn("[pitch] outcome fan-out failed", String(e)));
+    // Write the SL-MAS outcome locally (same Postgres). Errors are logged
+    // and never break the pitch ingest. The ingester is idempotent on
+    // pitch.id — re-deliveries of the same Supabase webhook are safe.
+    try {
+      await outcomeIngester.ingest(
+        buildOutcomePayload({
+          pitchId: pitch.id,
+          outcome,
+          businessName,
+          agreedPrice,
+          interestLevel,
+          demoReaction,
+          objections: record.objections ?? null,
+          notes: record.notes ?? null,
+          pitchDate,
+        }),
+      );
+    } catch (e) {
+      console.warn("[pitch] sl-mas outcome ingest failed", String(e));
+    }
 
     await logIngestion("/api/ingest/pitch", "ok", null, rawBody);
     return NextResponse.json({ ok: true, pitchId: pitch.id, qualityFlag });

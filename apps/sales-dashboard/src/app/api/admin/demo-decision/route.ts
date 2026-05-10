@@ -7,11 +7,10 @@ import { validateAdminToken } from "@/lib/admin-auth";
 // Forwarder for the manual /build-demo skill's `decision.json`. The skill
 // drops the file alongside the demo HTML and lead JSON. The admin dropzone
 // (or any admin tool) POSTs the decision.json content here; this route HMAC-
-// signs the body and forwards to the Pi runtime's /api/decisions/manual.
+// signs the body and forwards to NERVE's /api/ingest/decision.
 //
-// Body shape mirrors `ManualDecisionBody` in
-// src/missionControl/routes/decisions.ts on the runtime side. We pass it
-// through verbatim — validation lives on the runtime.
+// Body shape mirrors NERVE's ManualDecisionBody contract. We pass it
+// through verbatim — validation lives on NERVE.
 
 interface DecisionForwardBody {
   source: string;
@@ -48,11 +47,17 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "body required" }, { status: 400 });
   }
 
-  const runtimeUrl = process.env.PI_RUNTIME_URL ?? process.env.RUNTIME_URL;
+  // Prefer the explicit NERVE URL; fall back to legacy PI_RUNTIME_URL during
+  // the migration window. After 2026-Q3 we can drop the fallback.
+  const targetUrl =
+    process.env.NERVE_API_URL ??
+    process.env.NEXT_PUBLIC_NERVE_URL ??
+    process.env.PI_RUNTIME_URL ??
+    process.env.RUNTIME_URL;
   const secret = process.env.OUTCOME_INGEST_SECRET;
-  if (!runtimeUrl) {
+  if (!targetUrl) {
     return NextResponse.json(
-      { error: "PI_RUNTIME_URL not configured" },
+      { error: "NERVE_API_URL not configured" },
       { status: 503 },
     );
   }
@@ -62,7 +67,13 @@ export async function POST(req: NextRequest) {
     ? `sha256=${crypto.createHmac("sha256", secret).update(canonical).digest("hex")}`
     : undefined;
 
-  const endpoint = `${runtimeUrl.replace(/\/$/, "")}/api/decisions/manual`;
+  // NERVE-native path; legacy /api/decisions/manual path is also accepted by
+  // the older runtime for back-compat during the migration window.
+  const path =
+    targetUrl.includes("nerve") || process.env.NERVE_API_URL
+      ? "/api/ingest/decision"
+      : "/api/decisions/manual";
+  const endpoint = `${targetUrl.replace(/\/$/, "")}${path}`;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 10_000);
 
