@@ -407,6 +407,25 @@ export const siteComposerAgent: AgentHandler = async (input) => {
         confidence: generatedSites.length > 0 ? 0.8 : 0.3,
         tags: [`ai:${withAI}`, `template:${generatedSites.length - withAI}`],
       },
+      // Per-lead decisions: rich pivot tags so the Friday dashboard can group
+      // close rates by hero variant, palette, brand source, etc.
+      _decisions: generatedSites.map((s) => ({
+        lead_id: s.lead_id,
+        reasoning: `Composed site for ${s.business_name} — hero=${s.hero_variant}, brand_source=${s.brand_source}, brief_used=${s.brief_used}, ai=${s.ai_generated ?? false}`,
+        alternatives: [],
+        confidence: s.brief_used && s.brand_source !== "vertical_default" ? 0.85 : 0.6,
+        tags: [
+          `vertical:${s.vertical}`,
+          `hero:${s.hero_variant}`,
+          `brand_source:${s.brand_source}`,
+          `component_style:${s.component_style}`,
+          `font_pairing:${s.font_pairing}`,
+          ...(s.has_reviews ? ["proof:review_count"] : []),
+          ...(s.has_map ? ["section:map"] : []),
+          ...(s.has_gallery ? ["section:gallery"] : []),
+          ...(s.has_menu ? ["section:menu"] : []),
+        ],
+      })),
     },
     cost_usd: totalCost,
   };

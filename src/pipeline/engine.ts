@@ -4,8 +4,16 @@ import { MultiAgentRuntime } from "./agentRuntime.js";
 import { DispatchReasonCode, PostDispatchAdapter } from "./postDispatch.js";
 import { SQLitePipelineStore } from "./sqlitePipelineStore.js";
 import { PipelineBudgetPolicy, PipelineNodeRun, PipelineRun } from "./types.js";
+import type { EpisodicStore } from "../memory/episodicStore.js";
+import type { ReflectionLoop } from "../evaluation/reflectionLoop.js";
+import type { DecisionStore } from "../learning/decisionStore.js";
+import { InMemoryWorkingMemory } from "../runtime/workingMemory.js";
+import type { WorkingMemory } from "../runtime/types.js";
 
 export class PipelineEngine {
+  /** WorkingMemory instances keyed by runId — shared across nodes of one run. */
+  private readonly workingMemories = new Map<string, WorkingMemory>();
+
   constructor(
     private readonly store: SQLitePipelineStore,
     private readonly runtime: MultiAgentRuntime,
@@ -15,7 +23,19 @@ export class PipelineEngine {
       max_cost_per_day_usd: Number(process.env.HIGGSFIELD_MAX_COST_PER_DAY_USD ?? "50"),
     },
     private readonly dispatchAdapters?: Map<string, PostDispatchAdapter>,
+    private readonly episodicStore?: EpisodicStore,
+    private readonly reflectionLoop?: ReflectionLoop,
+    private readonly decisionStore?: DecisionStore,
   ) {}
+
+  private getOrCreateWorkingMemory(runId: string): WorkingMemory {
+    let wm = this.workingMemories.get(runId);
+    if (!wm) {
+      wm = new InMemoryWorkingMemory(runId);
+      this.workingMemories.set(runId, wm);
+    }
+    return wm;
+  }
 
   createLeadGenerationDefinition(): ReturnType<SQLitePipelineStore["upsertDefinition"]> {
     return this.store.upsertDefinition({
@@ -133,6 +153,20 @@ export class PipelineEngine {
 
   async executeRun(runId: string): Promise<void> {
     this.store.setRunStatus(runId, "running");
+
+    // Idempotently begin an episode for this run. Only on the first call —
+    // re-entry from retryNode shouldn't re-create the episode row.
+    if (this.episodicStore && !this.episodicStore.getByPipelineRun(runId)) {
+      const run = this.store.getRun(runId);
+      if (run) {
+        this.episodicStore.start({
+          pipeline_run_id: runId,
+          pipeline_definition_id: run.pipeline_definition_id,
+          trigger: run.trigger,
+        });
+      }
+    }
+
     let safety = 0;
     while (safety < 200) {
       safety += 1;
@@ -144,6 +178,7 @@ export class PipelineEngine {
         const done = await this.executeNode(runId, node);
         if (!done) {
           this.store.setRunStatus(runId, "blocked", `blocked at ${node.node_id}`);
+          this.completeEpisode(runId, "blocked");
           return;
         }
       }
@@ -227,13 +262,30 @@ export class PipelineEngine {
         },
       });
       try {
-        const settled = await this.runtime.execute({
+        const workingMemory = this.getOrCreateWorkingMemory(runId);
+        const baseInput = {
           run_id: runId,
           node_id: node.node_id,
           agent_id: node.agent_id,
           config: node.config,
           upstreamArtifacts,
-        });
+          workingMemory,
+          strategyContext: [],
+        };
+        let settled;
+        if (this.reflectionLoop?.isEnabled(node.agent_id)) {
+          // Route through reflection. The wrapped handler from the runtime
+          // (which already includes withLearning) is what reflection retries.
+          const wrappedHandler = this.runtime.getHandler(node.agent_id);
+          if (!wrappedHandler) {
+            throw new Error(`No handler for ${node.agent_id} despite registration`);
+          }
+          const reflection = await this.reflectionLoop.execute(wrappedHandler, baseInput);
+          settled = reflection.output;
+        } else {
+          settled = await this.runtime.execute(baseInput);
+        }
+        this.episodicStore?.recordAgentSummary(runId, node.node_id, settled.summary);
         this.store.appendAgentTask({
           run_id: runId,
           node_id: node.node_id,
@@ -468,17 +520,42 @@ export class PipelineEngine {
     const allCompleted = nodes.length > 0 && nodes.every((node) => node.status === "completed");
     if (allCompleted) {
       this.store.setRunStatus(runId, "completed");
+      this.completeEpisode(runId, "completed");
       return;
     }
     if (hasFailed) {
       this.store.setRunStatus(runId, "failed");
+      this.completeEpisode(runId, "failed");
       return;
     }
     if (hasBlocked) {
       this.store.setRunStatus(runId, "blocked");
+      this.completeEpisode(runId, "blocked");
       return;
     }
     this.store.setRunStatus(runId, "running");
+  }
+
+  /** Persist final episode state, deriving pivot tags from logged decisions. */
+  private completeEpisode(runId: string, status: "completed" | "failed" | "blocked"): void {
+    if (!this.episodicStore) return;
+    const existing = this.episodicStore.getByPipelineRun(runId);
+    if (!existing || existing.ended_at) return;
+
+    const decisions = this.decisionStore?.listDecisionsByRun(runId) ?? [];
+    const pivotTags = derivePivotTags(decisions.flatMap((d) => d.tags));
+    const leadId = findLeadIdFromDecisions(decisions);
+    const wm = this.workingMemories.get(runId);
+
+    this.episodicStore.completeRun(runId, {
+      status,
+      pivot_tags: pivotTags,
+      lead_id: leadId,
+      working_memory_snapshot: wm?.snapshot(),
+    });
+
+    // Free the WM — it's persisted on the episode now.
+    this.workingMemories.delete(runId);
   }
 
   private collectUpstreamArtifacts(
@@ -530,4 +607,55 @@ export class PipelineEngine {
       })
       .catch(() => undefined);
   }
+}
+
+// ── Pivot tag derivation ──
+
+/** Tag prefixes considered pivot-worthy on episode rollups. */
+const PIVOT_PREFIXES = [
+  "vertical:",
+  "hero:",
+  "palette:",
+  "cta:",
+  "proof:",
+  "brand_source:",
+  "category:",
+  "qa_passed:",
+  "section:",
+  "component_style:",
+  "font_pairing:",
+];
+
+function derivePivotTags(allTags: string[]): string[] {
+  const seen = new Set<string>();
+  for (const tag of allTags) {
+    for (const prefix of PIVOT_PREFIXES) {
+      if (tag.startsWith(prefix)) {
+        seen.add(tag);
+        break;
+      }
+    }
+  }
+  return [...seen];
+}
+
+function findLeadIdFromDecisions(
+  decisions: Array<{ tags: string[] }>,
+): string | undefined {
+  // Most-frequent lead_id wins. At pipeline-level the run is one lead (manual)
+  // or many leads (batch). For multi-lead batches we leave lead_id null and
+  // attribute via individual decisions.
+  const counts = new Map<string, number>();
+  for (const d of decisions) {
+    for (const tag of d.tags) {
+      if (tag.startsWith("lead_id:")) {
+        const id = tag.slice("lead_id:".length);
+        counts.set(id, (counts.get(id) ?? 0) + 1);
+      }
+    }
+  }
+  if (counts.size === 0) return undefined;
+  if (counts.size === 1) return [...counts.keys()][0];
+  // Multi-lead batch — don't pin to a single lead.
+  return undefined;
 }

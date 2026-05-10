@@ -292,6 +292,19 @@ export const siteQaAgent: AgentHandler = async (input) => {
         confidence: 0.9,
         tags: [`pass_rate:${Math.round(passCount / Math.max(results.length, 1) * 100)}pct`, `avg_score:${avgScore}`],
       },
+      // Per-lead decisions for outcome attribution. Each pitch outcome
+      // attaches to the lead's QA decision via `lead_id:<id>` tag.
+      _decisions: results.map((r) => ({
+        lead_id: r.lead_id as string,
+        reasoning: `QA ${r.passed ? "passed" : "failed"} (score ${r.score}, ${r.error_count} errors, ${r.warning_count} warnings)`,
+        alternatives: [],
+        confidence: r.passed ? 0.9 : 0.4,
+        tags: [
+          `qa_passed:${r.passed ? "true" : "false"}`,
+          `qa_score:${r.score}`,
+          `qa_errors:${r.error_count}`,
+        ],
+      })),
     },
   };
 };

@@ -777,6 +777,9 @@ export const briefGeneratorAgent: AgentHandler = async (input) => {
 
   const briefs: SiteBrief[] = [];
 
+  // Track per-lead context for decision attribution.
+  const briefMeta: Array<{ lead_id: string; vertical: string; specificCategory: string; hasScrapedServices: boolean; hasReviews: boolean; brandColourSource: string }> = [];
+
   for (const profile of profiles) {
     const leadId = (profile.lead_id as string) ?? `lead-${Date.now()}`;
     const vertical = resolveVertical((profile.business_type as string) ?? "general");
@@ -796,6 +799,14 @@ export const briefGeneratorAgent: AgentHandler = async (input) => {
     } catch { /* non-fatal */ }
 
     briefs.push(brief);
+    briefMeta.push({
+      lead_id: leadId,
+      vertical,
+      specificCategory: brief.specificCategory,
+      hasScrapedServices: brief.services.some((s) => s.isScraped),
+      hasReviews: brief.bestReviews.length > 0,
+      brandColourSource: brief.brandColourSource,
+    });
   }
 
   return {
@@ -804,6 +815,21 @@ export const briefGeneratorAgent: AgentHandler = async (input) => {
       briefs,
       profiles, // pass through
       analyses: [...brandAnalyses.values()],
+      // Per-lead decisions tied to each brief — outcome attribution finds
+      // these via `lead_id:<id>` and the design choices encoded in tags.
+      _decisions: briefMeta.map((m) => ({
+        lead_id: m.lead_id,
+        reasoning: `Brief built for ${m.specificCategory}: vertical=${m.vertical}, scrapedServices=${m.hasScrapedServices}, reviewsCaptured=${m.hasReviews}, brandColourSource=${m.brandColourSource}`,
+        alternatives: [],
+        confidence: m.hasScrapedServices && m.hasReviews ? 0.85 : 0.6,
+        tags: [
+          `vertical:${m.vertical}`,
+          `category:${m.specificCategory}`,
+          `brand_source:${m.brandColourSource}`,
+          ...(m.hasReviews ? ["has_reviews:true"] : ["has_reviews:false"]),
+          ...(m.hasScrapedServices ? ["scraped_services:true"] : ["scraped_services:false"]),
+        ],
+      })),
     },
   };
 };

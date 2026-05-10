@@ -19,6 +19,17 @@ import { MultiAgentRuntime } from "./pipeline/agentRuntime.js";
 import { registerOutreachAgents } from "./agents/outreach/index.js";
 import { DecisionStore } from "./learning/decisionStore.js";
 import { withLearning } from "./learning/learningAgent.js";
+import { OutcomeIngester } from "./learning/outcomeIngest.js";
+import { SupabaseOutcomePoller } from "./learning/supabaseOutcomePoller.js";
+import { EpisodicStore } from "./memory/episodicStore.js";
+import { HeuristicCritic } from "./evaluation/heuristicCritic.js";
+import { ReflectionLoop } from "./evaluation/reflectionLoop.js";
+import { CriticFactory, type CriticImplementation } from "./evaluation/criticFactory.js";
+import { DynamicPlanner } from "./runtime/dynamicPlanner.js";
+import { ModelRegistry } from "./runtime/modelRegistry.js";
+import { AgentCapabilityRegistry } from "./runtime/agentRegistry.js";
+import { AttributionEngine } from "./evaluation/attributionEngine.js";
+import { StrategicStore } from "./memory/strategicStore.js";
 import { PipelineEngine } from "./pipeline/engine.js";
 import { PipelineScheduler } from "./pipeline/scheduler.js";
 import { SQLitePipelineStore } from "./pipeline/sqlitePipelineStore.js";
@@ -88,9 +99,23 @@ async function main(): Promise<void> {
   const decisionStore = new DecisionStore(dbPath);
   closeables.push(decisionStore);
 
-  // ── Pipeline engine ──
+  // ── Episodic memory (per-run history with critic scores + outcomes) ──
+  const episodicStore = new EpisodicStore(dbPath);
+  closeables.push(episodicStore);
+
+  // ── Strategic memory (cross-run knowledge, populated by nightly ranker) ──
+  const strategicStore = new StrategicStore(dbPath);
+  closeables.push(strategicStore);
+
+  // ── Model registry (LoRA hot-swap interface — Phase 10) ──
+  const modelRegistry = new ModelRegistry(dbPath);
+  closeables.push(modelRegistry);
+
+  // ── Pipeline runtime + capability registry ──
+  // Created early so the reflection loop can derive its enabled set from it.
   const agentRuntime = new MultiAgentRuntime();
-  registerOutreachAgents(agentRuntime);
+  const agentRegistry = new AgentCapabilityRegistry(agentRuntime);
+  registerOutreachAgents(agentRuntime, agentRegistry);
 
   // Wrap all registered agents with self-learning decision logging
   for (const agentId of agentRuntime.listRegistered()) {
@@ -105,11 +130,57 @@ async function main(): Promise<void> {
   log.info("agents registered with learning", {
     agents: agentRuntime.listRegistered(),
     count: agentRuntime.listRegistered().length,
+    capabilities: agentRegistry.list().length,
   });
+
+  // ── Critic + reflection ──
+  // Reflection-enabled agents derived from the capability registry. The env
+  // override remains useful for ops emergencies (force-disable a noisy agent).
+  // CriticFactory dispatches per-agent — heuristic by default, llm when the
+  // agent's registry entry sets critic_implementation: "llm".
+  const defaultImpl =
+    (process.env.CRITIC_IMPLEMENTATION as CriticImplementation | undefined) ?? "heuristic";
+  const critic =
+    defaultImpl === "heuristic" && process.env.CRITIC_FORCE_HEURISTIC === "true"
+      ? new HeuristicCritic()
+      : new CriticFactory(agentRegistry, { defaultImplementation: defaultImpl });
+  const envOverride = process.env.CRITIC_ENABLED_AGENTS;
+  const enabledFromEnv = envOverride
+    ? new Set(envOverride.split(",").map((s) => s.trim()).filter(Boolean))
+    : undefined;
+  const reflectionLoop = new ReflectionLoop(
+    critic,
+    {
+      threshold: Number(process.env.CRITIC_THRESHOLD ?? "0.7"),
+      maxRetries: Number(process.env.CRITIC_MAX_RETRIES ?? "1"),
+      enabledAgents: enabledFromEnv ?? agentRegistry.reflectionEnabledIds(),
+    },
+    episodicStore,
+  );
+
+  // ── Dynamic planner (registry-driven replanning on retryable failures) ──
+  // Instantiated but not yet wired into the engine — Phase 9.5 follow-up.
+  // Available for future engine.executeNode failure-handler integration.
+  const dynamicPlanner = new DynamicPlanner(agentRegistry);
+  void dynamicPlanner; // suppress unused warning until engine wires it in
+
+  // ── Attribution + Outcome ingest (cross-system pitch result bridge) ──
+  const attributionEngine = new AttributionEngine(decisionStore, episodicStore);
+  const outcomeIngester = new OutcomeIngester(
+    decisionStore,
+    episodicStore,
+    attributionEngine,
+  );
+  const outcomePoller = new SupabaseOutcomePoller(decisionStore, outcomeIngester);
   const pipelineEngine = new PipelineEngine(
     pipelineStore,
     agentRuntime,
     notificationStore,
+    undefined, // budgetPolicy — keep default
+    undefined, // dispatchAdapters
+    episodicStore,
+    reflectionLoop,
+    decisionStore,
   );
 
   // Auto-register pipeline definitions
@@ -156,15 +227,27 @@ async function main(): Promise<void> {
       pipelineEngine,
       undefined, // telephonyClient — removed
       compatStore,
+      outcomeIngester,
+      decisionStore,
+      modelRegistry,
+      episodicStore,
+      strategicStore,
     );
     const host = process.env.MISSION_CONTROL_HOST ?? "127.0.0.1";
     const port = Number(process.env.MISSION_CONTROL_PORT ?? "4317");
     await server.start({ host, port });
 
+    // Start the Supabase backstop poller. Skipped silently when
+    // SUPABASE_URL / service-role key are absent (logged once on first poll).
+    if (process.env.OUTCOME_POLLER_DISABLED !== "true") {
+      outcomePoller.start();
+    }
+
     // ── Graceful shutdown ──
     const shutdown = async (signal: string): Promise<void> => {
       log.info(`received ${signal}, shutting down`);
       pipelineScheduler.stop();
+      outcomePoller.stop();
       await server.stop();
       for (const c of closeables) {
         try {

@@ -20,6 +20,15 @@ import { SQLitePipelineStore } from "../pipeline/sqlitePipelineStore.js";
 import { PipelineDefinition } from "../pipeline/types.js";
 import { TelephonyControlClient } from "../telephony/controlClient.js";
 import { ClawdeckCompatStore } from "./clawdeckCompatStore.js";
+import { OutcomeIngester } from "../learning/outcomeIngest.js";
+import { DecisionStore } from "../learning/decisionStore.js";
+import { ModelRegistry } from "../runtime/modelRegistry.js";
+import { EpisodicStore } from "../memory/episodicStore.js";
+import { StrategicStore } from "../memory/strategicStore.js";
+import { handleOutcomesRoute } from "./routes/outcomes.js";
+import { handleDecisionsRoute } from "./routes/decisions.js";
+import { handleModelsRoute } from "./routes/models.js";
+import { handleEpisodesRoute } from "./routes/episodes.js";
 
 const log = createLogger("mission-control");
 const MAX_BODY_BYTES = 1_048_576; // 1MB
@@ -48,6 +57,11 @@ export class MissionControlServer {
     private readonly pipelineEngine?: PipelineEngine,
     private readonly telephonyClient?: TelephonyControlClient,
     private readonly compatStore?: ClawdeckCompatStore,
+    private readonly outcomeIngester?: OutcomeIngester,
+    private readonly decisionStore?: DecisionStore,
+    private readonly modelRegistry?: ModelRegistry,
+    private readonly episodicStore?: EpisodicStore,
+    private readonly strategicStore?: StrategicStore,
   ) {}
 
   start(options: MissionControlServerOptions): Promise<void> {
@@ -126,6 +140,46 @@ export class MissionControlServer {
         build_version: "0.1.0",
       });
       return;
+    }
+
+    // ── Outcome ingest + listing ──
+    if (this.outcomeIngester && url.pathname.startsWith("/api/outcomes/")) {
+      const handled = await handleOutcomesRoute(req, res, url, {
+        ingester: this.outcomeIngester,
+        ingestSecret: process.env.OUTCOME_INGEST_SECRET,
+        allowUnsigned:
+          process.env.NODE_ENV !== "production" &&
+          process.env.OUTCOME_INGEST_ALLOW_UNSIGNED === "true",
+      });
+      if (handled) return;
+    }
+
+    // ── Manual decisions (manual /build-demo skill, admin tools) ──
+    if (this.decisionStore && url.pathname.startsWith("/api/decisions/")) {
+      const handled = await handleDecisionsRoute(req, res, url, {
+        decisionStore: this.decisionStore,
+      });
+      if (handled) return;
+    }
+
+    // ── Model registry (LoRA hot-swap interface, no training yet) ──
+    if (this.modelRegistry && url.pathname.startsWith("/api/models")) {
+      const handled = await handleModelsRoute(req, res, url, {
+        modelRegistry: this.modelRegistry,
+      });
+      if (handled) return;
+    }
+
+    // ── Friday dashboard: episodes + strategies ──
+    if (
+      this.episodicStore &&
+      (url.pathname.startsWith("/api/episodes/") || url.pathname === "/api/strategies")
+    ) {
+      const handled = await handleEpisodesRoute(req, res, url, {
+        episodicStore: this.episodicStore,
+        strategicStore: this.strategicStore,
+      });
+      if (handled) return;
     }
 
     if (method === "GET" && url.pathname === "/api/metrics") {
@@ -1368,12 +1422,27 @@ export class MissionControlServer {
     @media (max-width: 1120px) {
       .cards { grid-template-columns: repeat(3, minmax(0, 1fr)); }
       .grid { grid-template-columns: 1fr; }
+      .panel.span-2 { grid-column: auto !important; }
     }
     @media (max-width: 760px) {
+      .wrap { padding: 12px 10px 24px; }
       .cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .toolbar, .toolbar.dual { grid-template-columns: 1fr; }
       .cols-2 { grid-template-columns: 1fr; }
+      .hero { flex-direction: column; align-items: flex-start; gap: 8px; padding: 14px; }
+      .hero h1 { font-size: 22px; }
+      .panel { padding: 10px; }
+      .panel h2 { font-size: 13px; }
+      input, button, select { padding: 11px 12px; font-size: 14px; }
+      .scroll { max-height: 360px; overflow-x: auto; }
+      table { font-size: 11px; min-width: 480px; }
+      th, td { padding: 6px 6px; }
+      .json { font-size: 11px; }
     }
+    /* Always allow horizontal scroll for wide tables (catches mid-sized
+       tablet portrait widths where the table is narrower than viewport
+       but still wider than the panel). */
+    .scroll { overflow-x: auto; }
   </style>
 </head>
 <body>
@@ -1499,6 +1568,53 @@ export class MissionControlServer {
               </table>
             </div>
           </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="grid sl-mas">
+      <div class="panel span-2" style="grid-column: span 2;">
+        <h2>Friday Dashboard — Strategy Pivot</h2>
+        <div class="toolbar dual">
+          <select id="pivotVertical">
+            <option value="">All verticals</option>
+          </select>
+          <input id="pivotGroupBy" value="vertical,hero,palette" placeholder="vertical,hero,palette,cta,proof,brand_source" />
+          <button id="refreshPivot">Refresh</button>
+        </div>
+        <div class="scroll" style="max-height:280px;">
+          <table>
+            <thead><tr><th>Group</th><th>n</th><th>Won</th><th>Lost</th><th>Pend</th><th>Rate</th></tr></thead>
+            <tbody id="pivotBody"></tbody>
+          </table>
+        </div>
+        <div class="json" id="pivotMeta" style="margin-top:8px;font-size:11px;">Pivot will appear after first run with outcomes.</div>
+      </div>
+    </section>
+
+    <section class="grid">
+      <div class="panel">
+        <h2>Recent Episodes</h2>
+        <div class="toolbar">
+          <button class="alt" id="refreshEpisodes">Refresh Episodes</button>
+        </div>
+        <div class="scroll" style="max-height:340px;">
+          <table>
+            <thead><tr><th>Lead</th><th>Vertical</th><th>Outcome</th><th>£</th><th>Score</th><th>Started</th></tr></thead>
+            <tbody id="episodesBody"></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="panel">
+        <h2>Active Strategies</h2>
+        <div class="toolbar">
+          <button class="alt" id="refreshStrategies">Refresh Strategies</button>
+        </div>
+        <div class="scroll" style="max-height:340px;">
+          <table>
+            <thead><tr><th>Vertical</th><th>Hero</th><th>Palette</th><th>n</th><th>Rate</th><th>Status</th></tr></thead>
+            <tbody id="strategiesBody"></tbody>
+          </table>
         </div>
       </div>
     </section>
@@ -1681,6 +1797,116 @@ async function refreshMediaSessions() {
   el('telephonyResult').textContent = safeJson(data);
 }
 
+// ── SL-MAS Friday Dashboard ──
+
+function renderGroupKey(key) {
+  return Object.entries(key).map(function (kv) {
+    return kv[0] + '=' + kv[1];
+  }).join(' · ');
+}
+
+async function refreshPivot() {
+  const vertical = el('pivotVertical').value;
+  const groupBy = (el('pivotGroupBy').value || 'vertical,hero,palette').trim();
+  const params = new URLSearchParams();
+  if (vertical) params.set('vertical', vertical);
+  params.set('group_by', groupBy);
+  const data = await getJson('/api/episodes/pivot?' + params.toString());
+  const body = el('pivotBody');
+  body.innerHTML = '';
+  if (!data.rows || data.rows.length === 0) {
+    body.innerHTML = '<tr><td colspan="6" style="color:#8b949e;padding:14px;">No episodes match. Run a pipeline or ingest outcomes to populate.</td></tr>';
+  } else {
+    for (const row of data.rows) {
+      const tr = document.createElement('tr');
+      const ratePct = row.sample_size > 0 ? Math.round(row.close_rate * 100) + '%' : '—';
+      const rateColor = row.close_rate >= 0.5 ? '#3fb950' : row.close_rate >= 0.25 ? '#d29922' : '#f85149';
+      tr.innerHTML =
+        '<td>' + renderGroupKey(row.group_key) + '</td>' +
+        '<td>' + row.sample_size + '</td>' +
+        '<td>' + row.closed + '</td>' +
+        '<td>' + row.rejected + '</td>' +
+        '<td>' + row.pending + '</td>' +
+        '<td style="color:' + rateColor + ';font-weight:600;">' + ratePct + '</td>';
+      body.appendChild(tr);
+    }
+  }
+  el('pivotMeta').textContent =
+    'Filters: ' + (data.filters && data.filters.length ? data.filters.join(', ') : '(none)') +
+    ' · group_by: ' + (data.group_by || []).join(', ') +
+    ' · ' + data.count + ' groups';
+}
+
+async function refreshEpisodes() {
+  const data = await getJson('/api/episodes/recent?limit=50');
+  const body = el('episodesBody');
+  body.innerHTML = '';
+  // Populate the vertical filter dropdown opportunistically
+  const verticalSelect = el('pivotVertical');
+  const known = new Set();
+  for (let i = 0; i < verticalSelect.options.length; i++) {
+    if (verticalSelect.options[i].value) known.add(verticalSelect.options[i].value);
+  }
+  for (const ep of data.episodes || []) {
+    if (ep.vertical && !known.has(ep.vertical)) {
+      const opt = document.createElement('option');
+      opt.value = ep.vertical;
+      opt.textContent = ep.vertical;
+      verticalSelect.appendChild(opt);
+      known.add(ep.vertical);
+    }
+    const tr = document.createElement('tr');
+    const outcome = ep.pitch_outcome || '(pending)';
+    const outcomeColor = ep.pitch_outcome === 'closed' ? '#3fb950'
+                       : ep.pitch_outcome === 'rejected' ? '#f85149'
+                       : '#8b949e';
+    const composerScore = (ep.critic_scores && ep.critic_scores.compose != null)
+      ? ep.critic_scores.compose.toFixed(2) : '—';
+    tr.innerHTML =
+      '<td>' + (ep.lead_id || '—') + '</td>' +
+      '<td>' + (ep.vertical || '—') + '</td>' +
+      '<td style="color:' + outcomeColor + ';">' + outcome + '</td>' +
+      '<td>' + (ep.close_amount_gbp != null ? '£' + ep.close_amount_gbp : '—') + '</td>' +
+      '<td>' + composerScore + '</td>' +
+      '<td>' + new Date(ep.started_at).toLocaleString() + '</td>';
+    tr.onclick = function () {
+      el('detailBox').textContent = safeJson(ep);
+    };
+    body.appendChild(tr);
+  }
+}
+
+async function refreshStrategies() {
+  const data = await getJson('/api/strategies');
+  const body = el('strategiesBody');
+  body.innerHTML = '';
+  if (!data.strategies || data.strategies.length === 0) {
+    body.innerHTML = '<tr><td colspan="6" style="color:#8b949e;padding:14px;">No strategies yet. Run nightly ranker after outcomes accumulate.</td></tr>';
+    return;
+  }
+  for (const s of data.strategies) {
+    const tr = document.createElement('tr');
+    const ratePct = s.close_rate != null ? Math.round(s.close_rate * 100) + '%' : '—';
+    const statusColor =
+      s.status === 'champion' ? '#a371f7' :
+      s.status === 'active' ? '#3fb950' :
+      s.status === 'testing' ? '#58a6ff' :
+      s.status === 'deprecated' ? '#f85149' :
+      '#8b949e';
+    tr.innerHTML =
+      '<td>' + s.vertical + '</td>' +
+      '<td>' + (s.parameters.hero || '_') + '</td>' +
+      '<td>' + (s.parameters.palette || '_') + '</td>' +
+      '<td>' + s.sample_size + '</td>' +
+      '<td>' + ratePct + '</td>' +
+      '<td style="color:' + statusColor + ';font-weight:600;">' + s.status + '</td>';
+    tr.onclick = function () {
+      el('detailBox').textContent = safeJson(s);
+    };
+    body.appendChild(tr);
+  }
+}
+
 el('saveDefaultJob').onclick = async function () {
   const payload = {
     id: 'content-automation-default',
@@ -1782,6 +2008,10 @@ el('newRealtime').onclick = async function () {
 el('refreshNotifs').onclick = refreshNotifications;
 el('refreshSessions').onclick = refreshSessions;
 el('refreshTasks').onclick = refreshTasks;
+el('refreshPivot').onclick = refreshPivot;
+el('refreshEpisodes').onclick = refreshEpisodes;
+el('refreshStrategies').onclick = refreshStrategies;
+el('pivotVertical').onchange = refreshPivot;
 
 el('runTask').onclick = async function () {
   const text = el('messageInput').value.trim();
@@ -1795,6 +2025,8 @@ el('runTask').onclick = async function () {
 
 async function fullRefresh() {
   setHeartbeat('syncing...');
+  // Episodes must run before pivot so the vertical dropdown is populated.
+  await refreshEpisodes().catch(function () { /* ignore */ });
   await Promise.all([
     refreshDashboard(),
     refreshJobs(),
@@ -1802,7 +2034,9 @@ async function fullRefresh() {
     refreshQueue(),
     refreshTasks(),
     refreshNotifications(),
-    refreshSessions()
+    refreshSessions(),
+    refreshPivot().catch(function () { /* ignore */ }),
+    refreshStrategies().catch(function () { /* ignore */ })
   ]);
   setHeartbeat('live @ ' + new Date().toLocaleTimeString());
 }

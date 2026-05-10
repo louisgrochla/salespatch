@@ -51,37 +51,47 @@ export function withLearning(
     // 2. Execute the actual agent
     const output = await handler(enrichedInput);
 
-    // 3. Extract decision metadata from output
-    const decision = (output.artifacts._decision as {
-      reasoning?: string;
-      alternatives?: string[];
-      confidence?: number;
-      tags?: string[];
-    }) ?? {};
+    // 3. Extract decision metadata. Agents may emit either:
+    //    - `_decision`  (singular) — one summary decision for the run
+    //    - `_decisions` (plural)   — per-lead decisions, each with `lead_id`
+    //
+    // When both are present, plural wins (more granular attribution).
+    const plural = output.artifacts._decisions as DecisionMeta[] | undefined;
+    const singular = output.artifacts._decision as DecisionMeta | undefined;
 
-    // 4. Log the decision
+    const decisionsToLog: DecisionMeta[] = Array.isArray(plural) && plural.length > 0
+      ? plural
+      : singular
+        ? [singular]
+        : [{}]; // log a bare decision so the run is still represented
+
+    // 4. Log each decision
     try {
-      decisionStore.logDecision({
-        agent_id: agentId,
-        run_id: input.run_id,
-        node_id: input.node_id,
-        action: output.summary,
-        reasoning: decision.reasoning ?? "No reasoning provided",
-        alternatives: decision.alternatives ?? [],
-        confidence: decision.confidence ?? 0.5,
-        inputs_summary: summarizeInputs(input),
-        output_summary: summarizeOutput(output),
-        tags: [
+      for (const d of decisionsToLog) {
+        const tags = [
           ...(options.defaultTags ?? []),
-          ...(decision.tags ?? []),
+          ...(d.tags ?? []),
           `agent:${agentId}`,
-        ],
-      });
+        ];
+        if (d.lead_id) tags.push(`lead_id:${d.lead_id}`);
+        decisionStore.logDecision({
+          agent_id: agentId,
+          run_id: input.run_id,
+          node_id: input.node_id,
+          action: d.action ?? output.summary,
+          reasoning: d.reasoning ?? "No reasoning provided",
+          alternatives: d.alternatives ?? [],
+          confidence: d.confidence ?? 0.5,
+          inputs_summary: summarizeInputs(input),
+          output_summary: d.output_summary ?? summarizeOutput(output),
+          tags,
+        });
+      }
 
-      log.debug("decision logged", {
+      log.debug("decisions logged", {
         agent: agentId,
         run: input.run_id,
-        confidence: decision.confidence ?? 0.5,
+        count: decisionsToLog.length,
         priorDecisions: context.totalDecisions,
       });
     } catch (err) {
@@ -90,13 +100,25 @@ export function withLearning(
     }
 
     // Remove internal learning metadata from output artifacts
-    const { _decision, ...cleanArtifacts } = output.artifacts;
+    const { _decision, _decisions, ...cleanArtifacts } = output.artifacts;
 
     return {
       ...output,
       artifacts: cleanArtifacts,
     };
   };
+}
+
+interface DecisionMeta {
+  reasoning?: string;
+  alternatives?: string[];
+  confidence?: number;
+  tags?: string[];
+  /** Lead identifier (slug). When present, `lead_id:<id>` is added to tags. */
+  lead_id?: string;
+  /** Optional override for the decision's action / output_summary. */
+  action?: string;
+  output_summary?: string;
 }
 
 function summarizeInputs(input: AgentExecutionInput): string {

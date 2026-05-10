@@ -1,7 +1,7 @@
 import { IncomingMessage } from "node:http";
 import { timingSafeEqual } from "node:crypto";
 
-const EXEMPT_PATHS = ["/api/health"];
+const EXEMPT_PATHS = ["/api/health", "/api/outcomes/ingest"];
 
 export function authenticateRequest(
   req: IncomingMessage,
