@@ -51,21 +51,22 @@ The **"self"** in self-learning is unlocked when (3) is complete: agents read NE
 
 ## Status Snapshot
 
-_Last updated: 2026-05-10 (Phase A + D1 + D2 + B1 + B2 complete)_
+_Last updated: 2026-05-10 (Phase A + D1 + D2 + B1 + B2 + B3 complete)_
 
 - Live: https://nerve.salespatch.co.uk/pipeline ✓
-- Postgres SL-MAS schema: 15 tables migrated (8 base + composer_iterations + lead_profiles + spend_ledger + site_briefs + brand_analyses + demo_artefacts + qa_results + lead_assignment_events + stripe_events)
+- Postgres SL-MAS schema: 16 tables migrated (8 base + composer_iterations + lead_profiles + spend_ledger + site_briefs + brand_analyses + demo_artefacts + qa_results + lead_assignment_events + stripe_events + salesperson_events)
 - **Phase A complete** — 7 Tier 1 ingest endpoints live + verified in prod via `scripts/nerve/simulate-ingest.sh`: composer-iteration, lead-profile, spend, site-brief, brand-analysis, demo-artefact, qa-result
 - **D1 live** — `/api/read/strategies` + `/api/read/lead-profiles/winning-features` HMAC-signed read endpoints in prod; build-demo skill consults both before generating (first read-side of the self-learning loop)
 - **D2 substrate ready** — `/api/read/decisions/learning-context` HMAC-signed read endpoint in prod; `NerveLearningClient` on Pi runtime side ready to drop into `withLearning(...)` via `options.contextSource` when the autumn pipeline restarts. 7/7 learning tests pass.
-- **B1 live** — `/api/ingest/lead-assignment` HMAC-signed funnel event ingest in prod; sales-dashboard producers wired in both status-flipping handlers. `OUTCOME_INGEST_SECRET` configured on sales-dashboard Vercel project, so real SP flips populate the timeline.
-- **B2 live** — `/api/ingest/stripe-event` HMAC-signed payment event ingest in prod; sales-dashboard payment webhook fans out every signature-verified Stripe event to NERVE. Closed pitches with confirmed payment are now joinable in the warehouse.
-- Producers wired today: tools/workbench (A1), outreach pipeline (A6 via spendReporter at 4 call sites), spec-site-brief skill (A2 + A4), build-demo skill (A3 + D1 read-bias), sales-dashboard status + pitch handlers (B1), sales-dashboard payment webhook (B2)
+- **B1 live** — `/api/ingest/lead-assignment` HMAC-signed funnel event ingest in prod; sales-dashboard producers wired in both status-flipping handlers.
+- **B2 live** — `/api/ingest/stripe-event` HMAC-signed payment event ingest in prod; sales-dashboard payment webhook fans out every signature-verified Stripe event to NERVE.
+- **B3 live** — `/api/ingest/salesperson-event` HMAC-signed SP lifecycle event ingest in prod; producers wired in signup, payments-connect, and admin profile-edit handlers. Per-SP timeline (signup → connect → profile_update → deactivated etc.) now queryable from NERVE.
+- Producers wired today: tools/workbench (A1), outreach pipeline (A6 via spendReporter at 4 call sites), spec-site-brief skill (A2 + A4), build-demo skill (A3 + D1 read-bias), sales-dashboard status + pitch (B1), sales-dashboard payment webhook (B2), sales-dashboard signup + payments-connect + admin (B3)
 - Producers awaiting wiring: Pi siteQaAgent (A5 — agent doesn't exist yet, manual posts work); autumn pipeline (D2 contextSource swap)
 - Pi runtime: dropped from data path, parked for autumn agents
-- Open phases: B (B3/B4 remaining), C (Tier 3 archival), D (D3 parked far-future), E (MC retirement)
-- Tasks open: 8
-- Tasks complete: 37 (see Done log)
+- Open phases: B (B4 remaining), C (Tier 3 archival), D (D3 parked far-future), E (MC retirement)
+- Tasks open: 7
+- Tasks complete: 38 (see Done log)
 
 ---
 
@@ -195,13 +196,17 @@ _Last updated: 2026-05-10 (Phase A + D1 + D2 + B1 + B2 complete)_
 
 ### B3 — Salesperson signup + profile changes → NERVE
 
-- **Status:** not started
-- **Owner:** _(unclaimed)_
+- **Status:** complete (PR #57, merged 2026-05-10)
+- **Owner:** _(merged)_
 - **Goal:** Signup events, profile edits, and onboarding completions write to NERVE.
-- **Files:**
-  - `apps/nerve/prisma/schema.prisma` (new `SalespersonEvent` model)
-  - sales-dashboard signup / profile edit handlers post to NERVE
-- **Acceptance:** Per-SP timeline queryable from NERVE.
+- **Files shipped:**
+  - `apps/nerve/prisma/schema.prisma` + migration `14_salesperson_events` — `SalespersonEvent` model with generic shape (type + denormalised fields + JSONB metadata) matching the B1/B2 template
+  - `apps/nerve/src/lib/sl-mas/salespersonEventStore.ts` — ingest + timeline / per-user / by-type read helpers
+  - `apps/nerve/src/app/api/ingest/salesperson-event/route.ts` — HMAC POST
+  - `apps/sales-dashboard/src/lib/nerve-ingest.ts` — `postSalespersonEvent` + `buildSalespersonEventId`
+  - Three handlers wired: `auth/signup` (type=signup), `payments/connect` (type=stripe_connect_created on first account creation), `admin/salespeople/[id]` (derived type from the diff: pin_reset / deactivated / reactivated / profile_update, with `metadata.fields` naming which columns moved)
+  - `scripts/nerve/simulate-ingest.sh` — extended with signup + stripe_connect_created probes
+- **Verified:** full 13-endpoint simulate-ingest sweep on prod returned HTTP 200, including both salesperson-event probes.
 - **Depends on:** none.
 - **Estimated effort:** 2 hours.
 
@@ -357,6 +362,7 @@ _Last updated: 2026-05-10 (Phase A + D1 + D2 + B1 + B2 complete)_
 
 > Tasks land here when their checkbox flips. Most recent at top.
 
+- **2026-05-10** PR #57 merged: B3 — salesperson lifecycle events ingest. Third Tier 2 stream. `salesperson_events` table (migration 14) with generic event shape; HMAC-signed `/api/ingest/salesperson-event` route; producers in signup handler, payments-connect, and admin profile-edit (with diff-derived event type). Per-SP timeline now queryable from NERVE.
 - **2026-05-10** PR #55 merged: B2 — Stripe webhook events ingest. Second Tier 2 stream. `stripe_events` table (migration 13) with full `body_json` JSONB + denormalised business keys; HMAC-signed `/api/ingest/stripe-event` route; sales-dashboard payment webhook fans out before local dispatch (even crashed handlers trace to NERVE); shared `postSigned()` helper extracted from B1 plumbing. Closed pitches with confirmed payment now joinable from the warehouse.
 - **2026-05-10** PR #53 merged: B1 — lead-assignment funnel events ingest. First Tier 2 stream. `lead_assignment_events` table (migration 12) with derived `transition` column; HMAC-signed `/api/ingest/lead-assignment` route; sales-dashboard producers wired in both status PATCH + pitch cascade handlers; simulate-ingest extended with three-event timeline sweep. Closes the dependency D2 was officially blocked on.
 - **2026-05-10** PR #51 merged: D2 — `withLearning(...)` can source learning context from NERVE. `/api/read/decisions/learning-context` HMAC endpoint live; `NerveLearningClient` + extracted pure formatter; `LearningContextSource` interface on `withLearning` with safe fallback to local store. Pi swap is one block in `src/index.ts`, deferred to autumn pipeline restart.
