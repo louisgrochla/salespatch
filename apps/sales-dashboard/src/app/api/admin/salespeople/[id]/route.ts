@@ -2,6 +2,11 @@ import { NextRequest, NextResponse } from 'next/server';
 import { validateAdminToken } from '@/lib/admin-auth';
 import { hashPin } from '@/lib/auth';
 import { getSupabaseServer } from '@/lib/supabase';
+import {
+  buildSalespersonEventId,
+  postSalespersonEvent,
+  type SalespersonEventType,
+} from '@/lib/nerve-ingest';
 
 function requireAdmin(req: NextRequest): NextResponse | null {
   const token = req.cookies.get('admin_token')?.value;
@@ -174,6 +179,44 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 
   const { error } = await sb.from('sales_users').update(update).eq('id', params.id);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  // B3: mirror the admin profile edit to NERVE. One event per PATCH call;
+  // the metadata.fields list names which columns moved so analytics can
+  // distinguish "admin reset PIN" from "admin bumped commission" without
+  // schema bloat. Fire-and-forget — Supabase write already committed.
+  //
+  // Special-case: a pure PIN reset is recorded as type=pin_reset; mixed
+  // edits land as type=profile_update with metadata.fields capturing the
+  // full set.
+  const pinOnly =
+    typeof body.pin === 'string' &&
+    body.active === undefined &&
+    body.commission_amount_pence === undefined;
+  const eventType: SalespersonEventType = pinOnly
+    ? 'pin_reset'
+    : body.active === false
+      ? 'deactivated'
+      : body.active === true
+        ? 'reactivated'
+        : 'profile_update';
+  const editedFields = Object.keys(update).filter((k) => k !== 'pin_hash');
+  if (typeof body.pin === 'string') editedFields.push('pin');
+  const occurredAt = new Date().toISOString();
+  postSalespersonEvent({
+    event_id: buildSalespersonEventId(params.id, eventType, occurredAt),
+    user_id: params.id,
+    type: eventType,
+    source: 'admin_panel',
+    metadata: { fields: editedFields },
+    occurred_at: occurredAt,
+  }).then((r) => {
+    if (!r.ok) {
+      console.warn(
+        `[nerve-ingest] salesperson ${eventType} event failed:`,
+        r.error,
+      );
+    }
+  });
 
   return NextResponse.json({
     data: {

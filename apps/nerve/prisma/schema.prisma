@@ -1365,3 +1365,42 @@ model StripeEvent {
   @@index([paymentIntentId])
   @@map("stripe_events")
 }
+
+// ─── salesperson events (Tier 2 SP lifecycle) ────────────────────────────
+//
+// B3 of Phase B. Append-only mirror of every meaningful SP lifecycle
+// event: signup, profile edits (self or admin), Stripe Connect setup,
+// PIN reset, deactivation. Lets the warehouse answer per-SP timeline
+// questions (when did Sarah sign up, when did she connect Stripe, when
+// did her commission rate change) without having to read the
+// sales-dashboard SQLite + Supabase split.
+//
+// Producers: signup handler, admin profile-edit handler, payments-
+// connect handler. All fire-and-forget after the source-of-truth
+// write succeeds.
+//
+// Idempotency: caller-supplied `eventId` = `<user_id>:<type>:
+// <iso_no_colons>`. Retries collapse onto the same row.
+//
+// Generic shape (type + denormalised fields + JSONB metadata) matches
+// the lead_assignment_events / stripe_events template — keeps the
+// schema small while letting new event types land without a migration.
+
+model SalespersonEvent {
+  id              String   @id @default(cuid())
+  eventId         String   @unique @map("event_id") // <user_id>:<type>:<iso_no_colons>
+  userId          String   @map("user_id") // sales_users.id
+  type            String // "signup" | "profile_update" | "stripe_connect_created" | "stripe_connect_completed" | "pin_reset" | "deactivated" | ...
+  displayName     String?  @map("display_name") // denormalised so analytics doesn't have to join
+  areaPostcode    String?  @map("area_postcode") // denormalised
+  stripeConnectId String?  @map("stripe_connect_id") // present on stripe_connect_* events
+  source          String   @default("signup_handler") // "signup_handler" | "admin_panel" | "payments_connect" | "auth_demo" | "test"
+  notes           String? // free-form context from caller
+  metadata        Json     @default("{}")
+  occurredAt      DateTime @map("occurred_at")
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  @@index([userId, occurredAt(sort: Desc)])
+  @@index([type, occurredAt(sort: Desc)])
+  @@map("salesperson_events")
+}
