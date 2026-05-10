@@ -36,6 +36,44 @@ Keep entries terse. One screen each is plenty.
 
 ---
 
+## 2026-05-10 — JSON-API validators must check both `undefined` AND `null`
+
+**Context:** Wiring the spec-site-brief skill to POST briefs into NERVE for the first time (A2 producer side). Noose & Needle backfill had a genuine research gap on `google_rating`, sent it as `null`.
+
+**Tried:** Validator pattern `if (p.field !== undefined && (typeof p.field !== "number" || ...))` for optional numeric fields, copied across A2 (site-brief, brand-analysis) and pre-existing in A4 (lead-profile).
+
+**Result:** HTTP 400 `"google_rating must be number in [0,5]"` for any payload sending explicit JSON null. `null !== undefined` is true, then `typeof null === "object"` trips the type guard. Bug ships silently when you only ever test with concrete values, which is what the simulate-ingest.sh probes did before this surfaced.
+
+**Decision:** Added small `isPresent<T>(v): v is T` helper to each route (`v !== undefined && v !== null`). Threaded through every optional-field check. Stores already use `?? null` so nothing else needed touching. Added an explicit-null lead-profile probe to scripts/nerve/simulate-ingest.sh as a regression guard.
+
+**Watch out for:** Any new validator on optional fields. The TypeScript type `T | undefined` doesn't model the on-the-wire JSON, which can also be `null`. Use `isPresent<T>` or check both. Will reappear on every future Phase B/C ingest endpoint if not codified — consider lifting the helper into `src/lib/sl-mas/validation.ts` when there are more than ~3 callers.
+
+**Related:** PR #44 (fix). Surfaced during the spec-site-brief NERVE wiring follow-up to PR #43. Files: `apps/nerve/src/app/api/ingest/{lead-profile,site-brief,brand-analysis}/route.ts`.
+
+---
+
+## 2026-05-10 — `vercel env pull` returns empty for "Sensitive" env vars
+
+**Context:** Trying to programmatically run a cleanup `DELETE FROM ... WHERE lead_id LIKE 'verify-%'` against the prod NERVE Postgres after a series of simulate-ingest.sh sweeps left ~10 test rows.
+
+**Tried:**
+1. `psql "$DATABASE_URL" -f ...` from local — DATABASE_URL was empty in `apps/nerve/.env.local` (placeholder `""`).
+2. `vercel env pull /tmp/.env.prod --environment=production --yes` to refresh — pulled the file, but `DATABASE_URL`, `DIRECT_URL`, `NEXTAUTH_SECRET` etc all came back as empty `""`. Other vars (`OUTCOME_INGEST_SECRET`) came down with real values.
+3. `vercel env ls production` — showed all vars as `Encrypted`, no distinction visible in the list output between Sensitive and regular Encrypted.
+
+**Result:** Vercel marks DB credentials as "Sensitive" by convention (especially when added via the Postgres / Neon integration). Sensitive vars are runtime-only — never downloadable via CLI. There's no flag to override; this is intentional.
+
+**Decision:** Use the Neon dashboard SQL editor for any prod DB operation that needs to happen from a local shell. Or build an HMAC-signed admin endpoint inside the NERVE app itself for repeat cases (not worth it for one-off cleanups).
+
+**Watch out for:**
+- `vercel env pull` *succeeds* when fetching Sensitive vars; it just writes empty strings. No error, no warning. You only notice when the downstream tool fails to connect.
+- Any future "run a quick prod query" instinct will hit this. Build a Neon-shortcut bookmark instead of fighting the CLI.
+- Vercel preview deployments also have Deployment Protection enabled; `vercel curl --deployment <url> /path` works for read-only probes and auto-generates a bypass token, but it doesn't passthrough curl flags like `-X POST`. For signed POSTs against a preview, easier to just merge to main and verify against prod (which has no protection).
+
+**Related:** Noticed during the verify-row cleanup pass after closing out PRs #43, #44 today. The cleanup SQL bundle ended up at `/tmp/cleanup-verify-rows.sql` for manual paste into Neon.
+
+---
+
 ## 2026-05-07 — Migrating workflow from Claude Desktop to terminal Claude Code
 
 **Context:** The repo was in unknown shape after months of Claude Desktop sessions.
