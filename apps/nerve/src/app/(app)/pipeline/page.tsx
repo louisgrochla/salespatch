@@ -1,13 +1,7 @@
 import { PageHeader, HeaderLink } from "@/components/PageHeader";
 import { StatTile } from "@/components/StatTile";
 import { PipelinePivot } from "@/components/PipelinePivot";
-import { RuntimeStatusBanner } from "@/components/PipelineStatus";
-import {
-  getPivot,
-  getRecentEpisodes,
-  getRuntimeStatus,
-  safe,
-} from "@/lib/runtime-api";
+import { episodicStore } from "@/lib/sl-mas/episodicStore";
 
 export const dynamic = "force-dynamic";
 
@@ -23,39 +17,29 @@ export default async function PipelinePage({
 }: {
   searchParams: SearchParams;
 }) {
-  const status = await getRuntimeStatus();
-  const groupBy =
+  const groupByKeys =
     searchParams.group_by?.split(",").map((s) => s.trim()).filter(Boolean) ??
     DEFAULT_GROUP_BY;
 
-  const [pivot, episodes] = await Promise.all([
-    safe(() =>
-      getPivot({
-        vertical: searchParams.vertical,
-        group_by: groupBy.map((g) => `${g}:`),
-      }),
-    ),
-    safe(() => getRecentEpisodes({ limit: 200 })),
+  const filters = searchParams.vertical
+    ? [`vertical:${searchParams.vertical}`]
+    : [];
+  const groupByPrefixes = groupByKeys.map((g) => `${g}:`);
+
+  const [pivot, recent] = await Promise.all([
+    episodicStore.pivotByTags(filters, groupByPrefixes),
+    episodicStore.listRecent(200),
   ]);
 
-  // Compute summary tiles from the pivot rows
-  const totalPitched = pivot.data
-    ? pivot.data.rows.reduce((s, r) => s + r.closed + r.rejected, 0)
-    : 0;
-  const totalClosed = pivot.data
-    ? pivot.data.rows.reduce((s, r) => s + r.closed, 0)
-    : 0;
-  const totalPending = pivot.data
-    ? pivot.data.rows.reduce((s, r) => s + r.pending, 0)
-    : 0;
+  const totalPitched = pivot.reduce((s, r) => s + r.closed + r.rejected, 0);
+  const totalClosed = pivot.reduce((s, r) => s + r.closed, 0);
+  const totalPending = pivot.reduce((s, r) => s + r.pending, 0);
   const overallRate = totalPitched > 0 ? totalClosed / totalPitched : 0;
-  const closedRevenue = episodes.data
-    ? episodes.data.episodes.reduce(
-        (s, ep) =>
-          s + (ep.pitch_outcome === "closed" ? ep.close_amount_gbp ?? 0 : 0),
-        0,
-      )
-    : 0;
+  const closedRevenue = recent.reduce(
+    (s, ep) =>
+      s + (ep.pitch_outcome === "closed" ? ep.close_amount_gbp ?? 0 : 0),
+    0,
+  );
 
   return (
     <div className="p-6 max-w-7xl mx-auto">
@@ -69,14 +53,6 @@ export default async function PipelinePage({
           </>
         }
       />
-
-      <RuntimeStatusBanner status={status} />
-
-      {pivot.error && (
-        <div className="border border-rose-700 bg-rose-950/30 px-4 py-3 mb-4 font-mono text-xs text-rose-200">
-          Pivot fetch failed: {pivot.error}
-        </div>
-      )}
 
       <section className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
         <StatTile
@@ -98,8 +74,8 @@ export default async function PipelinePage({
         />
         <StatTile
           label="design combos"
-          value={pivot.data?.rows.length ?? 0}
-          hint={`grouped by ${groupBy.join(" × ")}`}
+          value={pivot.length}
+          hint={`grouped by ${groupByKeys.join(" × ")}`}
         />
       </section>
 
@@ -108,25 +84,19 @@ export default async function PipelinePage({
           <h2 className="font-sans text-base font-medium text-fg">
             Pivot by{" "}
             <span className="font-mono text-sm text-fg-muted">
-              {groupBy.join(" × ")}
+              {groupByKeys.join(" × ")}
             </span>
           </h2>
           <PivotControls
             currentVertical={searchParams.vertical}
-            currentGroupBy={groupBy.join(",")}
+            currentGroupBy={groupByKeys.join(",")}
           />
         </div>
-        {pivot.data ? (
-          <PipelinePivot rows={pivot.data.rows} groupBy={groupBy} />
-        ) : (
-          <div className="border border-border bg-bg-panel px-4 py-6 text-fg-dim font-mono text-xs">
-            Could not load pivot data.
-          </div>
-        )}
+        <PipelinePivot rows={pivot} groupBy={groupByKeys} />
       </section>
 
       <p className="font-mono text-2xs text-fg-dim mt-6">
-        Cached for 60s. Edit ?vertical= or ?group_by= in the URL to slice.
+        Live from Postgres. Edit ?vertical= or ?group_by= in the URL to slice.
         Available group keys: vertical, hero, palette, cta, proof, brand_source,
         category, qa_passed, section, component_style, font_pairing.
       </p>

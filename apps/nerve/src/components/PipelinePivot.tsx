@@ -1,11 +1,11 @@
 import { cn } from "@/lib/cn";
-import type { PivotRow } from "@/lib/runtime-api";
+import type { PivotResult } from "@/lib/sl-mas/types";
 
 export function PipelinePivot({
   rows,
   groupBy,
 }: {
-  rows: PivotRow[];
+  rows: PivotResult[];
   groupBy: string[];
 }) {
   if (rows.length === 0) {

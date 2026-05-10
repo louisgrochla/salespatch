@@ -1,12 +1,6 @@
 import { PageHeader, HeaderLink } from "@/components/PageHeader";
-import { RuntimeStatusBanner } from "@/components/PipelineStatus";
 import { cn } from "@/lib/cn";
-import {
-  getRecentEpisodes,
-  getRuntimeStatus,
-  safe,
-  type EpisodeSummary,
-} from "@/lib/runtime-api";
+import { episodicStore, type EpisodeRow } from "@/lib/sl-mas/episodicStore";
 
 export const dynamic = "force-dynamic";
 
@@ -20,11 +14,8 @@ export default async function EpisodesPage({
 }: {
   searchParams: SearchParams;
 }) {
-  const status = await getRuntimeStatus();
   const limit = Math.min(Math.max(Number(searchParams.limit ?? "100"), 1), 500);
-  const result = await safe(() =>
-    getRecentEpisodes({ vertical: searchParams.vertical, limit }),
-  );
+  const episodes = await episodicStore.listRecent(limit, searchParams.vertical);
 
   return (
     <div className="p-6 max-w-7xl mx-auto">
@@ -39,26 +30,16 @@ export default async function EpisodesPage({
         }
       />
 
-      <RuntimeStatusBanner status={status} />
-
-      {result.error && (
-        <div className="border border-rose-700 bg-rose-950/30 px-4 py-3 mb-4 font-mono text-xs text-rose-200">
-          Fetch failed: {result.error}
-        </div>
-      )}
-
-      {result.data && (
-        <EpisodesTable episodes={result.data.episodes} />
-      )}
+      <EpisodesTable episodes={episodes} />
 
       <p className="font-mono text-2xs text-fg-dim mt-6">
-        Cached for 60s. Use ?vertical=barber or ?limit=200 in the URL.
+        Live from Postgres. Use ?vertical=barber or ?limit=200 in the URL.
       </p>
     </div>
   );
 }
 
-function EpisodesTable({ episodes }: { episodes: EpisodeSummary[] }) {
+function EpisodesTable({ episodes }: { episodes: EpisodeRow[] }) {
   if (episodes.length === 0) {
     return (
       <div className="border border-border bg-bg-panel px-4 py-6 text-fg-dim font-mono text-xs">

@@ -1,18 +1,13 @@
 import { PageHeader, HeaderLink } from "@/components/PageHeader";
-import { RuntimeStatusBanner } from "@/components/PipelineStatus";
 import { cn } from "@/lib/cn";
-import {
-  getStrategies,
-  getRuntimeStatus,
-  safe,
-  type Strategy,
-} from "@/lib/runtime-api";
+import { strategicStore, type StrategyRow } from "@/lib/sl-mas/strategicStore";
+import type { StrategyStatus } from "@/lib/sl-mas/types";
 
 export const dynamic = "force-dynamic";
 
 interface SearchParams {
   vertical?: string;
-  status?: Strategy["status"];
+  status?: StrategyStatus;
 }
 
 export default async function StrategiesPage({
@@ -20,13 +15,13 @@ export default async function StrategiesPage({
 }: {
   searchParams: SearchParams;
 }) {
-  const status = await getRuntimeStatus();
   const validStatus = (
     ["new", "testing", "active", "champion", "deprecated"] as const
   ).find((s) => s === searchParams.status);
-  const result = await safe(() =>
-    getStrategies({ vertical: searchParams.vertical, status: validStatus }),
-  );
+  const strategies = await strategicStore.list({
+    vertical: searchParams.vertical,
+    status: validStatus,
+  });
 
   return (
     <div className="p-6 max-w-7xl mx-auto">
@@ -41,15 +36,7 @@ export default async function StrategiesPage({
         }
       />
 
-      <RuntimeStatusBanner status={status} />
-
-      {result.error && (
-        <div className="border border-rose-700 bg-rose-950/30 px-4 py-3 mb-4 font-mono text-xs text-rose-200">
-          Fetch failed: {result.error}
-        </div>
-      )}
-
-      {result.data && <StrategyTable strategies={result.data.strategies} />}
+      <StrategyTable strategies={strategies} />
 
       <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-3 font-mono text-xs">
         <div className="border border-border bg-bg-panel px-4 py-3">
@@ -84,21 +71,21 @@ export default async function StrategiesPage({
       </div>
 
       <p className="font-mono text-2xs text-fg-dim mt-4">
-        Cached for 60s. Use ?vertical=barber or ?status=champion in the URL.
+        Live from Postgres. Use ?vertical=barber or ?status=champion in the URL.
+        Nightly ranker runs at 03:00 UTC via Vercel Cron.
       </p>
     </div>
   );
 }
 
-function StrategyTable({ strategies }: { strategies: Strategy[] }) {
+function StrategyTable({ strategies }: { strategies: StrategyRow[] }) {
   if (strategies.length === 0) {
     return (
       <div className="border border-border bg-bg-panel px-4 py-6 text-fg-dim font-mono text-xs">
-        No strategies yet. Once outcomes land, the nightly ranker (
-        <code className="text-fg-muted">
-          tsx src/jobs/nightlyStrategyRanker.ts
-        </code>
-        ) populates this table.
+        No strategies yet. Once outcomes land, the nightly ranker
+        (<code className="text-fg-muted">
+          /api/cron/strategy-ranker
+        </code>) populates this table.
       </div>
     );
   }
@@ -152,7 +139,7 @@ function StrategyTable({ strategies }: { strategies: Strategy[] }) {
   );
 }
 
-function statusClass(status: Strategy["status"]): string {
+function statusClass(status: StrategyStatus): string {
   switch (status) {
     case "champion":
       return "text-purple-400";
