@@ -3,8 +3,8 @@
 #
 # Hits the SL-MAS ingest endpoints on a NERVE deployment with HMAC-signed
 # test payloads. Currently covers A1 (composer-iteration), A2 (site-brief +
-# brand-analysis), A4 (lead-profile), A6 (spend). Prints HTTP status +
-# response body for each.
+# brand-analysis), A3 (demo-artefact), A4 (lead-profile), A6 (spend).
+# Prints HTTP status + response body for each.
 #
 # Usage:
 #   scripts/nerve/simulate-ingest.sh                 # production (default)
@@ -40,6 +40,7 @@ LEAD_ID="verify-lead-$STAMP"
 ITER_ID="verify-iter-$STAMP"
 BRIEF_ID="verify-brief-$STAMP"
 ANALYSIS_ID="verify-analysis-$STAMP"
+ARTEFACT_ID="verify-artefact-$STAMP"
 
 echo "Target: $NERVE_BASE_URL"
 echo "Stamp:  $STAMP"
@@ -211,8 +212,30 @@ JSON
 )
 sign_and_post "/api/ingest/brand-analysis" "$ANALYSIS_BODY"
 
+# ── A3 demo-artefact ─────────────────────────────────────────────────────
+ARTEFACT_HTML='<!DOCTYPE html><html><head><title>Verify probe '"$STAMP"'</title></head><body><h1>verify-artefact</h1><p>Tiny stub html for the demo-artefact ingest probe.</p></body></html>'
+ARTEFACT_BODY=$(cat <<JSON
+{
+  "artefact_id": "$ARTEFACT_ID",
+  "lead_id": "$LEAD_ID",
+  "brief_id": "$BRIEF_ID",
+  "composer_iteration_id": "$ITER_ID",
+  "business_name": "Verify Test Cafe",
+  "vertical": "hospitality",
+  "html_inline": $(printf '%s' "$ARTEFACT_HTML" | python3 -c 'import json,sys; print(json.dumps(sys.stdin.read()))'),
+  "photo_count": 0,
+  "aesthetic_positioning": "preview-probe stub",
+  "dominant_hex": "#0E0E10",
+  "metadata": { "source": "simulate-ingest.sh", "stamp": "$STAMP" },
+  "generated_at": "$ISO"
+}
+JSON
+)
+sign_and_post "/api/ingest/demo-artefact" "$ARTEFACT_BODY"
+
 echo "── Cleanup SQL (run against NERVE Postgres if you want the test rows gone) ──"
 cat <<SQL
+DELETE FROM "demo_artefacts" WHERE artefact_id = '$ARTEFACT_ID';
 DELETE FROM "brand_analyses" WHERE analysis_id = '$ANALYSIS_ID';
 DELETE FROM "site_briefs" WHERE brief_id = '$BRIEF_ID';
 DELETE FROM "composer_iterations" WHERE iteration_id = '$ITER_ID';
