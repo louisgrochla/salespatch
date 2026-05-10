@@ -51,15 +51,16 @@ The **"self"** in self-learning is unlocked when (3) is complete: agents read NE
 
 ## Status Snapshot
 
-_Last updated: 2026-05-10 (manual)_
+_Last updated: 2026-05-10 (manual, post-A1/A2/A4/A6 sweep)_
 
 - Live: https://nerve.salespatch.co.uk/pipeline ✓
-- Postgres SL-MAS schema: 8 tables migrated, seeded with bulk fixture
-- End-to-end pitch ingest: verified via `simulate-pitch.sh`
+- Postgres SL-MAS schema: 11 tables migrated (8 base + composer_iterations + lead_profiles + spend_ledger + site_briefs + brand_analyses)
+- Tier 1 ingest endpoints live + verified in prod via `scripts/nerve/simulate-ingest.sh`: composer-iteration, lead-profile, spend, site-brief, brand-analysis
+- Producers wired today: tools/workbench (A1), outreach pipeline (A6 via spendReporter at 4 call sites), spec-site-brief skill (A2 + A4 via `~/.claude/scripts/nerve/post-ingest.sh`)
 - Pi runtime: dropped from data path, parked for autumn agents
-- Open phases: A (Tier 1 capture), B (Tier 2 capture), C (Tier 3 archival), D (self-learning loop), E (MC retirement)
-- Tasks open: 18
-- Tasks complete: 27 (see Done log)
+- Open phases: A residual (A3, A5), B (Tier 2 capture), C (Tier 3 archival), D (self-learning loop), E (MC retirement)
+- Tasks open: 14
+- Tasks complete: 31 (see Done log)
 
 ---
 
@@ -69,7 +70,7 @@ _Last updated: 2026-05-10 (manual)_
 
 ### A1 — Composer Workbench saves to NERVE
 
-- **Status:** in progress (this branch)
+- **Status:** complete (PR #41, merged 2026-05-10)
 - **Owner:** feat/a1-composer-iterations
 - **Goal:** Every "save" in `tools/workbench/` writes a `composer_iteration` row to NERVE Postgres with the HTML, prompt, response, and lead context.
 - **Why:** Founder's manual edits are pure signal — captured nowhere today.
@@ -84,8 +85,8 @@ _Last updated: 2026-05-10 (manual)_
 
 ### A2 — Site briefs + brand analysis ingest
 
-- **Status:** in progress (this branch)
-- **Owner:** feat/a2-site-briefs
+- **Status:** complete (PR #43, merged 2026-05-10)
+- **Owner:** _(merged)_
 - **Goal:** Every site brief generated (manual `/build-demo` skill OR Pi `brief-generator-agent`) lands in NERVE with the full markdown body + structured fields. Brand analysis (palette/fonts/asset inventory) lands in NERVE alongside.
 - **Files:**
   - `apps/nerve/prisma/schema.prisma` (new `SiteBrief`, `BrandAnalysis` models)
@@ -113,7 +114,7 @@ _Last updated: 2026-05-10 (manual)_
 
 ### A4 — Lead profile snapshots ingest
 
-- **Status:** in progress (this branch)
+- **Status:** complete (PR #40, merged 2026-05-10)
 - **Owner:** feat/a4-lead-profiles
 - **Goal:** Whenever a lead is profiled (Pi `lead-profiler-agent` OR manual research via spec-site-brief), the structured profile (Instagram followers, photo count, hours, review summary, website screenshot URL) lands in NERVE.
 - **Files:**
@@ -139,7 +140,7 @@ _Last updated: 2026-05-10 (manual)_
 
 ### A6 — API spend ledger ingest
 
-- **Status:** in progress (this branch)
+- **Status:** complete (PR #42, merged 2026-05-10)
 - **Owner:** feat/a6-spend-ledger
 - **Goal:** Each external API call (OpenRouter, Apify, Google Places) writes a `spend_ledger` row to NERVE with provider, cost_usd, run_id, agent_id, tokens.
 - **Files:**
@@ -335,6 +336,12 @@ _Last updated: 2026-05-10 (manual)_
 
 > Tasks land here when their checkbox flips. Most recent at top.
 
+- **2026-05-10** A2 + A4 producer wired: `spec-site-brief` skill writes brief.json + brand-analysis.json + lead-profile.json sidecars and posts each to NERVE via `~/.claude/scripts/nerve/post-ingest.sh`. Noose & Needle backfill verified end-to-end against prod
+- **2026-05-10** PR #44 merged: ingest validators accept null on optional fields (regression: simulate-ingest.sh sweeps an explicit-null lead-profile)
+- **2026-05-10** PR #43 merged: A2 — site briefs + brand analysis ingest (schema, migration 9_site_briefs, two HMAC routes, two Prisma stores, simulate-ingest.sh extended)
+- **2026-05-10** PR #42 merged: A6 — API spend ledger ingest (schema, migration, route, store, runtime spendReporter wired into aiComposer/brandIntelligence/leadScoutAgent)
+- **2026-05-10** PR #41 merged: A1 — composer workbench iterations ingest (schema, migration, route, store, workbench server.ts wired)
+- **2026-05-10** PR #40 merged: A4 — lead profile snapshots ingest (schema, migration 7_lead_profiles, route, store; Pi-side activation deferred to autumn)
 - **2026-05-10** Verified end-to-end prod pitch ingest via `simulate-pitch.sh` (HTTP 200, episode flipped pending → closed) — task #25
 - **2026-05-10** PR #38 merged: NERVE build runs `prisma migrate deploy` on every deploy
 - **2026-05-10** PR #36 merged: full SL-MAS Phases 1–10 + NERVE Pipeline pages + NERVE-native Postgres migration
