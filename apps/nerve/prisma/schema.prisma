@@ -961,7 +961,7 @@ model ModelRegistration {
   @@map("model_registrations")
 }
 
- feat/a1-composer-iterations
+ 
 // ─── composer workbench iterations ───────────────────────────────────────
 //
 // Founder's manual demo-iteration trail from `tools/workbench/`. Every save
@@ -1028,5 +1028,4 @@ model SpendLedger {
   @@index([leadId, occurredAt(sort: Desc)])
   @@index([runId])
   @@map("spend_ledger")
- main
 }
