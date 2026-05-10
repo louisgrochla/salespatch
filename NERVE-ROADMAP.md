@@ -51,16 +51,17 @@ The **"self"** in self-learning is unlocked when (3) is complete: agents read NE
 
 ## Status Snapshot
 
-_Last updated: 2026-05-10 (manual, post-A1/A2/A4/A6 sweep)_
+_Last updated: 2026-05-10 (manual, Phase A complete)_
 
 - Live: https://nerve.salespatch.co.uk/pipeline ✓
-- Postgres SL-MAS schema: 11 tables migrated (8 base + composer_iterations + lead_profiles + spend_ledger + site_briefs + brand_analyses)
-- Tier 1 ingest endpoints live + verified in prod via `scripts/nerve/simulate-ingest.sh`: composer-iteration, lead-profile, spend, site-brief, brand-analysis
-- Producers wired today: tools/workbench (A1), outreach pipeline (A6 via spendReporter at 4 call sites), spec-site-brief skill (A2 + A4 via `~/.claude/scripts/nerve/post-ingest.sh`)
+- Postgres SL-MAS schema: 13 tables migrated (8 base + composer_iterations + lead_profiles + spend_ledger + site_briefs + brand_analyses + demo_artefacts + qa_results)
+- **Phase A complete** — 7 Tier 1 ingest endpoints live + verified in prod via `scripts/nerve/simulate-ingest.sh`: composer-iteration, lead-profile, spend, site-brief, brand-analysis, demo-artefact, qa-result
+- Producers wired today: tools/workbench (A1), outreach pipeline (A6 via spendReporter at 4 call sites), spec-site-brief skill (A2 + A4), build-demo skill (A3)
+- Producers awaiting wiring: Pi siteQaAgent (A5 — agent doesn't exist yet, manual posts work)
 - Pi runtime: dropped from data path, parked for autumn agents
-- Open phases: A residual (A3, A5), B (Tier 2 capture), C (Tier 3 archival), D (self-learning loop), E (MC retirement)
-- Tasks open: 14
-- Tasks complete: 31 (see Done log)
+- Open phases: B (Tier 2 capture), C (Tier 3 archival), D (self-learning loop), E (MC retirement)
+- Tasks open: 12
+- Tasks complete: 33 (see Done log)
 
 ---
 
@@ -100,8 +101,8 @@ _Last updated: 2026-05-10 (manual, post-A1/A2/A4/A6 sweep)_
 
 ### A3 — Demo HTML artefacts ingest
 
-- **Status:** in progress (this branch)
-- **Owner:** feat/a3-demo-artefacts
+- **Status:** complete (PR #46, merged 2026-05-10)
+- **Owner:** _(merged)_
 - **Goal:** Every generated demo HTML (manual or Pi-composer) saved to NERVE as a `DemoArtefact` row, JSONB inline.
 - **Files:**
   - `apps/nerve/prisma/schema.prisma` (new `DemoArtefact` model)
@@ -127,8 +128,8 @@ _Last updated: 2026-05-10 (manual, post-A1/A2/A4/A6 sweep)_
 
 ### A5 — Site QA results ingest
 
-- **Status:** in progress (this branch)
-- **Owner:** feat/a5-qa-results
+- **Status:** complete (PR #47, merged 2026-05-10)
+- **Owner:** _(merged)_
 - **Goal:** QA results from `siteQaAgent` (HTML validity, contrast, accessibility, score) land in NERVE keyed by demo_artefact_id.
 - **Files:**
   - `apps/nerve/prisma/schema.prisma` (new `QaResult` model)
@@ -336,6 +337,10 @@ _Last updated: 2026-05-10 (manual, post-A1/A2/A4/A6 sweep)_
 
 > Tasks land here when their checkbox flips. Most recent at top.
 
+- **2026-05-10** **Phase A complete.** Seven Tier 1 ingest streams live in prod, all HMAC-secured, all idempotent on caller-supplied natural keys, all probed by simulate-ingest.sh
+- **2026-05-10** PR #47 merged: A5 — site QA results ingest (schema, migration 11_qa_results, route, store; Pi siteQaAgent autumn)
+- **2026-05-10** A3 producer wired: build-demo skill writes demo-artefact.json sidecar and posts to NERVE via post-ingest.sh
+- **2026-05-10** PR #46 merged: A3 — demo HTML artefacts ingest (schema, migration 10_demo_artefacts, route, store; soft FKs to A1 + A2 chain)
 - **2026-05-10** A2 + A4 producer wired: `spec-site-brief` skill writes brief.json + brand-analysis.json + lead-profile.json sidecars and posts each to NERVE via `~/.claude/scripts/nerve/post-ingest.sh`. Noose & Needle backfill verified end-to-end against prod
 - **2026-05-10** PR #44 merged: ingest validators accept null on optional fields (regression: simulate-ingest.sh sweeps an explicit-null lead-profile)
 - **2026-05-10** PR #43 merged: A2 — site briefs + brand analysis ingest (schema, migration 9_site_briefs, two HMAC routes, two Prisma stores, simulate-ingest.sh extended)
