@@ -1,3 +1,9 @@
+// ── A4 future wire-up ────────────────────────────────────────────────
+// When the auto pipeline returns in autumn, post the merged profile to
+// NERVE_API_URL/api/ingest/lead-profile here, fire-and-forget, HMAC-
+// signed with OUTCOME_INGEST_SECRET. See apps/nerve/src/lib/sl-mas/
+// leadProfileStore.ts for the field shape.
+
 import { AgentHandler } from "../../pipeline/agentRuntime.js";
 import { createLogger } from "../../lib/logger.js";
 import { pLimit } from "../../lib/concurrency.js";

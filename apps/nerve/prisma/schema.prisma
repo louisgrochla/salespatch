@@ -961,6 +961,64 @@ model ModelRegistration {
   @@map("model_registrations")
 }
 
+
+// ─── lead profile snapshots ──────────────────────────────────────────────
+//
+// Rich enriched-data snapshots produced by the Pi `lead-profiler-agent` or
+// the manual `/build-demo` spec-site research workflow. Distinct from
+// LeadRecord (the simpler founder-facing record) — this row is the
+// AI-introspectable corpus: Instagram numbers, review summaries, services,
+// qualifier verdicts, raw scout/profiler payloads. One row per lead, keyed
+// on the natural slug `lead_id`. Re-profiling upserts in place so a Pi
+// rerun replaces the previous snapshot rather than accreting duplicates.
+//
+// `raw_scout_data` and `raw_profiler_data` are kept for audit so future
+// agents can re-derive structured fields without re-scraping.
+
+model LeadProfile {
+  id                   String   @id @default(cuid())
+  leadId               String   @unique @map("lead_id") // natural key (slug)
+  businessName         String   @map("business_name")
+  businessType         String?  @map("business_type")
+  vertical             String?
+  category             String? // e.g. "barber" specifically vs "health" generically
+  address              String?
+  postcode             String?
+  phone                String?
+  email                String?
+  websiteUrl           String?  @map("website_url")
+  websiteQualityScore  Int?     @map("website_quality_score") // 0-100
+  googleRating         Float?   @map("google_rating")
+  googleReviewCount    Int?     @map("google_review_count")
+  bestReviews          Json?    @map("best_reviews") // [{ author, rating, text, date }]
+  instagramHandle      String?  @map("instagram_handle")
+  instagramFollowers   Int?     @map("instagram_followers")
+  instagramPostCount   Int?     @map("instagram_post_count")
+  instagramBio         String?  @map("instagram_bio")
+  photoCount           Int      @default(0) @map("photo_count")
+  hasLogo              Boolean  @default(false) @map("has_logo")
+  hasHeroImage         Boolean  @default(false) @map("has_hero_image")
+  openingHours         String[] @default([]) @map("opening_hours")
+  services             Json? // [{ name, description, isScraped }]
+  priceRange           String?  @map("price_range")
+  qualificationScore   Float?   @map("qualification_score") // 0-1
+  qualificationReasons String[] @default([]) @map("qualification_reasons")
+  qualifierVerdict     String?  @map("qualifier_verdict") // "qualified" | "rejected" | "uncertain"
+  latitude             Float?
+  longitude            Float?
+  rawScoutData         Json?    @map("raw_scout_data") // original Google Places response
+  rawProfilerData      Json?    @map("raw_profiler_data") // original profiler output
+  metadata             Json     @default("{}")
+  profiledAt           DateTime @default(now()) @map("profiled_at")
+  createdAt            DateTime @default(now()) @map("created_at")
+  updatedAt            DateTime @default(now()) @updatedAt @map("updated_at")
+
+  @@index([vertical, profiledAt(sort: Desc)])
+  @@index([qualifierVerdict, profiledAt(sort: Desc)])
+  @@index([postcode])
+  @@map("lead_profiles")
+}
+
  
 // ─── composer workbench iterations ───────────────────────────────────────
 //
@@ -995,6 +1053,7 @@ model ComposerIteration {
   @@index([editKind, createdAt(sort: Desc)])
   @@index([parentIterationId])
   @@map("composer_iterations")
+}
 
 // Per-call API spend ledger. Each successful (or failed) outbound call to a
 // paid external API — OpenRouter, Apify, Google Places, etc. — writes one
@@ -1028,4 +1087,5 @@ model SpendLedger {
   @@index([leadId, occurredAt(sort: Desc)])
   @@index([runId])
   @@map("spend_ledger")
+
 }

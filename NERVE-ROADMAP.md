@@ -113,8 +113,8 @@ _Last updated: 2026-05-10 (manual)_
 
 ### A4 — Lead profile snapshots ingest
 
-- **Status:** not started
-- **Owner:** _(unclaimed)_
+- **Status:** in progress (this branch)
+- **Owner:** feat/a4-lead-profiles
 - **Goal:** Whenever a lead is profiled (Pi `lead-profiler-agent` OR manual research via spec-site-brief), the structured profile (Instagram followers, photo count, hours, review summary, website screenshot URL) lands in NERVE.
 - **Files:**
   - `apps/nerve/prisma/schema.prisma` (extend `LeadRecord` or new `LeadProfile` model)
