@@ -41,6 +41,6 @@ export async function middleware(req: NextRequest) {
 // matches passes the role gate above.
 export const config = {
   matcher: [
-    "/((?!api/auth|api/ingest|api/public|login|research|supervisor/login|_next/static|_next/image|favicon.ico|robots.txt|$).*)",
+    "/((?!api/auth|api/ingest|api/read|api/public|login|research|supervisor/login|_next/static|_next/image|favicon.ico|robots.txt|$).*)",
   ],
 };
