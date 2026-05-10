@@ -11,6 +11,7 @@
 
 import type { SiteBrief } from "./briefGenerator.js";
 import type { DesignDecision } from "./designSystem.js";
+import { reportSpend } from "../../lib/spendReporter.js";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -268,6 +269,22 @@ export async function generateSiteWithAI(
 
     const elapsed = ((Date.now() - t0) / 1000).toFixed(1);
     console.log(`[AI Composer] Done in ${elapsed}s — ${totalTokens} tokens, $${costUsd.toFixed(4)}`);
+
+    // Mirror spend to NERVE — fire-and-forget, never blocks generation.
+    reportSpend({
+      provider: "openrouter",
+      model: AI_COMPOSER_MODEL,
+      agent_id: "site-composer-agent",
+      lead_id: _leadId || undefined,
+      cost_usd: costUsd,
+      input_tokens: promptTokens,
+      output_tokens: completionTokens,
+      total_tokens: totalTokens,
+      request_kind: "completion",
+      success: true,
+      metadata: { business_name: brief.businessName },
+      occurred_at: new Date().toISOString(),
+    });
 
     // Extract HTML from response (strip any markdown fences if model adds them)
     let html = content.trim();
