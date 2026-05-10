@@ -1,4 +1,5 @@
 import crypto from 'crypto';
+import type Stripe from 'stripe';
 
 // Sales-dashboard → NERVE ingest helper.
 //
@@ -12,9 +13,10 @@ import crypto from 'crypto';
 //   secret: OUTCOME_INGEST_SECRET
 //   body:   the raw JSON, signed verbatim
 //
-// Distinct from the pitch route's NERVE_PITCH_SECRET path — that endpoint
-// pre-dates the unified Phase A secret. Migrating it is out of scope for
-// B1; the lead-assignment event is the only thing this helper does today.
+// Distinct from the legacy pitch route's NERVE_PITCH_SECRET +
+// x-supabase-signature path. Migrating that is out of scope for the
+// Phase B work; new producers (B1 lead-assignment events, B2 Stripe
+// events) all go through this helper on the unified secret.
 
 const NERVE_BASE_URL =
   process.env.NERVE_BASE_URL ?? 'https://nerve.salespatch.co.uk';
@@ -77,6 +79,106 @@ export function buildEventId(
 export async function postLeadAssignmentEvent(
   payload: LeadAssignmentEventPayload,
 ): Promise<NerveIngestResult> {
+  return postSigned('/api/ingest/lead-assignment', payload);
+}
+
+// ─── Stripe events (B2) ────────────────────────────────────────────────
+
+export interface StripeEventPayload {
+  stripe_event_id: string;
+  type: string;
+  api_version?: string | null;
+  livemode?: boolean;
+  account_id?: string | null;
+  request_id?: string | null;
+  idempotency_key?: string | null;
+  assignment_id?: string | null;
+  salesperson_id?: string | null;
+  customer_id?: string | null;
+  session_id?: string | null;
+  subscription_id?: string | null;
+  payment_intent_id?: string | null;
+  invoice_id?: string | null;
+  amount_total_pence?: number | null;
+  currency?: string | null;
+  payment_status?: string | null;
+  body_json: Record<string, unknown>;
+  occurred_at: string;
+}
+
+/**
+ * Build a NERVE-bound Stripe event payload from a verified Stripe.Event.
+ * Extracts denormalised business keys (assignment_id, customer_id, etc.)
+ * from the event object via duck-typing so the same extractor works
+ * across checkout sessions, payment intents, subscriptions, invoices,
+ * and charges without an event-type switch. Fields we can't find stay
+ * null — NERVE accepts them as optional.
+ */
+export function buildStripeEventPayload(
+  event: Stripe.Event,
+): StripeEventPayload {
+  // Stripe's Event.data.object is the underlying resource. Cast through
+  // unknown because the union of all resource types is wide and we only
+  // probe for fields we expect.
+  const obj = event.data.object as unknown as Record<string, unknown>;
+
+  const meta = (obj.metadata ?? {}) as Record<string, unknown>;
+  const assignmentId = readString(meta, 'lead_assignment_id');
+  const salespersonId = readString(meta, 'salesperson_id');
+
+  return {
+    stripe_event_id: event.id,
+    type: event.type,
+    api_version: event.api_version ?? null,
+    livemode: event.livemode,
+    account_id: event.account ?? null,
+    request_id:
+      typeof event.request === 'string'
+        ? event.request
+        : event.request?.id ?? null,
+    idempotency_key:
+      typeof event.request === 'object' && event.request
+        ? event.request.idempotency_key ?? null
+        : null,
+    assignment_id: assignmentId ?? null,
+    salesperson_id: salespersonId ?? null,
+    customer_id: readStripeRef(obj.customer) ?? null,
+    session_id: pickStripeId(obj, ['cs_']) ?? null,
+    subscription_id:
+      readStripeRef(obj.subscription) ??
+      pickStripeId(obj, ['sub_']) ??
+      null,
+    payment_intent_id:
+      readStripeRef(obj.payment_intent) ??
+      pickStripeId(obj, ['pi_']) ??
+      null,
+    invoice_id:
+      readStripeRef(obj.invoice) ?? pickStripeId(obj, ['in_']) ?? null,
+    amount_total_pence:
+      pickInt(obj, ['amount_total', 'amount_paid', 'amount']) ?? null,
+    currency: readString(obj, 'currency') ?? null,
+    payment_status: readString(obj, 'payment_status') ?? null,
+    body_json: event as unknown as Record<string, unknown>,
+    occurred_at: new Date(event.created * 1000).toISOString(),
+  };
+}
+
+/**
+ * Post a Stripe event to NERVE. Fire-and-forget — never throws. Callers
+ * should pattern-match `ok` and log the rest.
+ */
+export async function postStripeEvent(
+  payload: StripeEventPayload,
+): Promise<NerveIngestResult> {
+  return postSigned('/api/ingest/stripe-event', payload);
+}
+
+// ─── shared HMAC POST plumbing ─────────────────────────────────────────
+
+async function postSigned(
+  pathSuffix: string,
+  payload: unknown,
+): Promise<NerveIngestResult> {
   const secret = process.env.OUTCOME_INGEST_SECRET;
   if (!secret) {
     return {
@@ -93,7 +195,7 @@ export async function postLeadAssignmentEvent(
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
   try {
-    const res = await fetch(`${NERVE_BASE_URL}/api/ingest/lead-assignment`, {
+    const res = await fetch(`${NERVE_BASE_URL}${pathSuffix}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -121,4 +223,47 @@ export async function postLeadAssignmentEvent(
   } finally {
     clearTimeout(timer);
   }
+}
+
+function readString(
+  obj: Record<string, unknown>,
+  key: string,
+): string | undefined {
+  const v = obj[key];
+  return typeof v === 'string' && v.length > 0 ? v : undefined;
+}
+
+function readStripeRef(v: unknown): string | undefined {
+  // Stripe expandable references are either the bare ID string or an
+  // expanded object with an `.id` field. Handle both.
+  if (typeof v === 'string' && v.length > 0) return v;
+  if (v && typeof v === 'object' && 'id' in v) {
+    const id = (v as { id?: unknown }).id;
+    if (typeof id === 'string' && id.length > 0) return id;
+  }
+  return undefined;
+}
+
+/** Find an id-like value on the object whose prefix matches one of `prefixes`. */
+function pickStripeId(
+  obj: Record<string, unknown>,
+  prefixes: string[],
+): string | undefined {
+  // Common slot: `id` itself (e.g. checkout.Session, PaymentIntent, etc.).
+  const id = obj.id;
+  if (typeof id === 'string' && prefixes.some((p) => id.startsWith(p))) {
+    return id;
+  }
+  return undefined;
+}
+
+function pickInt(
+  obj: Record<string, unknown>,
+  keys: string[],
+): number | undefined {
+  for (const key of keys) {
+    const v = obj[key];
+    if (typeof v === 'number' && Number.isFinite(v)) return Math.trunc(v);
+  }
+  return undefined;
 }

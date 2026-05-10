@@ -1307,3 +1307,61 @@ model LeadAssignmentEvent {
   @@index([transition])
   @@map("lead_assignment_events")
 }
+
+// ─── stripe events (Tier 2 payment timeline) ─────────────────────────────
+//
+// B2 of Phase B. Append-only mirror of every signature-verified Stripe
+// webhook event that hits the sales-dashboard. Lets the warehouse answer
+// "which closed pitches have a confirmed Stripe payment" without
+// touching Stripe or Supabase — currently invisible to NERVE because the
+// existing payment-confirmation signal only lives in Supabase
+// lead_assignments.
+//
+// Producer: `apps/sales-dashboard/src/app/api/payments/webhook/route.ts`
+// fans out after `constructEvent` verifies the signature, before the
+// local dispatch runs. Fire-and-forget — Stripe's own retry + the
+// dashboard's stripe_events idempotency table own the "did the payment
+// actually settle" decision; NERVE just gets the complete log.
+//
+// Idempotency: caller-supplied `stripeEventId` is Stripe's `evt_...` ID,
+// already globally unique. Retries (when Stripe re-fires after a 500)
+// collapse onto the same row.
+//
+// `bodyJson` is the full event payload verbatim so future analytics can
+// re-derive fields without re-fetching from Stripe. Stripe events are
+// typically <50KB; JSONB column comfortably holds them.
+
+model StripeEvent {
+  id               String   @id @default(cuid())
+  stripeEventId    String   @unique @map("stripe_event_id") // evt_...
+  type             String // e.g. "checkout.session.completed"
+  apiVersion       String?  @map("api_version")
+  livemode         Boolean  @default(true) // false for test-mode events
+  accountId        String?  @map("account_id") // Connect account, when applicable
+  requestId        String?  @map("request_id") // originating Stripe request id
+  idempotencyKey   String?  @map("idempotency_key") // Stripe-side caller idempotency
+  // Denormalised business keys — extracted by the producer from event
+  // metadata or the event object so analytics joins don't have to parse
+  // bodyJson. All optional; not every event has all of them.
+  assignmentId    String?  @map("assignment_id")
+  salespersonId   String?  @map("salesperson_id")
+  customerId      String?  @map("customer_id") // Stripe cus_...
+  sessionId       String?  @map("session_id") // Stripe cs_...
+  subscriptionId  String?  @map("subscription_id") // Stripe sub_...
+  paymentIntentId String?  @map("payment_intent_id") // Stripe pi_...
+  invoiceId       String?  @map("invoice_id") // Stripe in_...
+  amountTotalPence Int?    @map("amount_total_pence")
+  currency        String? // lowercase ISO 4217, e.g. "gbp"
+  paymentStatus   String?  @map("payment_status") // "paid" | "unpaid" | "no_payment_required"
+  bodyJson        Json     @map("body_json") // full event payload verbatim
+  occurredAt      DateTime @map("occurred_at") // from event.created
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  @@index([type, occurredAt(sort: Desc)])
+  @@index([assignmentId, occurredAt(sort: Desc)])
+  @@index([customerId, occurredAt(sort: Desc)])
+  @@index([sessionId])
+  @@index([subscriptionId])
+  @@index([paymentIntentId])
+  @@map("stripe_events")
+}

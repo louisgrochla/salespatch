@@ -4,8 +4,8 @@
 # Hits the SL-MAS ingest endpoints on a NERVE deployment with HMAC-signed
 # test payloads. Currently covers A1 (composer-iteration), A2 (site-brief +
 # brand-analysis), A3 (demo-artefact), A4 (lead-profile), A5 (qa-result),
-# A6 (spend), B1 (lead-assignment events). Prints HTTP status + response
-# body for each.
+# A6 (spend), B1 (lead-assignment events), B2 (stripe events). Prints
+# HTTP status + response body for each.
 #
 # Usage:
 #   scripts/nerve/simulate-ingest.sh                 # production (default)
@@ -47,6 +47,8 @@ ASSIGNMENT_ID="verify-assignment-$STAMP"
 EVENT_ID_VISITED="$ASSIGNMENT_ID:visited:$STAMP"
 EVENT_ID_PITCHED="$ASSIGNMENT_ID:pitched:${STAMP}-p"
 EVENT_ID_SOLD="$ASSIGNMENT_ID:sold:${STAMP}-s"
+STRIPE_EVENT_ID="evt_verify_$STAMP"
+STRIPE_SESSION_ID="cs_verify_$STAMP"
 
 echo "Target: $NERVE_BASE_URL"
 echo "Stamp:  $STAMP"
@@ -320,8 +322,51 @@ JSON
 )
 sign_and_post "/api/ingest/lead-assignment" "$EVENT_SOLD_BODY"
 
+# ── B2 stripe event (checkout.session.completed shape) ───────────────────
+STRIPE_EVENT_BODY=$(cat <<JSON
+{
+  "stripe_event_id": "$STRIPE_EVENT_ID",
+  "type": "checkout.session.completed",
+  "api_version": "2024-11-20.acacia",
+  "livemode": false,
+  "request_id": "req_verify_$STAMP",
+  "assignment_id": "$ASSIGNMENT_ID",
+  "salesperson_id": "verify-sp-$STAMP",
+  "customer_id": "cus_verify_$STAMP",
+  "session_id": "$STRIPE_SESSION_ID",
+  "payment_intent_id": "pi_verify_$STAMP",
+  "amount_total_pence": 35000,
+  "currency": "gbp",
+  "payment_status": "paid",
+  "body_json": {
+    "id": "$STRIPE_EVENT_ID",
+    "type": "checkout.session.completed",
+    "livemode": false,
+    "data": {
+      "object": {
+        "id": "$STRIPE_SESSION_ID",
+        "object": "checkout.session",
+        "amount_total": 35000,
+        "currency": "gbp",
+        "payment_status": "paid",
+        "customer": "cus_verify_$STAMP",
+        "payment_intent": "pi_verify_$STAMP",
+        "metadata": {
+          "lead_assignment_id": "$ASSIGNMENT_ID",
+          "salesperson_id": "verify-sp-$STAMP"
+        }
+      }
+    }
+  },
+  "occurred_at": "$ISO"
+}
+JSON
+)
+sign_and_post "/api/ingest/stripe-event" "$STRIPE_EVENT_BODY"
+
 echo "── Cleanup SQL (run against NERVE Postgres if you want the test rows gone) ──"
 cat <<SQL
+DELETE FROM "stripe_events" WHERE stripe_event_id = '$STRIPE_EVENT_ID';
 DELETE FROM "lead_assignment_events" WHERE assignment_id = '$ASSIGNMENT_ID';
 DELETE FROM "qa_results" WHERE qa_id = '$QA_ID';
 DELETE FROM "demo_artefacts" WHERE artefact_id = '$ARTEFACT_ID';
