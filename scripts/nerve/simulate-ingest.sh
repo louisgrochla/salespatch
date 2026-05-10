@@ -4,7 +4,8 @@
 # Hits the SL-MAS ingest endpoints on a NERVE deployment with HMAC-signed
 # test payloads. Currently covers A1 (composer-iteration), A2 (site-brief +
 # brand-analysis), A3 (demo-artefact), A4 (lead-profile), A5 (qa-result),
-# A6 (spend). Prints HTTP status + response body for each.
+# A6 (spend), B1 (lead-assignment events). Prints HTTP status + response
+# body for each.
 #
 # Usage:
 #   scripts/nerve/simulate-ingest.sh                 # production (default)
@@ -42,6 +43,10 @@ BRIEF_ID="verify-brief-$STAMP"
 ANALYSIS_ID="verify-analysis-$STAMP"
 ARTEFACT_ID="verify-artefact-$STAMP"
 QA_ID="verify-qa-$STAMP"
+ASSIGNMENT_ID="verify-assignment-$STAMP"
+EVENT_ID_VISITED="$ASSIGNMENT_ID:visited:$STAMP"
+EVENT_ID_PITCHED="$ASSIGNMENT_ID:pitched:${STAMP}-p"
+EVENT_ID_SOLD="$ASSIGNMENT_ID:sold:${STAMP}-s"
 
 echo "Target: $NERVE_BASE_URL"
 echo "Stamp:  $STAMP"
@@ -261,8 +266,63 @@ JSON
 )
 sign_and_post "/api/ingest/qa-result" "$QA_BODY"
 
+# ── B1 lead-assignment events (visited → pitched → sold timeline) ────────
+# Three events in sequence so the timeline + transition index get exercised.
+EVENT_VISITED_BODY=$(cat <<JSON
+{
+  "event_id": "$EVENT_ID_VISITED",
+  "assignment_id": "$ASSIGNMENT_ID",
+  "lead_id": "$LEAD_ID",
+  "user_id": "verify-sp-$STAMP",
+  "prev_status": "new",
+  "status": "visited",
+  "source": "test",
+  "latitude": 57.1497,
+  "longitude": -2.0943,
+  "metadata": { "source": "simulate-ingest.sh", "stamp": "$STAMP" },
+  "occurred_at": "$ISO"
+}
+JSON
+)
+sign_and_post "/api/ingest/lead-assignment" "$EVENT_VISITED_BODY"
+
+EVENT_PITCHED_BODY=$(cat <<JSON
+{
+  "event_id": "$EVENT_ID_PITCHED",
+  "assignment_id": "$ASSIGNMENT_ID",
+  "lead_id": "$LEAD_ID",
+  "user_id": "verify-sp-$STAMP",
+  "prev_status": "visited",
+  "status": "pitched",
+  "source": "test",
+  "notes": "Stub pitched event from simulate-ingest.sh.",
+  "metadata": { "source": "simulate-ingest.sh", "stamp": "$STAMP" },
+  "occurred_at": "$ISO"
+}
+JSON
+)
+sign_and_post "/api/ingest/lead-assignment" "$EVENT_PITCHED_BODY"
+
+EVENT_SOLD_BODY=$(cat <<JSON
+{
+  "event_id": "$EVENT_ID_SOLD",
+  "assignment_id": "$ASSIGNMENT_ID",
+  "lead_id": "$LEAD_ID",
+  "user_id": "verify-sp-$STAMP",
+  "prev_status": "pitched",
+  "status": "sold",
+  "source": "test",
+  "commission_amount_pence": 17500,
+  "metadata": { "source": "simulate-ingest.sh", "stamp": "$STAMP" },
+  "occurred_at": "$ISO"
+}
+JSON
+)
+sign_and_post "/api/ingest/lead-assignment" "$EVENT_SOLD_BODY"
+
 echo "── Cleanup SQL (run against NERVE Postgres if you want the test rows gone) ──"
 cat <<SQL
+DELETE FROM "lead_assignment_events" WHERE assignment_id = '$ASSIGNMENT_ID';
 DELETE FROM "qa_results" WHERE qa_id = '$QA_ID';
 DELETE FROM "demo_artefacts" WHERE artefact_id = '$ARTEFACT_ID';
 DELETE FROM "brand_analyses" WHERE analysis_id = '$ANALYSIS_ID';
