@@ -51,19 +51,20 @@ The **"self"** in self-learning is unlocked when (3) is complete: agents read NE
 
 ## Status Snapshot
 
-_Last updated: 2026-05-10 (Phase A + D1 + D2 complete)_
+_Last updated: 2026-05-10 (Phase A + D1 + D2 + B1 complete)_
 
 - Live: https://nerve.salespatch.co.uk/pipeline ✓
-- Postgres SL-MAS schema: 13 tables migrated (8 base + composer_iterations + lead_profiles + spend_ledger + site_briefs + brand_analyses + demo_artefacts + qa_results)
+- Postgres SL-MAS schema: 14 tables migrated (8 base + composer_iterations + lead_profiles + spend_ledger + site_briefs + brand_analyses + demo_artefacts + qa_results + lead_assignment_events)
 - **Phase A complete** — 7 Tier 1 ingest endpoints live + verified in prod via `scripts/nerve/simulate-ingest.sh`: composer-iteration, lead-profile, spend, site-brief, brand-analysis, demo-artefact, qa-result
 - **D1 live** — `/api/read/strategies` + `/api/read/lead-profiles/winning-features` HMAC-signed read endpoints in prod; build-demo skill consults both before generating (first read-side of the self-learning loop)
 - **D2 substrate ready** — `/api/read/decisions/learning-context` HMAC-signed read endpoint in prod; `NerveLearningClient` on Pi runtime side ready to drop into `withLearning(...)` via `options.contextSource` when the autumn pipeline restarts. 7/7 learning tests pass.
-- Producers wired today: tools/workbench (A1), outreach pipeline (A6 via spendReporter at 4 call sites), spec-site-brief skill (A2 + A4), build-demo skill (A3 + D1 read-bias)
-- Producers awaiting wiring: Pi siteQaAgent (A5 — agent doesn't exist yet, manual posts work); autumn pipeline (D2 contextSource swap)
+- **B1 live** — `/api/ingest/lead-assignment` HMAC-signed funnel event ingest in prod; sales-dashboard producers wired in both status-flipping handlers (status PATCH + pitch cascade). First Tier 2 stream that starts collecting **real data today** once `OUTCOME_INGEST_SECRET` is set on the sales-dashboard Vercel project.
+- Producers wired today: tools/workbench (A1), outreach pipeline (A6 via spendReporter at 4 call sites), spec-site-brief skill (A2 + A4), build-demo skill (A3 + D1 read-bias), sales-dashboard status + pitch handlers (B1)
+- Producers awaiting wiring: Pi siteQaAgent (A5 — agent doesn't exist yet, manual posts work); autumn pipeline (D2 contextSource swap); B1 needs `OUTCOME_INGEST_SECRET` env var on sales-dashboard's Vercel project
 - Pi runtime: dropped from data path, parked for autumn agents
-- Open phases: B (Tier 2 capture), C (Tier 3 archival), D (D3 parked far-future), E (MC retirement)
-- Tasks open: 10
-- Tasks complete: 35 (see Done log)
+- Open phases: B (B2/B3/B4 remaining), C (Tier 3 archival), D (D3 parked far-future), E (MC retirement)
+- Tasks open: 9
+- Tasks complete: 36 (see Done log)
 
 ---
 
@@ -160,14 +161,18 @@ _Last updated: 2026-05-10 (Phase A + D1 + D2 complete)_
 
 ### B1 — Sales-dashboard `lead_assignments` status timeline → NERVE
 
-- **Status:** not started
-- **Owner:** _(unclaimed)_
+- **Status:** complete (PR #53, merged 2026-05-10)
+- **Owner:** _(merged)_
 - **Goal:** Every status flip on `lead_assignments` (Supabase) mirrors to a `LeadAssignmentEvent` row in NERVE.
-- **Files:**
-  - `apps/nerve/prisma/schema.prisma` (new `LeadAssignmentEvent` model)
-  - `apps/nerve/src/app/api/ingest/lead-assignment/route.ts`
-  - `apps/sales-dashboard/src/app/api/leads/[id]/status/route.ts` posts to NERVE after the Supabase update
-- **Acceptance:** Full timeline `(visited→pitched→sold|rejected)` per assignment_id queryable from NERVE.
+- **Files shipped:**
+  - `apps/nerve/prisma/schema.prisma` + migration `12_lead_assignment_events` — new `LeadAssignmentEvent` model with derived `transition` column and indexes on `(assignment_id, occurred_at)`, `(lead_id, occurred_at)`, `(user_id, occurred_at)`, `(status, occurred_at)`, `(transition)`
+  - `apps/nerve/src/lib/sl-mas/leadAssignmentEventStore.ts` — ingest + timeline / per-lead / per-SP / per-transition read helpers
+  - `apps/nerve/src/app/api/ingest/lead-assignment/route.ts` — HMAC-signed POST, validates `AssignmentStatus` set, bounds-checks GPS + commission
+  - `apps/sales-dashboard/src/lib/nerve-ingest.ts` — `postLeadAssignmentEvent` helper (fire-and-forget, 4s timeout, Phase A HMAC pattern)
+  - `apps/sales-dashboard/src/app/api/leads/[id]/{status,pitch}/route.ts` — producers wired in both status-flipping handlers (sources: `status_patch`, `pitch_cascade`)
+  - `scripts/nerve/simulate-ingest.sh` — extended with `visited → pitched → sold` three-event sweep
+- **Verified:** three-event sweep on prod returned HTTP 200 with correct `transition` strings (`new→visited`, `visited→pitched`, `pitched→sold`).
+- **Real data prerequisite:** set `OUTCOME_INGEST_SECRET` on the sales-dashboard Vercel project (same value as NERVE). Without it the helper returns `ok:false` and the status flip succeeds anyway, but no events flow.
 - **Depends on:** none.
 - **Estimated effort:** 2–3 hours.
 
@@ -347,6 +352,7 @@ _Last updated: 2026-05-10 (Phase A + D1 + D2 complete)_
 
 > Tasks land here when their checkbox flips. Most recent at top.
 
+- **2026-05-10** PR #53 merged: B1 — lead-assignment funnel events ingest. First Tier 2 stream. `lead_assignment_events` table (migration 12) with derived `transition` column; HMAC-signed `/api/ingest/lead-assignment` route; sales-dashboard producers wired in both status PATCH + pitch cascade handlers; simulate-ingest extended with three-event timeline sweep. Closes the dependency D2 was officially blocked on.
 - **2026-05-10** PR #51 merged: D2 — `withLearning(...)` can source learning context from NERVE. `/api/read/decisions/learning-context` HMAC endpoint live; `NerveLearningClient` + extracted pure formatter; `LearningContextSource` interface on `withLearning` with safe fallback to local store. Pi swap is one block in `src/index.ts`, deferred to autumn pipeline restart.
 - **2026-05-10** PR #49 merged: D1 — first read side of the self-learning loop. `/api/read/strategies` + `/api/read/lead-profiles/winning-features` HMAC-signed GET endpoints under a new `api/read` middleware exemption; companion `get-ingest.sh` helper; build-demo skill consults both before generating and biases output toward champion combinations
 - **2026-05-10** **Phase A complete.** Seven Tier 1 ingest streams live in prod, all HMAC-secured, all idempotent on caller-supplied natural keys, all probed by simulate-ingest.sh
