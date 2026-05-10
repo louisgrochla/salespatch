@@ -69,8 +69,8 @@ _Last updated: 2026-05-10 (manual)_
 
 ### A1 — Composer Workbench saves to NERVE
 
-- **Status:** not started
-- **Owner:** _(unclaimed)_
+- **Status:** in progress (this branch)
+- **Owner:** feat/a1-composer-iterations
 - **Goal:** Every "save" in `tools/workbench/` writes a `composer_iteration` row to NERVE Postgres with the HTML, prompt, response, and lead context.
 - **Why:** Founder's manual edits are pure signal — captured nowhere today.
 - **Files:**
