@@ -995,6 +995,7 @@ model ComposerIteration {
   @@index([editKind, createdAt(sort: Desc)])
   @@index([parentIterationId])
   @@map("composer_iterations")
+}
 
 // Per-call API spend ledger. Each successful (or failed) outbound call to a
 // paid external API — OpenRouter, Apify, Google Places, etc. — writes one
