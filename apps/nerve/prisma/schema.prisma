@@ -1260,3 +1260,50 @@ model QaResult {
   @@index([passed, score(sort: Desc)])
   @@map("qa_results")
 }
+
+// ─── lead assignment events (Tier 2 funnel timeline) ─────────────────────
+//
+// B1 of Phase B. Every status flip on Supabase `lead_assignments` mirrors
+// here as an append-only event row so NERVE can answer funnel questions
+// the closed-pitch-only `pitch_log` can't (visited→pitched conversion,
+// per-SP timing, leads that got visited but never pitched).
+//
+// Producers: `apps/sales-dashboard/src/app/api/leads/[id]/status/route.ts`
+// + `.../pitch/route.ts` cascade. Both fire-and-forget — Supabase write
+// success is the source of truth, NERVE post failure must never break
+// the status flip.
+//
+// Idempotency key: caller-supplied `eventId` = `<assignmentId>:<status>:
+// <occurredAt_no_colons>`. Retries from the producer collapse into the
+// same row. Multiple legitimate flips to the same status (e.g. pitched
+// → visited → pitched) produce distinct rows because the timestamps differ.
+//
+// Status set matches AssignmentStatus across the monorepo:
+// new | visited | pitched | sold | rejected (knowledge/contracts/shared-enums.md).
+
+model LeadAssignmentEvent {
+  id                    String   @id @default(cuid())
+  eventId               String   @unique @map("event_id") // <assignmentId>:<status>:<iso_no_colons>
+  assignmentId          String   @map("assignment_id") // Supabase lead_assignments.id (UUID)
+  leadId                String   @map("lead_id") // slug
+  userId                String?  @map("user_id") // sales_users.id; null for system-initiated reopens
+  prevStatus            String?  @map("prev_status") // null on the very first event for an assignment
+  status                String // terminal state of this transition
+  transition            String // "prev_status→status" for easy GIN-style filtering
+  source                String   @default("status_patch") // "status_patch" | "pitch_cascade" | "supabase_poll" | "backfill"
+  rejectionReason       String?  @map("rejection_reason") // populated when status=rejected
+  commissionAmountPence Int?     @map("commission_amount_pence") // populated when status=sold
+  notes                 String? // free-form context from caller
+  latitude              Float?
+  longitude             Float?
+  metadata              Json     @default("{}")
+  occurredAt            DateTime @map("occurred_at") // when the flip happened (producer-supplied)
+  createdAt             DateTime @default(now()) @map("created_at")
+
+  @@index([assignmentId, occurredAt(sort: Desc)])
+  @@index([leadId, occurredAt(sort: Desc)])
+  @@index([userId, occurredAt(sort: Desc)])
+  @@index([status, occurredAt(sort: Desc)])
+  @@index([transition])
+  @@map("lead_assignment_events")
+}

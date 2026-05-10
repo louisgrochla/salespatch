@@ -4,6 +4,7 @@ import { resolveUserFromRequest } from '@/lib/auth';
 import { run, queryOne, transaction } from '@/lib/db';
 import { randomUUID } from 'crypto';
 import type { AssignmentStatus } from '@/lib/types';
+import { buildEventId, postLeadAssignmentEvent } from '@/lib/nerve-ingest';
 
 export const dynamic = 'force-dynamic';
 
@@ -99,9 +100,10 @@ export async function PATCH(
     );
   }
 
+  const occurredAt = new Date().toISOString();
   transaction(() => {
     // Update assignment
-    const now = new Date().toISOString();
+    const now = occurredAt;
     const timestampCol = `${body.status}_at`;
     const validCols = ['visited_at', 'pitched_at', 'sold_at', 'rejected_at'];
 
@@ -137,6 +139,29 @@ export async function PATCH(
       `status_${body.status}`, body.notes ?? null,
       body.location_lat ?? null, body.location_lng ?? null,
     );
+  });
+
+  // B1: mirror the flip to NERVE for the funnel timeline. Fire-and-forget;
+  // local write succeeded, NERVE post failure must not surface to the SP.
+  postLeadAssignmentEvent({
+    event_id: buildEventId(params.id, body.status, occurredAt),
+    assignment_id: params.id,
+    lead_id: assignment.lead_id as string,
+    user_id: auth.user_id,
+    prev_status: currentStatus as AssignmentStatus,
+    status: body.status,
+    source: 'status_patch',
+    rejection_reason: body.rejection_reason ?? null,
+    commission_amount_pence:
+      body.commission_amount != null
+        ? Math.round(body.commission_amount * 100)
+        : null,
+    notes: body.notes ?? null,
+    latitude: body.location_lat ?? null,
+    longitude: body.location_lng ?? null,
+    occurred_at: occurredAt,
+  }).then((r) => {
+    if (!r.ok) console.warn('[nerve-ingest] status_patch failed:', r.error);
   });
 
   return NextResponse.json({ data: { success: true, status: body.status } });

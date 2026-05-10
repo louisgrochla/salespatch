@@ -2,6 +2,11 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import crypto from 'crypto';
 import { resolveUserFromRequest } from '@/lib/auth';
+import {
+  buildEventId,
+  postLeadAssignmentEvent,
+  type AssignmentStatus,
+} from '@/lib/nerve-ingest';
 
 export const dynamic = 'force-dynamic';
 
@@ -245,6 +250,37 @@ export async function POST(
       updated_at: new Date().toISOString(),
     })
     .eq('id', params.id);
+
+  // B1: mirror the status cascade to NERVE for the funnel timeline.
+  // Fire-and-forget; Supabase write is already committed, NERVE failure
+  // must not surface to the SP. Skipped when newStatus equals the prior
+  // status (legitimate when 'visited' → 'visited' on a re-pitch).
+  if (newStatus !== assignment.status) {
+    postLeadAssignmentEvent({
+      event_id: buildEventId(
+        params.id,
+        newStatus as AssignmentStatus,
+        pitchedAt,
+      ),
+      assignment_id: params.id,
+      lead_id: assignment.lead_id as string,
+      user_id: auth.user_id,
+      prev_status: assignment.status as AssignmentStatus,
+      status: newStatus as AssignmentStatus,
+      source: 'pitch_cascade',
+      commission_amount_pence:
+        body.agreed_price != null
+          ? Math.round(body.agreed_price * 100)
+          : null,
+      latitude: body.gps_lat ?? null,
+      longitude: body.gps_lng ?? null,
+      notes: `pitch_outcome=${body.outcome}; pitch_id=${pitchId}`,
+      metadata: { pitch_id: pitchId, pitch_outcome: body.outcome },
+      occurred_at: pitchedAt,
+    }).then((r) => {
+      if (!r.ok) console.warn('[nerve-ingest] pitch_cascade failed:', r.error);
+    });
+  }
 
   await sb.from('sales_activity_log').insert({
     id: crypto.randomUUID(),
