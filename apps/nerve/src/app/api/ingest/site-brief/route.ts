@@ -85,17 +85,22 @@ function validatePayload(p: Partial<SiteBriefInput>): string | undefined {
     return "verdict required";
   if (typeof p.brief_markdown !== "string" || p.brief_markdown.length === 0)
     return "brief_markdown required";
+  // Optional fields: null and undefined both mean "not supplied".
   if (
-    p.generated_at !== undefined &&
+    isPresent(p.generated_at) &&
     (typeof p.generated_at !== "string" || Number.isNaN(Date.parse(p.generated_at)))
   )
     return "generated_at must be ISO timestamp";
   if (
-    p.google_rating !== undefined &&
+    isPresent(p.google_rating) &&
     (typeof p.google_rating !== "number" ||
       p.google_rating < 0 ||
       p.google_rating > 5)
   )
     return "google_rating must be number in [0,5]";
   return undefined;
+}
+
+function isPresent<T>(v: T | undefined | null): v is T {
+  return v !== undefined && v !== null;
 }

@@ -85,6 +85,26 @@ JSON
 )
 sign_and_post "/api/ingest/lead-profile" "$LEAD_BODY"
 
+# ── Regression: lead-profile with explicit nulls on optional numeric fields.
+# Previously the validator rejected JSON null with "X must be number in [0,N]";
+# guards against that bug returning. Different lead_id so the upsert path
+# is exercised cleanly.
+LEAD_NULL_BODY=$(cat <<JSON
+{
+  "lead_id": "$LEAD_ID-nulls",
+  "business_name": "Verify Test Cafe — null fields",
+  "vertical": "hospitality",
+  "google_rating": null,
+  "google_review_count": null,
+  "qualification_score": null,
+  "qualifier_verdict": null,
+  "metadata": { "source": "simulate-ingest.sh", "stamp": "$STAMP", "regression": "null-validators" },
+  "profiled_at": "$ISO"
+}
+JSON
+)
+sign_and_post "/api/ingest/lead-profile" "$LEAD_NULL_BODY"
+
 # ── A6 spend-ledger ──────────────────────────────────────────────────────
 SPEND_BODY=$(cat <<JSON
 {
@@ -197,5 +217,5 @@ DELETE FROM "brand_analyses" WHERE analysis_id = '$ANALYSIS_ID';
 DELETE FROM "site_briefs" WHERE brief_id = '$BRIEF_ID';
 DELETE FROM "composer_iterations" WHERE iteration_id = '$ITER_ID';
 DELETE FROM "spend_ledger" WHERE lead_id = '$LEAD_ID';
-DELETE FROM "lead_profiles" WHERE lead_id = '$LEAD_ID';
+DELETE FROM "lead_profiles" WHERE lead_id IN ('$LEAD_ID', '$LEAD_ID-nulls');
 SQL
