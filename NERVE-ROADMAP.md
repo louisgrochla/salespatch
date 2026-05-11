@@ -51,7 +51,7 @@ The **"self"** in self-learning is unlocked when (3) is complete: agents read NE
 
 ## Status Snapshot
 
-_Last updated: 2026-05-11 (E1 + leads index follow-up)_
+_Last updated: 2026-05-11 (Phase F added — unified business lifecycle)_
 
 - Live: https://nerve.salespatch.co.uk/pipeline ✓ · /leads ✓ · /leads/[id] ✓
 - Postgres SL-MAS schema: 17 tables migrated (8 base + composer_iterations + lead_profiles + spend_ledger + site_briefs + brand_analyses + demo_artefacts + qa_results + lead_assignment_events + stripe_events + salesperson_events + onboarding_responses)
@@ -60,12 +60,15 @@ _Last updated: 2026-05-11 (E1 + leads index follow-up)_
 - **D1 live** — `/api/read/strategies` + `/api/read/lead-profiles/winning-features` HMAC-signed read endpoints in prod; build-demo skill consults both before generating (first read-side of the self-learning loop)
 - **D2 substrate ready** — `/api/read/decisions/learning-context` HMAC-signed read endpoint in prod; `NerveLearningClient` on Pi runtime side ready to drop into `withLearning(...)` via `options.contextSource` when the autumn pipeline restarts. 7/7 learning tests pass.
 - **E1 live** — `/leads/[id]` is the single-tab operator surface. Polymorphic on cuid (LeadRecord) or slug (SL-MAS lead_id); fans out across all Phase A/B stores in parallel; renders stat tiles, latest brief + full markdown, brand swatches/typography, sandboxed demo iframe preview, QA, lead profile, assignment timeline, onboarding, pitch history, composer iterations, API spend. First Phase E retirement surface.
+- **First real lead end-to-end (2026-05-11):** JP Nail Lash Brow Studio (Kingswells, AB15) ran through `/lead-hunter` → `/new-lead` → `/spec-site-brief` → `/build-demo` → `/lead-json`. All four NERVE ingests landed HTTP 200. Demo artefact (2.8 MB inline) lives at `/leads/jp-nail`. Submit folder ready for admin form. Validated the operator pipeline before scaling up the demo batch.
 - Producers wired today: tools/workbench (A1), outreach pipeline (A6 via spendReporter at 4 call sites), spec-site-brief skill (A2 + A4), build-demo skill (A3 + D1 read-bias), sales-dashboard status + pitch (B1), sales-dashboard payment webhook (B2), sales-dashboard signup + payments-connect + admin (B3), sales-dashboard onboarding POST (B4)
 - Producers awaiting wiring: Pi siteQaAgent (A5 — agent doesn't exist yet, manual posts work); autumn pipeline (D2 contextSource swap)
 - Pi runtime: dropped from data path, parked for autumn agents
-- Open phases: C (Tier 3 archival), D (D3 parked far-future), E (E2/E3/E4/E5 remaining)
-- Tasks open: 5
+- Open phases: C (Tier 3 archival, autumn-parked), D (D3 parked far-future), E (E2/E3/E4/E5 — Phase E remaining), **F (unified business lifecycle — F1/F2/F3 net new)**
+- Tasks open: 8
 - Tasks complete: 40 (see Done log)
+
+**Strategic note (Phase F):** the `/lead-hunter`, `/spec-site-brief`, `/build-demo`, `/lead-json` skills are not throwaway founder tooling — they are the system prompt for the future LLM-driven agent layer. Every refinement now compounds the moment the Claude Agent SDK is dropped in. Phase F treats them as production primitives and unifies the four id-spaces (local folder slug · `LeadRecord.id` cuid · `lead_profiles.lead_id` slug · Supabase `lead_assignments.lead_id`) into one canonical business identity in NERVE.
 
 ---
 
@@ -366,6 +369,77 @@ _Last updated: 2026-05-11 (E1 + leads index follow-up)_
 - **Goal:** Delete `src/orchestrator/orchestrator.ts`, `src/agents/codeAgent.ts`, `src/agents/opsAgent.ts`, `src/caller/callerModel.ts`. Remove MC chat console.
 - **Depends on:** E4.
 - **Estimated effort:** 4 hours.
+
+---
+
+## Phase F — Unified business lifecycle
+
+> The platform converges into one orchestration surface. Today the
+> `/lead-hunter`, `/spec-site-brief`, `/build-demo`, `/lead-json` skills
+> run in a Claude Code session, write to `~/Desktop/salespatch-demos/`,
+> post to NERVE, and the resulting submit folder is dragged into the
+> admin "New lead" form by hand. That works for the founder doing
+> single-operator beta runs. It does not work for two SPs in two
+> different cities running it in parallel, and it does not work as the
+> substrate for the eventual autonomous agent layer.
+>
+> Phase F closes that gap. After F1/F2/F3 every business is one
+> canonical NERVE row with one decision log, skill invocations are
+> triggered from the admin portal (not the founder's terminal), and the
+> mid-engagement note streams that today happen verbally or on the SP's
+> Notes app land in NERVE next to the assignment timeline.
+>
+> Strategic context: the current `/commands` are not throwaway tooling.
+> They are the system prompt for the future LLM-driven agent layer.
+> Every refinement now compounds the moment the Claude Agent SDK gets
+> dropped in. Phase F treats the skills as production primitives, not
+> founder-only convenience.
+
+### F1 — Business identity unification in NERVE
+
+- **Status:** not started
+- **Owner:** _(unclaimed)_
+- **Goal:** One business = one canonical row in NERVE, lookupable by normalised name + postcode. Everything else (briefs, demos, assignments, pitches, onboarding) hangs off it as soft FK. Today there are four id-spaces that cannot reliably dedup the same physical business: local folder slug, `LeadRecord.id` (cuid), `lead_profiles.lead_id` (slug), Supabase `lead_assignments.lead_id`. Collapse them into a single `BusinessIdentity` keyed by `slug` (or `normalised_name + postcode`), and treat the existing tables as soft FKs into it.
+- **Files:**
+  - `apps/nerve/prisma/schema.prisma` — new `BusinessIdentity` model OR slug column on `LeadRecord` with a unique index on `(normalised_name, postcode)`
+  - `apps/nerve/src/lib/sl-mas/businessIdentityStore.ts` — normalisation helper (lowercase, strip punctuation, drop "the / & / and") + `lookupOrCreate(name, postcode)`
+  - Migration for new table + backfill: pre-existing rows in `lead_profiles`, `site_briefs`, `demo_artefacts` keyed by slug get one canonical identity each; existing `LeadRecord` rows backfilled by matching name
+  - Updates to the `/lead-hunter` and `/new-lead` skills to consult NERVE for prior identity before writing a folder
+  - Updates to the `/leads` index page to dedup the two sections against the canonical identity
+- **Acceptance:** Running `/lead-hunter` for a previously-pitched business returns "already in pipeline" against the canonical identity regardless of slug variation ("noose & needle" vs "noose-and-needle"). `/leads/<id>` works with the canonical id and surfaces every artefact ever produced for that business in one timeline.
+- **Depends on:** none — schema move + one normalisation function. Smallest of the three.
+- **Estimated effort:** 1 day.
+
+### F2 — Admin-triggered skill invocation
+
+- **Status:** not started
+- **Owner:** _(unclaimed)_
+- **Goal:** The admin portal grows buttons that invoke the skills (`lead-hunter`, `spec-site-brief`, `build-demo`, `lead-json`) without dragging files. Backend route uses the Claude Agent SDK to run the existing skill prompts and write results directly to NERVE. No more "drop submit folder into the New Lead form" dance — the form pre-populates from a NERVE-side build.
+- **Files:**
+  - `apps/admin-panel/src/app/leads/[id]/page.tsx` — per-lead skill trigger UI ("Run /spec-site-brief", "Run /build-demo")
+  - `apps/admin-panel/src/app/api/skills/<skill>/route.ts` — one route per skill, invokes Claude Agent SDK with the existing skill markdown as the system prompt
+  - `apps/nerve/src/app/api/ingest/skill-run/route.ts` — new ingest endpoint for skill run rows (status, duration, model, tokens, cost)
+  - `apps/nerve/prisma/schema.prisma` — new `SkillRun` model
+  - Skill markdown stays the same — that's the whole point. The trigger surface changes, the prompt doesn't.
+- **Acceptance:** Founder can click "Run /spec-site-brief" on a lead in the admin portal and see the brief + brand-analysis + lead-profile rows appear in NERVE without touching local files. `/leads/<id>` E1 page renders the result the same way it renders a CLI-skill-emitted result today.
+- **Depends on:** F1 (skills need to write against the canonical identity, not a fresh slug each time).
+- **Estimated effort:** 1–2 weeks. This is where the Claude Agent SDK earns its keep — wraps the existing skill prompts rather than rewriting them.
+
+### F3 — Mid-engagement note streams
+
+- **Status:** not started
+- **Owner:** _(unclaimed)_
+- **Goal:** SPs and customers can push notes / change requests / pitch outcomes back into NERVE during engagement — between the visit and the close. Closes the timeline gap between B1 (assignment status events) and B4 (post-sale customer onboarding). Today these notes happen verbally or in the SP's Notes app and never reach the warehouse, so the AI layer cannot ask "what did SPs say worked at the door for closed leads vs rejected ones."
+- **Files:**
+  - `apps/nerve/prisma/schema.prisma` — new `EngagementNote` model with `assignment_id` FK, `kind` enum (pitch_note / change_request / customer_feedback / objection_raised), `author_role` (salesperson / customer / founder), `body`, `metadata` JSONB
+  - `apps/nerve/src/app/api/ingest/engagement-note/route.ts` — HMAC POST (matches the B1–B4 pattern)
+  - `apps/nerve/src/lib/sl-mas/engagementNoteStore.ts` — ingest + per-assignment / per-lead read helpers
+  - `apps/mobile-api` — new endpoint `POST /api/assignments/:id/notes` that mobile/iOS posts to, fans out to NERVE
+  - `apps/ios/SalesFlow` — note-capture UI on the assignment detail screen (free text + kind selector)
+  - `/leads/<id>` E1 page — new "Engagement notes" section between assignment timeline and customer onboarding
+- **Acceptance:** SP records a pitch note from the iOS app while standing outside the shop; note appears on `/leads/<id>` within 5 seconds. Customer change request (mid-build) lands keyed to assignment_id and shows up on the same timeline.
+- **Depends on:** F1 (notes hang off the canonical identity).
+- **Estimated effort:** 3–5 days.
 
 ---
 
