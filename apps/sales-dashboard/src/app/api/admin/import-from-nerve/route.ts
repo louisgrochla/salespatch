@@ -5,6 +5,7 @@ import { isSupabaseMode } from '@/lib/auth-db';
 import { getSupabaseServer } from '@/lib/supabase';
 import { queryOne, run, transaction } from '@/lib/db';
 import { nerveGet } from '@/lib/nerve-read';
+import { buildEventId, postLeadAssignmentEvent } from '@/lib/nerve-ingest';
 
 // POST /api/admin/import-from-nerve
 //
@@ -270,6 +271,7 @@ export async function POST(req: NextRequest) {
 
   const notes = buildNotes(data);
   const assignmentId = randomUUID();
+  const occurredAt = new Date().toISOString();
   const contact_name = data.pitch_brief?.contact_name ?? null;
   const contact_role = data.pitch_brief?.contact_role ?? null;
 
@@ -309,6 +311,33 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: msg }, { status: 500 });
     }
   }
+
+  // Fire the B1 producer so NERVE's lead_assignment_events table holds
+  // the initial assignment row. Without this the F2 queue would keep
+  // re-listing this lead (the queue filter is "demo_artefact exists AND
+  // no lead_assignment_event yet"). Fire-and-forget — never blocks the
+  // response: if NERVE is down the Supabase row is still valid and the
+  // queue dedup just stays stale until the next status flip.
+  const eventId = buildEventId(assignmentId, 'new', occurredAt);
+  postLeadAssignmentEvent({
+    event_id: eventId,
+    assignment_id: assignmentId,
+    lead_id: slug,
+    user_id,
+    prev_status: null,
+    status: 'new',
+    source: 'nerve_import',
+    occurred_at: occurredAt,
+    metadata: {
+      imported_by: 'admin',
+      nerve_artefact_id: data.demo_artefact?.artefact_id ?? null,
+      nerve_brief_id: data.site_brief?.brief_id ?? null,
+      nerve_pitch_brief_id: data.pitch_brief?.pitch_brief_id ?? null,
+    },
+  }).catch((err) => {
+    // Log; do not surface to caller — the Supabase row is already written.
+    console.warn('[import-from-nerve] postLeadAssignmentEvent failed', err);
+  });
 
   return NextResponse.json({
     data: {
