@@ -422,8 +422,13 @@ _Last updated: 2026-05-11 (F1 shipped + capture enrichment shipped — pitch pla
 
 ### F2 — Admin queue surfaces NERVE-built leads for assignment
 
-- **Status:** not started
-- **Owner:** _(unclaimed)_
+- **Status:** in progress (PR (a) — pending-assignments read endpoint — open 2026-05-11)
+- **Owner:** claude-session-f2-2026-05-11
+- **Sub-PRs:**
+  - **(a)** `/api/read/pending-assignments` HMAC GET endpoint in NERVE — returns lead cards (canonical-dedup against F1 BusinessIdentity, demo + brief + pitch-brief + QA enrichments). Card payload is lean (no full HTML); the import handler re-queries with the returned ids.
+  - **(b)** `/leads/queue` page in admin-panel — server-side fetch from (a), card list with assign action. Adds `OUTCOME_INGEST_SECRET` to admin-panel env.
+  - **(c)** `/api/leads/import-from-nerve` handler in admin-panel — POST takes a slug, reads brief + lead-profile + demo-artefact + pitch-brief from NERVE, writes to Supabase `leads`, fires B1 producer.
+  - **(d)** Wire the "Assign" action so importing into Supabase auto-creates the assignment row.
 - **Goal:** Kill the "drag submit folder into the New Lead form" step. Skills keep running in Claude Code (the founder's terminal) and keep writing to NERVE as they do today. The admin portal grows a **pending-assignment queue** sourced directly from NERVE: any lead with a `demo_artefact` row but no `lead_assignment_event` yet shows up automatically, ready to assign to an SP. One click imports the lead into Supabase (using existing brief + lead-profile + demo-artefact rows), then the existing B1 flow closes the loop on every status change. No file dragging, no form filling.
 - **Files:**
   - `apps/nerve/src/app/api/read/pending-assignments/route.ts` — HMAC-signed GET. Returns leads where `demo_artefact` exists AND no `lead_assignment_event` does yet. Same pattern as the D1 read endpoints (`api/read/*` middleware exemption already in place).
