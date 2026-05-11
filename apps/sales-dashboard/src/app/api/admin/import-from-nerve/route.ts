@@ -421,8 +421,16 @@ function buildNotes(b: LeadBundle): NotesPayload {
         : null,
     trust_badges: pitch?.trust_badges ?? [],
     avoid_topics: pitch?.avoid_topics ?? [],
+    // demo_site_domain precedence: the NERVE public route wins when a
+    // demo_artefact exists in NERVE Postgres (that's where the HTML
+    // actually lives). pitch_brief.demo_site_domain is only used as a
+    // fallback for the legacy manual-upload flow where the demo was
+    // hosted somewhere else (e.g. Supabase R2). Previously this was
+    // reversed and skills writing a placeholder subdomain via /lead-json
+    // (eg "the-cult-of-coffee.salespatch.co.uk") sent the iOS WebView to
+    // a Vercel password-protection page.
     demo_site_domain:
-      pitch?.demo_site_domain ?? buildDemoUrl(b.slug, !!demo),
+      buildDemoUrl(b.slug, !!demo) ?? pitch?.demo_site_domain ?? null,
     demo_site_qa_score: b.qa_result?.score ?? null,
     contact_name: pitch?.contact_name ?? null,
     contact_role: pitch?.contact_role ?? null,
