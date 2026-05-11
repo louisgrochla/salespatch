@@ -20,6 +20,7 @@ import {
 
 const NAV = [
   { href: '/admin', label: 'Overview' },
+  { href: '/admin/queue', label: 'Queue' },
   { href: '/admin/users', label: 'Users' },
   { href: '/admin/leads', label: 'Leads' },
   { href: '/admin/upload', label: 'Demo uploads' },
