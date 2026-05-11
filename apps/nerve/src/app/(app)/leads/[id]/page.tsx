@@ -17,6 +17,7 @@ import { onboardingResponseStore } from "@/lib/sl-mas/onboardingResponseStore";
 import { composerIterationStore } from "@/lib/sl-mas/composerIterationStore";
 import { spendLedgerStore } from "@/lib/sl-mas/spendLedgerStore";
 import { businessIdentityStore } from "@/lib/sl-mas/businessIdentityStore";
+import { pitchBriefStore } from "@/lib/sl-mas/pitchBriefStore";
 
 export const dynamic = "force-dynamic";
 
@@ -60,6 +61,8 @@ export default async function LeadDetailPage({
     assignmentEvents,
     composerIters,
     spendRows,
+    pitchBriefs,
+    latestPitchBrief,
   ] = await Promise.all([
     prisma.leadRecord.findUnique({ where: { id } }),
     leadProfileStore.getByLeadId(id),
@@ -71,6 +74,8 @@ export default async function LeadDetailPage({
     leadAssignmentEventStore.listForLead(id, 50),
     composerIterationStore.listByLead(id, 20),
     spendLedgerStore.listRecent(200, { lead_id: id }),
+    pitchBriefStore.listForLead(id, 10),
+    pitchBriefStore.latestForLead(id),
   ]);
 
   const hasSlMasData =
@@ -81,7 +86,8 @@ export default async function LeadDetailPage({
     qaResults.length > 0 ||
     assignmentEvents.length > 0 ||
     composerIters.length > 0 ||
-    spendRows.length > 0;
+    spendRows.length > 0 ||
+    pitchBriefs.length > 0;
 
   if (!lead && !hasSlMasData && !canonicalIdentity) notFound();
 
@@ -396,6 +402,83 @@ export default async function LeadDetailPage({
               />
             </div>
           </details>
+        </Section>
+      )}
+
+      {latestPitchBrief &&
+        (latestPitchBrief.hook ||
+          latestPitchBrief.opener ||
+          latestPitchBrief.close_script ||
+          latestPitchBrief.demo_moments.length > 0 ||
+          latestPitchBrief.specific_objections.length > 0 ||
+          latestPitchBrief.pain_points.length > 0 ||
+          latestPitchBrief.trust_badges.length > 0 ||
+          latestPitchBrief.avoid_topics.length > 0) && (
+        <Section
+          title="Pitch brief"
+          subtitle={`/lead-json · ${formatIso(latestPitchBrief.generated_at)}${pitchBriefs.length > 1 ? ` · ${pitchBriefs.length} versions` : ""}`}
+        >
+          <Panel>
+            {latestPitchBrief.hook && (
+              <Row label="hook">{latestPitchBrief.hook}</Row>
+            )}
+            {latestPitchBrief.opener && (
+              <Row label="opener">{latestPitchBrief.opener}</Row>
+            )}
+            {latestPitchBrief.demo_moments.length > 0 && (
+              <Row label="demo moments">
+                <ol className="font-mono text-xs space-y-1 list-decimal list-inside">
+                  {latestPitchBrief.demo_moments.map((m, i) => (
+                    <li key={i}>{m}</li>
+                  ))}
+                </ol>
+              </Row>
+            )}
+            {latestPitchBrief.close_script && (
+              <Row label="close script">{latestPitchBrief.close_script}</Row>
+            )}
+            {latestPitchBrief.next_visit_reason && (
+              <Row label="next visit">{latestPitchBrief.next_visit_reason}</Row>
+            )}
+            {latestPitchBrief.specific_objections.length > 0 && (
+              <Row label="objections">
+                <ul className="font-mono text-xs space-y-2">
+                  {latestPitchBrief.specific_objections.map((o, i) => (
+                    <li key={i} className="border-l border-border pl-2">
+                      <div className="text-fg-muted">"{o.objection}"</div>
+                      <div className="text-fg">→ {o.response}</div>
+                    </li>
+                  ))}
+                </ul>
+              </Row>
+            )}
+            {(latestPitchBrief.pain_points.length > 0 ||
+              latestPitchBrief.trust_badges.length > 0 ||
+              latestPitchBrief.avoid_topics.length > 0) && (
+              <Row label="rep notes">
+                <div className="font-mono text-xs space-y-2">
+                  {latestPitchBrief.pain_points.length > 0 && (
+                    <div>
+                      <span className="text-fg-dim">pain points:</span>{" "}
+                      {latestPitchBrief.pain_points.join(" · ")}
+                    </div>
+                  )}
+                  {latestPitchBrief.trust_badges.length > 0 && (
+                    <div>
+                      <span className="text-fg-dim">trust:</span>{" "}
+                      {latestPitchBrief.trust_badges.join(" · ")}
+                    </div>
+                  )}
+                  {latestPitchBrief.avoid_topics.length > 0 && (
+                    <div>
+                      <span className="text-fg-dim">avoid:</span>{" "}
+                      {latestPitchBrief.avoid_topics.join(" · ")}
+                    </div>
+                  )}
+                </div>
+              </Row>
+            )}
+          </Panel>
         </Section>
       )}
 
