@@ -51,9 +51,9 @@ The **"self"** in self-learning is unlocked when (3) is complete: agents read NE
 
 ## Status Snapshot
 
-_Last updated: 2026-05-11 (E1 — first Phase E surface)_
+_Last updated: 2026-05-11 (E1 + leads index follow-up)_
 
-- Live: https://nerve.salespatch.co.uk/pipeline ✓ · /leads/[id] ✓
+- Live: https://nerve.salespatch.co.uk/pipeline ✓ · /leads ✓ · /leads/[id] ✓
 - Postgres SL-MAS schema: 17 tables migrated (8 base + composer_iterations + lead_profiles + spend_ledger + site_briefs + brand_analyses + demo_artefacts + qa_results + lead_assignment_events + stripe_events + salesperson_events + onboarding_responses)
 - **Phase A complete** — 7 Tier 1 ingest endpoints live + verified in prod via `scripts/nerve/simulate-ingest.sh`: composer-iteration, lead-profile, spend, site-brief, brand-analysis, demo-artefact, qa-result
 - **Phase B complete** — 4 Tier 2 ingest endpoints live: lead-assignment (B1), stripe-event (B2), salesperson-event (B3), onboarding-response (B4). The warehouse can now answer the full sales lifecycle: SP signs up → SP visits/pitches → Stripe pays → customer fills onboarding form.
@@ -373,6 +373,7 @@ _Last updated: 2026-05-11 (E1 — first Phase E surface)_
 
 > Tasks land here when their checkbox flips. Most recent at top.
 
+- **2026-05-11** PR #64 merged: E1 follow-up — leads index surfaces SL-MAS slug leads. `/leads` now shows two sections (SL-MAS leads on top with brief/demo/assignment counts; manual records below unchanged), both linking to the same `/leads/[id]` E1 detail page. Adds a `?vertical=` filter. Closes E1's usage loop — slug-only leads were previously only reachable by typing the URL.
 - **2026-05-11** PR #62 merged: E1 — NERVE lead viewer page. First Phase E surface. `/leads/[id]` extended to single-tab operator detail across all Phase A/B SL-MAS stores: stat tile strip, latest site brief + full markdown disclosure, brand analysis (palette swatches/typography/voice), sandboxed demo iframe preview, QA results, lead profile, assignment timeline, customer onboarding, pitch history (business-name join), composer iterations, API spend. Polymorphic on `[id]` — accepts either `LeadRecord.id` cuid or SL-MAS `lead_id` slug; 404 only when both id spaces miss. Header title cascades across name fallbacks. Existing LeadRecord CRUD preserved. Verified in browser against bulk-smoke seed slugs.
 - **2026-05-10** **Phase B complete.** All four Tier 2 streams live (B1 funnel timeline, B2 Stripe events, B3 SP lifecycle, B4 customer onboarding). The warehouse now sees the full sales lifecycle from signup to post-sale customer feedback.
 - **2026-05-10** PR #59 merged: B4 — onboarding response ingest. Final Tier 2 stream. `onboarding_responses` table (migration 15) using UPSERT-on-lead-assignment-id (A4 pattern) rather than event-stream (B1/B2/B3 pattern) because the form auto-saves on every keystroke. `save_count` for drop-off analytics + sticky `completed_at`. Producer fans out the full Supabase row each save so NERVE always reflects the cumulative latest state.
