@@ -51,7 +51,7 @@ The **"self"** in self-learning is unlocked when (3) is complete: agents read NE
 
 ## Status Snapshot
 
-_Last updated: 2026-05-11 (Phase F added — unified business lifecycle)_
+_Last updated: 2026-05-11 (Phase F scope-split — F2 narrowed, F4 added for far-horizon agent SDK)_
 
 - Live: https://nerve.salespatch.co.uk/pipeline ✓ · /leads ✓ · /leads/[id] ✓
 - Postgres SL-MAS schema: 17 tables migrated (8 base + composer_iterations + lead_profiles + spend_ledger + site_briefs + brand_analyses + demo_artefacts + qa_results + lead_assignment_events + stripe_events + salesperson_events + onboarding_responses)
@@ -64,11 +64,17 @@ _Last updated: 2026-05-11 (Phase F added — unified business lifecycle)_
 - Producers wired today: tools/workbench (A1), outreach pipeline (A6 via spendReporter at 4 call sites), spec-site-brief skill (A2 + A4), build-demo skill (A3 + D1 read-bias), sales-dashboard status + pitch (B1), sales-dashboard payment webhook (B2), sales-dashboard signup + payments-connect + admin (B3), sales-dashboard onboarding POST (B4)
 - Producers awaiting wiring: Pi siteQaAgent (A5 — agent doesn't exist yet, manual posts work); autumn pipeline (D2 contextSource swap)
 - Pi runtime: dropped from data path, parked for autumn agents
-- Open phases: C (Tier 3 archival, autumn-parked), D (D3 parked far-future), E (E2/E3/E4/E5 — Phase E remaining), **F (unified business lifecycle — F1/F2/F3 net new)**
-- Tasks open: 8
+- Open phases: C (Tier 3 archival, autumn-parked), D (D3 parked far-future), E (E2/E3/E4/E5 — Phase E remaining), **F (unified business lifecycle — F1/F2/F3 near-term, F4 far horizon)**
+- Tasks open: 9
 - Tasks complete: 40 (see Done log)
 
 **Strategic note (Phase F):** the `/lead-hunter`, `/spec-site-brief`, `/build-demo`, `/lead-json` skills are not throwaway founder tooling — they are the system prompt for the future LLM-driven agent layer. Every refinement now compounds the moment the Claude Agent SDK is dropped in. Phase F treats them as production primitives and unifies the four id-spaces (local folder slug · `LeadRecord.id` cuid · `lead_profiles.lead_id` slug · Supabase `lead_assignments.lead_id`) into one canonical business identity in NERVE.
+
+**Phase F dependency order:**
+- **F1 (identity, ~1 day)** — first, smallest, unblocks everything else.
+- **F2 (admin queue + import-from-NERVE, 2-3 days)** — kills the manual submit-folder upload. Skills stay manual in Claude Code; only the bridge between "skill produced files" and "admin has a lead to assign" gets automated. This is the immediate operator win.
+- **F3 (mid-engagement notes, 3-5 days)** — closes the timeline gap between B1 (visit/pitch/sold) and B4 (post-sale onboarding). Captures the SP-side conversation that today never reaches the warehouse.
+- **F4 (Claude Agent SDK skill invocation, 1-2 weeks, far horizon)** — moves the skill trigger off the founder's terminal entirely. Pre-requisite: a body of n>10 manual skill runs across multiple verticals to stress-test the prompts before they get frozen behind agent invocations.
 
 ---
 
@@ -410,20 +416,20 @@ _Last updated: 2026-05-11 (Phase F added — unified business lifecycle)_
 - **Depends on:** none — schema move + one normalisation function. Smallest of the three.
 - **Estimated effort:** 1 day.
 
-### F2 — Admin-triggered skill invocation
+### F2 — Admin queue surfaces NERVE-built leads for assignment
 
 - **Status:** not started
 - **Owner:** _(unclaimed)_
-- **Goal:** The admin portal grows buttons that invoke the skills (`lead-hunter`, `spec-site-brief`, `build-demo`, `lead-json`) without dragging files. Backend route uses the Claude Agent SDK to run the existing skill prompts and write results directly to NERVE. No more "drop submit folder into the New Lead form" dance — the form pre-populates from a NERVE-side build.
+- **Goal:** Kill the "drag submit folder into the New Lead form" step. Skills keep running in Claude Code (the founder's terminal) and keep writing to NERVE as they do today. The admin portal grows a **pending-assignment queue** sourced directly from NERVE: any lead with a `demo_artefact` row but no `lead_assignment_event` yet shows up automatically, ready to assign to an SP. One click imports the lead into Supabase (using existing brief + lead-profile + demo-artefact rows), then the existing B1 flow closes the loop on every status change. No file dragging, no form filling.
 - **Files:**
-  - `apps/admin-panel/src/app/leads/[id]/page.tsx` — per-lead skill trigger UI ("Run /spec-site-brief", "Run /build-demo")
-  - `apps/admin-panel/src/app/api/skills/<skill>/route.ts` — one route per skill, invokes Claude Agent SDK with the existing skill markdown as the system prompt
-  - `apps/nerve/src/app/api/ingest/skill-run/route.ts` — new ingest endpoint for skill run rows (status, duration, model, tokens, cost)
-  - `apps/nerve/prisma/schema.prisma` — new `SkillRun` model
-  - Skill markdown stays the same — that's the whole point. The trigger surface changes, the prompt doesn't.
-- **Acceptance:** Founder can click "Run /spec-site-brief" on a lead in the admin portal and see the brief + brand-analysis + lead-profile rows appear in NERVE without touching local files. `/leads/<id>` E1 page renders the result the same way it renders a CLI-skill-emitted result today.
-- **Depends on:** F1 (skills need to write against the canonical identity, not a fresh slug each time).
-- **Estimated effort:** 1–2 weeks. This is where the Claude Agent SDK earns its keep — wraps the existing skill prompts rather than rewriting them.
+  - `apps/nerve/src/app/api/read/pending-assignments/route.ts` — HMAC-signed GET. Returns leads where `demo_artefact` exists AND no `lead_assignment_event` does yet. Same pattern as the D1 read endpoints (`api/read/*` middleware exemption already in place).
+  - `apps/admin-panel/src/app/leads/queue/page.tsx` — pending-leads queue page. Cards with business name + vertical + demo preview thumbnail + "Assign to SP" action.
+  - `apps/admin-panel/src/app/api/leads/import-from-nerve/route.ts` — inverse of the B1 flow. Takes a slug, reads `lead_profile` + `site_brief` + `demo_artefact` from NERVE (use the same HMAC-signed read helper), writes to the Supabase `leads` table the same way the current manual upload does.
+  - `apps/admin-panel` — wire the "Assign" action so importing into Supabase auto-creates the assignment row (or queues the existing assignment flow).
+- **Acceptance:** After running `/build-demo` on a lead in Claude Code, the admin operator opens `/leads/queue` and sees that lead waiting. They pick an SP, click Assign, and the lead lands in Supabase with all the artefact fields populated. Subsequent status flips fan back through the B1 producer into NERVE as before. The local submit folder becomes audit-only (kept on disk, never uploaded by hand).
+- **Depends on:** F1 (queue needs to dedup on canonical identity so the same business can't sit in the queue twice under different slugs).
+- **Estimated effort:** 2–3 days.
+- **What's intentionally out of scope:** skills do NOT get triggered from admin in this phase — they stay manual in Claude Code. The agent-SDK wrap-and-trigger work moves to F4.
 
 ### F3 — Mid-engagement note streams
 
@@ -440,6 +446,22 @@ _Last updated: 2026-05-11 (Phase F added — unified business lifecycle)_
 - **Acceptance:** SP records a pitch note from the iOS app while standing outside the shop; note appears on `/leads/<id>` within 5 seconds. Customer change request (mid-build) lands keyed to assignment_id and shows up on the same timeline.
 - **Depends on:** F1 (notes hang off the canonical identity).
 - **Estimated effort:** 3–5 days.
+
+### F4 — Skill invocation via Claude Agent SDK
+
+- **Status:** not started
+- **Owner:** _(unclaimed, far horizon)_
+- **Goal:** The trigger surface for `/lead-hunter`, `/spec-site-brief`, `/build-demo`, `/lead-json` moves off the founder's Claude Code session. Admin portal (and eventually a cron) invokes the existing skill prompts via the Claude Agent SDK, with no edits to the skill markdown. The skill prompt IS the production agent system prompt; this task is the trigger-surface migration, not a rewrite.
+- **Files:**
+  - `apps/admin-panel/src/app/leads/[id]/page.tsx` — per-lead skill trigger UI ("Run /spec-site-brief", "Run /build-demo")
+  - `apps/admin-panel/src/app/api/skills/<skill>/route.ts` — one route per skill, invokes Claude Agent SDK with the existing skill markdown as the system prompt
+  - `apps/nerve/src/app/api/ingest/skill-run/route.ts` — new ingest endpoint for skill run rows (status, duration, model, tokens, cost)
+  - `apps/nerve/prisma/schema.prisma` — new `SkillRun` model
+  - Skill markdown stays the same — that's the whole point.
+- **Acceptance:** Founder (or eventually a cron) can trigger any of the four skills from outside Claude Code and see the resulting NERVE rows appear within the skill's normal runtime. `/leads/<id>` E1 page renders the result the same way it renders a CLI-skill-emitted result today.
+- **Depends on:** F1 (canonical identity), F2 (admin queue is the natural place to put the trigger UI), and ideally a body of n>10 successful manual skill runs to stress-test the prompts before they get frozen behind agent invocations.
+- **Estimated effort:** 1–2 weeks.
+- **Pre-requisite stress test:** before F4 freezes the skill prompts behind agent invocations, run 5–10 leads through the manual skills across at least three different verticals to surface prompt failure modes (convergent diagnoses, default-aesthetic attractors, photo-sparsity handling, owner-name-null handling). Hidden defaults in the prompts are much harder to find once an agent is producing demos at 3am.
 
 ---
 
