@@ -1265,6 +1265,66 @@ model DemoArtefact {
 }
 
 
+// ─── pitch briefs (capture enrichment, 2026-05-11) ───────────────────────
+//
+// Output of the /lead-json skill — the salesperson pitch playbook for a
+// single lead. Hook, opener, demo_moments, close_script, next_visit_reason,
+// objections, plus the lead-card surface (services, pain_points,
+// trust_badges, avoid_topics). Distinct from SiteBrief (upstream research)
+// and the Supabase `leads` table (admin-imported); this is the rep-facing
+// prescription captured at skill emit time so the warehouse holds the
+// *prescription* side of "did this script close".
+//
+// Pairs with B1 lead_assignment_events (outcomes) so a future agent can
+// ask "which closer scripts beat rejection for vertical=barber". Idempotent
+// on pitch_brief_id; same-skill-run collapses onto the same row, a fresh
+// run creates a new history row. Latest-per-lead query served by the
+// (lead_id, generated_at DESC) index.
+
+model PitchBrief {
+  id                  String   @id @default(cuid())
+  pitchBriefId        String   @unique @map("pitch_brief_id") // <slug>-pitch-<iso_no_colons>
+  leadId              String   @map("lead_id")
+  briefId             String?  @map("brief_id") // soft FK to site_briefs.brief_id
+  businessName        String   @map("business_name")
+  vertical            String?
+  // Lead-card denormalised surface (what the admin form receives).
+  businessType        String?  @map("business_type")
+  postcode            String?
+  address             String?
+  description         String?
+  heroHeadline        String?  @map("hero_headline")
+  ctaText             String?  @map("cta_text")
+  services            String[] @default([])
+  painPoints          String[] @default([]) @map("pain_points")
+  openingHours        String[] @default([]) @map("opening_hours")
+  trustBadges         String[] @default([]) @map("trust_badges")
+  avoidTopics         String[] @default([]) @map("avoid_topics")
+  contactName         String?  @map("contact_name")
+  contactRole         String?  @map("contact_role")
+  brandPrimaryHex     String?  @map("brand_primary_hex")
+  brandAccentHex      String?  @map("brand_accent_hex")
+  demoSiteDomain      String?  @map("demo_site_domain")
+  // Sales playbook — closing power.
+  hook                String?
+  opener              String?
+  demoMoments         String[] @default([]) @map("demo_moments")
+  closeScript         String?  @map("close_script")
+  nextVisitReason     String?  @map("next_visit_reason")
+  specificObjections  Json     @default("[]") @map("specific_objections") // [{ objection, response }]
+  source              String   @default("manual_skill") // "manual_skill" | "pi_pitch_generator" | "agent_sdk"
+  metadata            Json     @default("{}")
+  generatedAt         DateTime @default(now()) @map("generated_at")
+  createdAt           DateTime @default(now()) @map("created_at")
+  updatedAt           DateTime @default(now()) @updatedAt @map("updated_at")
+
+  @@index([leadId, generatedAt(sort: Desc)])
+  @@index([vertical, generatedAt(sort: Desc)])
+  @@index([briefId])
+  @@map("pitch_briefs")
+}
+
+
 // ─── site QA results ─────────────────────────────────────────────────────
 //
 // A5 of Phase A. Per-artefact QA scores from the autumn Pi siteQaAgent
