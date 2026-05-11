@@ -51,7 +51,7 @@ The **"self"** in self-learning is unlocked when (3) is complete: agents read NE
 
 ## Status Snapshot
 
-_Last updated: 2026-05-11 (F1 shipped + capture enrichment shipped — pitch playbook now in NERVE)_
+_Last updated: 2026-05-11 evening (F2 complete — full operator pipeline from /build-demo to SP-assigned in one click)_
 
 - Live: https://nerve.salespatch.co.uk/pipeline ✓ · /leads ✓ · /leads/[id] ✓
 - Postgres SL-MAS schema: 19 tables migrated (above 17 + business_identities F1 + pitch_briefs capture enrichment)
@@ -68,15 +68,16 @@ _Last updated: 2026-05-11 (F1 shipped + capture enrichment shipped — pitch pla
 - Producers wired today: tools/workbench (A1), outreach pipeline (A6 via spendReporter at 4 call sites), spec-site-brief skill (A2 + A4), build-demo skill (A3 + D1 read-bias), sales-dashboard status + pitch (B1), sales-dashboard payment webhook (B2), sales-dashboard signup + payments-connect + admin (B3), sales-dashboard onboarding POST (B4)
 - Producers awaiting wiring: Pi siteQaAgent (A5 — agent doesn't exist yet, manual posts work); autumn pipeline (D2 contextSource swap)
 - Pi runtime: dropped from data path, parked for autumn agents
-- Open phases: C (Tier 3 archival, autumn-parked), D (D3 parked far-future), E (E2/E3/E4/E5 — Phase E remaining), **F (F2 next — admin queue · F3 — mid-engagement notes · F4 far horizon)**
-- Tasks open: 8
-- Tasks complete: 41 (see Done log)
+- **F2 live (2026-05-11 evening)** — full operator pipeline closed. `/build-demo` in Claude Code → admin `/leads/queue` shows the lead → pick SP from dropdown → click Assign → `lead_assignments` row written with NERVE-served `demo_site_domain`. Two-round-trip read path: (a) lean listing for the queue + (c) full bundle on import. Public NERVE route `/api/public/demo/<slug>` serves the demo HTML to the SP, no Supabase upload required. The slug is the lead_id across NERVE + admin SQLite so the existing B1 producer's status events trace back automatically.
+- Open phases: C (Tier 3 archival, autumn-parked), D (D3 parked far-future), E (E2/E3/E4/E5 — Phase E remaining), **F (F3 next — mid-engagement notes · F4 far horizon)**
+- Tasks open: 7
+- Tasks complete: 42 (see Done log)
 
 **Strategic note (Phase F):** the `/lead-hunter`, `/spec-site-brief`, `/build-demo`, `/lead-json` skills are not throwaway founder tooling — they are the system prompt for the future LLM-driven agent layer. Every refinement now compounds the moment the Claude Agent SDK is dropped in. Phase F treats them as production primitives and unifies the four id-spaces (local folder slug · `LeadRecord.id` cuid · `lead_profiles.lead_id` slug · Supabase `lead_assignments.lead_id`) into one canonical business identity in NERVE.
 
 **Phase F dependency order:**
-- **F1 (identity, ~1 day)** — first, smallest, unblocks everything else.
-- **F2 (admin queue + import-from-NERVE, 2-3 days)** — kills the manual submit-folder upload. Skills stay manual in Claude Code; only the bridge between "skill produced files" and "admin has a lead to assign" gets automated. This is the immediate operator win.
+- **F1 (identity, ~1 day)** — ✅ shipped 2026-05-11. First, smallest, unblocks everything else.
+- **F2 (admin queue + import-from-NERVE, 2-3 days)** — ✅ shipped 2026-05-11 evening. Killed the manual submit-folder upload. Skills stay manual in Claude Code; the bridge between "skill produced files" and "admin has a lead to assign" is now one click. Demo serving via NERVE public route avoided needing Supabase plumbing.
 - **F3 (mid-engagement notes, 3-5 days)** — closes the timeline gap between B1 (visit/pitch/sold) and B4 (post-sale onboarding). Captures the SP-side conversation that today never reaches the warehouse.
 - **F4 (Claude Agent SDK skill invocation, 1-2 weeks, far horizon)** — moves the skill trigger off the founder's terminal entirely. Pre-requisite: a body of n>10 manual skill runs across multiple verticals to stress-test the prompts before they get frozen behind agent invocations.
 
@@ -422,23 +423,22 @@ _Last updated: 2026-05-11 (F1 shipped + capture enrichment shipped — pitch pla
 
 ### F2 — Admin queue surfaces NERVE-built leads for assignment
 
-- **Status:** in progress (PR (a) — pending-assignments read endpoint — open 2026-05-11)
+- **Status:** complete (F2(c)+(d) fused into one PR — 2026-05-11)
 - **Owner:** claude-session-f2-2026-05-11
 - **Sub-PRs:**
-  - **(a)** `/api/read/pending-assignments` HMAC GET endpoint in NERVE — returns lead cards (canonical-dedup against F1 BusinessIdentity, demo + brief + pitch-brief + QA enrichments). Card payload is lean (no full HTML); the import handler re-queries with the returned ids.
-  - **(b)** `/leads/queue` page in admin-panel — server-side fetch from (a), card list with assign action. Adds `OUTCOME_INGEST_SECRET` to admin-panel env.
-  - **(c)** `/api/leads/import-from-nerve` handler in admin-panel — POST takes a slug, reads brief + lead-profile + demo-artefact + pitch-brief from NERVE, writes to Supabase `leads`, fires B1 producer.
-  - **(d)** Wire the "Assign" action so importing into Supabase auto-creates the assignment row.
+  - **(a)** `/api/read/pending-assignments` HMAC GET endpoint in NERVE — returns lead cards (canonical-dedup against F1 BusinessIdentity, demo + brief + pitch-brief + QA enrichments). Card payload is lean (no full HTML); the import handler re-queries with the returned ids. ✅ shipped PR #72.
+  - **(b)** `/leads/queue` page in admin-panel — server-side fetch from (a), card list with assign action. Adds `OUTCOME_INGEST_SECRET` to admin-panel env. ✅ shipped PR #73.
+  - **(c) + (d) fused** — `/api/read/lead-bundle` (NERVE, returns full bundle including demo HTML), `/api/public/demo/<slug>` (NERVE, serves demo HTML publicly so SPs get a real demo URL), `/api/leads/import-from-nerve` (admin POST handler that maps bundle → notes JSON and inserts `lead_assignments` row with slug as lead_id), SP picker dropdown + wired Assign button on each queue card. Admin-panel writes to LOCAL SQLITE (not Supabase — roadmap text above was inaccurate). ✅ shipped 2026-05-11.
 - **Goal:** Kill the "drag submit folder into the New Lead form" step. Skills keep running in Claude Code (the founder's terminal) and keep writing to NERVE as they do today. The admin portal grows a **pending-assignment queue** sourced directly from NERVE: any lead with a `demo_artefact` row but no `lead_assignment_event` yet shows up automatically, ready to assign to an SP. One click imports the lead into Supabase (using existing brief + lead-profile + demo-artefact rows), then the existing B1 flow closes the loop on every status change. No file dragging, no form filling.
 - **Files:**
   - `apps/nerve/src/app/api/read/pending-assignments/route.ts` — HMAC-signed GET. Returns leads where `demo_artefact` exists AND no `lead_assignment_event` does yet. Same pattern as the D1 read endpoints (`api/read/*` middleware exemption already in place).
   - `apps/admin-panel/src/app/leads/queue/page.tsx` — pending-leads queue page. Cards with business name + vertical + demo preview thumbnail + "Assign to SP" action.
   - `apps/admin-panel/src/app/api/leads/import-from-nerve/route.ts` — inverse of the B1 flow. Takes a slug, reads `lead_profile` + `site_brief` + `demo_artefact` from NERVE (use the same HMAC-signed read helper), writes to the Supabase `leads` table the same way the current manual upload does.
   - `apps/admin-panel` — wire the "Assign" action so importing into Supabase auto-creates the assignment row (or queues the existing assignment flow).
-- **Acceptance:** After running `/build-demo` on a lead in Claude Code, the admin operator opens `/leads/queue` and sees that lead waiting. They pick an SP, click Assign, and the lead lands in Supabase with all the artefact fields populated. Subsequent status flips fan back through the B1 producer into NERVE as before. The local submit folder becomes audit-only (kept on disk, never uploaded by hand).
+- **Acceptance:** After running `/build-demo` on a lead in Claude Code, the admin operator opens `/leads/queue` and sees that lead waiting. They pick an SP, click Assign, and the lead lands in `lead_assignments` (local SQLite) with all the artefact fields populated in `notes` JSON. Subsequent status flips fan back through the B1 producer into NERVE as before. The local submit folder becomes audit-only (kept on disk, never uploaded by hand). ✅ verified F2(c)+(d) PR.
 - **Depends on:** F1 (queue needs to dedup on canonical identity so the same business can't sit in the queue twice under different slugs).
-- **Estimated effort:** 2–3 days.
-- **What's intentionally out of scope:** skills do NOT get triggered from admin in this phase — they stay manual in Claude Code. The agent-SDK wrap-and-trigger work moves to F4.
+- **Estimated effort:** 2–3 days (actual: 1 day).
+- **What's intentionally out of scope:** skills do NOT get triggered from admin in this phase — they stay manual in Claude Code. The agent-SDK wrap-and-trigger work moves to F4. Supabase demo upload also out of scope — demos served via NERVE public route instead.
 
 ### F3 — Mid-engagement note streams
 
@@ -478,6 +478,10 @@ _Last updated: 2026-05-11 (F1 shipped + capture enrichment shipped — pitch pla
 
 > Tasks land here when their checkbox flips. Most recent at top.
 
+- **2026-05-11** **F2 complete.** F2(c)+(d) fused into one PR. New `/api/read/lead-bundle` HMAC endpoint in NERVE returns full bundle (site_brief markdown + demo_artefact html_inline + pitch_brief + brand_analysis + lead_profile + qa_result + business_identity) for one slug. New public `/api/public/demo/<slug>` route serves the demo HTML as `text/html` so SPs get a real shareable URL with zero Supabase plumbing. New admin `/api/leads/import-from-nerve` POST handler maps the bundle into a sales-dashboard-shaped `lead_assignments.notes` JSON, uses the slug as `lead_id` (the natural join key into NERVE), inserts the assignment + activity log in one tx. Queue page gains an SP picker dropdown per card + wired Assign button with success banner and live refresh. Closes the operator pipeline from "/build-demo finished in Claude Code" to "salesperson sees the lead" in one click.
+- **2026-05-11** PR #73 merged (commit cae0b94): F2(b) — admin queue page (read-only view). `/leads/queue` page in admin-panel with `/api/leads/queue` proxy route. HMAC GET helper `src/lib/nerve-read.ts`. Sidebar Queue entry. Cards render brand swatch + QA + pitch angle + demo metadata footer with disabled Assign placeholder.
+- **2026-05-11** PR #72 merged (commit 6807d64): F2(a) — `/api/read/pending-assignments` HMAC GET endpoint in NERVE. Returns canonical-deduped cards for leads with a demo_artefact but no lead_assignment_event yet. Lean payload (no full HTML).
+- **2026-05-11** PR #71 merged (commit df2147c): auto-QA pass — first producer for qa_results. `apps/nerve/scripts/qa-demo.ts` pure-Node heuristic checker, /build-demo wired to post the result.
 - **2026-05-11** PR #69 merged (commit 843cf7d): **capture enrichment** (pre-F2 hygiene). New `pitch_briefs` table + migration 17 + HMAC `/api/ingest/pitch-brief` endpoint mirrors the `/lead-json` playbook (hook, opener, demo_moments, close_script, objections, lead-card surface) into NERVE so the warehouse holds the prescription side of "did this pitch close" — pairs with B1 outcomes. `/leads/[id]` grows a Pitch brief panel (hidden on PASS-case rows). `/spec-site-brief` skill captures `diagnosis_alternatives_considered` + `positioning_alternatives_considered` + `verdict_reasoning_trace` into `site_briefs.metadata` (no schema change). `/build-demo` skill captures `photo_classifications` + `nerve_consult_summary` into `demo_artefacts.metadata` (no schema change). Smoke-tested end-to-end against prod (idempotent POST verified).
 - **2026-05-11** PR #68 merged (commit cc8f99b): **F1 — business identity unification**. New `business_identities` table + migration 16 keyed on `(normalised_name, postcode)` with separate unique slug index. `businessIdentityStore` with `normaliseName`/`normalisePostcode`/`slugify` primitives + four-stage `lookupOrCreate` fallback ladder. HMAC `/api/read/business-identity/lookup` for skill consultation. `/lead-hunter` and `/new-lead` skill markdowns wired to consult it before scaffolding (user-level, not committed). `/api/ingest/lead-profile` auto-populates the canonical row on each upsert. `/leads` index dedups manual records against SL-MAS profiles by normalised name. `/leads/[id]` accepts canonical id/slug as a third dispatch path. Idempotent backfill script ready at `scripts/backfill-business-identities.ts` (not yet run in prod — local env lacks prod creds, will lazily fill via `lookupOrCreate` on next producer hit).
 - **2026-05-11** PR #64 merged: E1 follow-up — leads index surfaces SL-MAS slug leads. `/leads` now shows two sections (SL-MAS leads on top with brief/demo/assignment counts; manual records below unchanged), both linking to the same `/leads/[id]` E1 detail page. Adds a `?vertical=` filter. Closes E1's usage loop — slug-only leads were previously only reachable by typing the URL.

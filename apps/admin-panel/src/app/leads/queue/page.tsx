@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Sidebar from '@/components/Sidebar';
-import { Inbox, RefreshCw, AlertCircle, Star, Camera, Image as ImageIcon } from 'lucide-react';
+import { Inbox, RefreshCw, AlertCircle, Star, Camera, Image as ImageIcon, ExternalLink, CheckCircle2, Loader2 } from 'lucide-react';
 
 interface PendingAssignment {
   canonical_slug: string;
@@ -36,15 +36,38 @@ interface PendingResponse {
   queried_at: string;
 }
 
+interface SalesUser {
+  id: string;
+  name: string;
+  area_postcode: string | null;
+  user_status: string;
+  active: boolean;
+  active_leads: number;
+  total_sales: number;
+}
+
+interface AssignSuccess {
+  slug: string;
+  user_name: string;
+  business_name: string;
+  demo_site_domain: string | null;
+}
+
 export default function LeadsQueuePage() {
   const [data, setData] = useState<PendingResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [verticalFilter, setVerticalFilter] = useState('');
+  const [team, setTeam] = useState<SalesUser[]>([]);
+  const [recentSuccess, setRecentSuccess] = useState<AssignSuccess | null>(null);
 
   useEffect(() => {
     loadQueue();
   }, [verticalFilter]);
+
+  useEffect(() => {
+    loadTeam();
+  }, []);
 
   async function loadQueue() {
     setLoading(true);
@@ -64,6 +87,25 @@ export default function LeadsQueuePage() {
     } finally {
       setLoading(false);
     }
+  }
+
+  async function loadTeam() {
+    try {
+      const res = await fetch('/api/team');
+      if (!res.ok) return;
+      const body = (await res.json()) as { data: SalesUser[] };
+      setTeam((body.data ?? []).filter((u) => u.active));
+    } catch {
+      // Non-fatal — picker just stays empty.
+    }
+  }
+
+  async function handleAssigned(success: AssignSuccess) {
+    setRecentSuccess(success);
+    // Refresh both queue and team (active_leads counts shift).
+    await Promise.all([loadQueue(), loadTeam()]);
+    // Clear the success banner after 6s.
+    setTimeout(() => setRecentSuccess((curr) => (curr === success ? null : curr)), 6000);
   }
 
   const verticals = Array.from(
@@ -99,6 +141,29 @@ export default function LeadsQueuePage() {
         </div>
 
         <div className="px-8 py-6 space-y-5">
+          {/* Success toast — shown for ~6s after an assign */}
+          {recentSuccess && (
+            <div className="border border-emerald-100 bg-emerald-50 rounded-lg px-4 py-3 flex items-start gap-2">
+              <CheckCircle2 className="w-4 h-4 text-emerald-500 mt-px shrink-0" />
+              <div className="flex-1 min-w-0">
+                <div className="text-[12px] font-medium text-emerald-900">
+                  Imported · {recentSuccess.business_name} → {recentSuccess.user_name}
+                </div>
+                {recentSuccess.demo_site_domain && (
+                  <a
+                    href={recentSuccess.demo_site_domain}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-[11px] text-emerald-700 hover:text-emerald-900 underline inline-flex items-center gap-1 mt-0.5"
+                  >
+                    Open demo
+                    <ExternalLink className="w-2.5 h-2.5" />
+                  </a>
+                )}
+              </div>
+            </div>
+          )}
+
           {/* Vertical filter */}
           {verticals.length > 0 && (
             <div className="flex items-center gap-1 border-b border-slate-100 pb-px">
@@ -158,7 +223,12 @@ export default function LeadsQueuePage() {
           {data && data.pending.length > 0 && (
             <div className="space-y-3">
               {data.pending.map((card) => (
-                <QueueCard key={card.canonical_slug} card={card} />
+                <QueueCard
+                  key={card.canonical_slug}
+                  card={card}
+                  team={team}
+                  onAssigned={handleAssigned}
+                />
               ))}
             </div>
           )}
@@ -174,7 +244,17 @@ export default function LeadsQueuePage() {
   );
 }
 
-function QueueCard({ card }: { card: PendingAssignment }) {
+interface QueueCardProps {
+  card: PendingAssignment;
+  team: SalesUser[];
+  onAssigned: (s: AssignSuccess) => void | Promise<void>;
+}
+
+function QueueCard({ card, team, onAssigned }: QueueCardProps) {
+  const [selectedUserId, setSelectedUserId] = useState('');
+  const [assigning, setAssigning] = useState(false);
+  const [cardError, setCardError] = useState<string | null>(null);
+
   const qaColor =
     card.qa_score === null
       ? 'text-slate-400 bg-slate-50'
@@ -184,6 +264,45 @@ function QueueCard({ card }: { card: PendingAssignment }) {
   const canonicalBadge = card.canonical_id
     ? { label: 'canonical', color: 'text-slate-500 bg-slate-50' }
     : { label: 'slug only', color: 'text-amber-600 bg-amber-50' };
+
+  const demoUrl = `/api/public/demo/${encodeURIComponent(card.canonical_slug)}`;
+  const demoExternalUrl = nerveBaseUrl() + demoUrl;
+
+  async function handleAssign() {
+    if (!selectedUserId) return;
+    setAssigning(true);
+    setCardError(null);
+    try {
+      const res = await fetch('/api/leads/import-from-nerve', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ slug: card.canonical_slug, user_id: selectedUserId }),
+      });
+      const body = (await res.json().catch(() => ({}))) as {
+        data?: {
+          user_name: string;
+          business_name: string;
+          demo_site_domain: string | null;
+        };
+        error?: string;
+      };
+      if (!res.ok) {
+        throw new Error(body.error ?? `HTTP ${res.status}`);
+      }
+      if (body.data) {
+        await onAssigned({
+          slug: card.canonical_slug,
+          user_name: body.data.user_name,
+          business_name: body.data.business_name,
+          demo_site_domain: body.data.demo_site_domain,
+        });
+      }
+    } catch (err) {
+      setCardError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setAssigning(false);
+    }
+  }
 
   return (
     <div className="border border-slate-100 rounded-xl bg-white hover:border-slate-200 transition-colors">
@@ -213,6 +332,15 @@ function QueueCard({ card }: { card: PendingAssignment }) {
                 <span className="text-[11px] text-slate-400 font-mono shrink-0">
                   {card.canonical_slug}
                 </span>
+                <a
+                  href={demoExternalUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-[11px] text-slate-400 hover:text-slate-700 inline-flex items-center gap-0.5 shrink-0"
+                  title="Open demo in new tab"
+                >
+                  <ExternalLink className="w-3 h-3" />
+                </a>
               </div>
               <div className="text-[11px] text-slate-500 mt-0.5 flex items-center gap-2 flex-wrap">
                 {card.vertical && <span className="capitalize">{card.vertical}</span>}
@@ -301,18 +429,41 @@ function QueueCard({ card }: { card: PendingAssignment }) {
               </>
             )}
           </div>
+
+          {/* Card-level error (assign failure) */}
+          {cardError && (
+            <div className="mt-2 text-[11px] text-red-700 bg-red-50 border border-red-100 rounded px-2 py-1 font-mono">
+              {cardError}
+            </div>
+          )}
         </div>
 
-        {/* Assign action (placeholder until F2 PR (c)/(d)) */}
-        <div className="shrink-0 flex flex-col items-end gap-1">
-          <button
-            disabled
-            title="Import + assign action lands in F2 PR (c)/(d)"
-            className="px-3.5 py-2 text-[12px] font-medium text-white bg-slate-300 rounded-lg cursor-not-allowed"
+        {/* Assign action — SP picker + button */}
+        <div className="shrink-0 flex flex-col items-end gap-1.5 w-[200px]">
+          <select
+            value={selectedUserId}
+            onChange={(e) => setSelectedUserId(e.target.value)}
+            disabled={assigning || team.length === 0}
+            className="w-full px-2 py-1.5 text-[11px] border border-slate-200 rounded-md bg-white text-slate-700 focus:outline-none focus:ring-1 focus:ring-slate-300 disabled:bg-slate-50 disabled:text-slate-400"
           >
-            Assign
+            <option value="">
+              {team.length === 0 ? 'No active SPs' : 'Pick a salesperson…'}
+            </option>
+            {team.map((u) => (
+              <option key={u.id} value={u.id}>
+                {u.name}
+                {u.area_postcode ? ` · ${u.area_postcode}` : ''} · {u.active_leads} active
+              </option>
+            ))}
+          </select>
+          <button
+            onClick={handleAssign}
+            disabled={!selectedUserId || assigning}
+            className="w-full px-3.5 py-2 text-[12px] font-medium text-white bg-slate-900 hover:bg-slate-800 rounded-lg transition-colors disabled:bg-slate-300 disabled:cursor-not-allowed inline-flex items-center justify-center gap-1.5"
+          >
+            {assigning && <Loader2 className="w-3 h-3 animate-spin" />}
+            {assigning ? 'Importing…' : 'Assign'}
           </button>
-          <span className="text-[9px] text-slate-400 font-mono">F2(c) next</span>
         </div>
       </div>
     </div>
@@ -331,4 +482,12 @@ function formatTime(iso: string): string {
   const days = Math.round(hours / 24);
   if (days < 7) return `${days}d ago`;
   return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+}
+
+function nerveBaseUrl(): string {
+  // The queue page is server-rendered then hydrated client-side, so process
+  // env isn't available here. The demo URL is canonical and hardcoded for
+  // the production deployment; if a local dev override is needed it can
+  // come from a NEXT_PUBLIC_ env in future.
+  return 'https://nerve.salespatch.co.uk';
 }
