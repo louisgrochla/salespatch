@@ -26,6 +26,7 @@ export type LeadAssignmentEventSource =
   | "pitch_cascade"
   | "supabase_poll"
   | "backfill"
+  | "nerve_import"
   | "test";
 
 export interface LeadAssignmentEventInput {
