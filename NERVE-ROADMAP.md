@@ -51,20 +51,21 @@ The **"self"** in self-learning is unlocked when (3) is complete: agents read NE
 
 ## Status Snapshot
 
-_Last updated: 2026-05-10 (Phase A + B + D1 + D2 complete)_
+_Last updated: 2026-05-11 (E1 — first Phase E surface)_
 
-- Live: https://nerve.salespatch.co.uk/pipeline ✓
+- Live: https://nerve.salespatch.co.uk/pipeline ✓ · /leads/[id] ✓
 - Postgres SL-MAS schema: 17 tables migrated (8 base + composer_iterations + lead_profiles + spend_ledger + site_briefs + brand_analyses + demo_artefacts + qa_results + lead_assignment_events + stripe_events + salesperson_events + onboarding_responses)
 - **Phase A complete** — 7 Tier 1 ingest endpoints live + verified in prod via `scripts/nerve/simulate-ingest.sh`: composer-iteration, lead-profile, spend, site-brief, brand-analysis, demo-artefact, qa-result
 - **Phase B complete** — 4 Tier 2 ingest endpoints live: lead-assignment (B1), stripe-event (B2), salesperson-event (B3), onboarding-response (B4). The warehouse can now answer the full sales lifecycle: SP signs up → SP visits/pitches → Stripe pays → customer fills onboarding form.
 - **D1 live** — `/api/read/strategies` + `/api/read/lead-profiles/winning-features` HMAC-signed read endpoints in prod; build-demo skill consults both before generating (first read-side of the self-learning loop)
 - **D2 substrate ready** — `/api/read/decisions/learning-context` HMAC-signed read endpoint in prod; `NerveLearningClient` on Pi runtime side ready to drop into `withLearning(...)` via `options.contextSource` when the autumn pipeline restarts. 7/7 learning tests pass.
+- **E1 live** — `/leads/[id]` is the single-tab operator surface. Polymorphic on cuid (LeadRecord) or slug (SL-MAS lead_id); fans out across all Phase A/B stores in parallel; renders stat tiles, latest brief + full markdown, brand swatches/typography, sandboxed demo iframe preview, QA, lead profile, assignment timeline, onboarding, pitch history, composer iterations, API spend. First Phase E retirement surface.
 - Producers wired today: tools/workbench (A1), outreach pipeline (A6 via spendReporter at 4 call sites), spec-site-brief skill (A2 + A4), build-demo skill (A3 + D1 read-bias), sales-dashboard status + pitch (B1), sales-dashboard payment webhook (B2), sales-dashboard signup + payments-connect + admin (B3), sales-dashboard onboarding POST (B4)
 - Producers awaiting wiring: Pi siteQaAgent (A5 — agent doesn't exist yet, manual posts work); autumn pipeline (D2 contextSource swap)
 - Pi runtime: dropped from data path, parked for autumn agents
-- Open phases: C (Tier 3 archival), D (D3 parked far-future), E (MC retirement)
-- Tasks open: 6
-- Tasks complete: 39 (see Done log)
+- Open phases: C (Tier 3 archival), D (D3 parked far-future), E (E2/E3/E4/E5 remaining)
+- Tasks open: 5
+- Tasks complete: 40 (see Done log)
 
 ---
 
@@ -317,13 +318,21 @@ _Last updated: 2026-05-10 (Phase A + B + D1 + D2 complete)_
 
 ### E1 — NERVE lead viewer page (parity with MC `/api/jobs` + lead detail)
 
-- **Status:** not started
-- **Owner:** _(unclaimed)_
+- **Status:** complete (PR #62, merged 2026-05-11)
+- **Owner:** _(merged)_
 - **Goal:** `/leads/<id>` page in NERVE matches MC's lead-detail surface. Inline brief, brand analysis, demo preview, pitch history.
-- **Files:** `apps/nerve/src/app/(app)/leads/[id]/page.tsx`
+- **Files shipped:**
+  - `apps/nerve/src/app/(app)/leads/[id]/page.tsx` — server component, `force-dynamic`, parallel fan-out across 10 SL-MAS stores + pitch/onboarding lookups. Existing LeadRecord edit/delete CRUD preserved.
+  - Sections (each conditional on its data source): stat tile strip · Lead record · Site brief (latest, full markdown in disclosure) · Brand analysis (palette swatches, typography, voice) · Demo artefact (sandboxed `<iframe srcDoc>` preview) · QA results · Lead profile · Assignment timeline · Customer onboarding · Pitch history · Composer iterations · API spend
+  - `CHANGELOG/2026-05/2026-05-11_001_nerve_e1_lead_viewer.md`
+- **Polymorphic id:** `[id]` is accepted as either `LeadRecord.id` (cuid, NERVE-manual) or SL-MAS `lead_id` (slug, skill-emitted). The two id-spaces don't overlap today, so the page queries both and 404s only when neither yields anything. Header title falls back across `LeadRecord.name` → `LeadProfile.business_name` → first brief/demo `business_name` → raw id.
+- **Verified:** smoke-tested in browser against the preview deployment on real bulk-smoke seed slugs (`source-barber`, `riverside-cafe`, `ace-bakery`) — all green.
 - **Acceptance:** Founder can do everything they do in MC's lead viewer in NERVE.
 - **Depends on:** A1, A2, A3, A4 (data must be ingested).
 - **Estimated effort:** 1 day.
+- **Follow-ups (not in scope for E1):**
+  - `/leads` index only lists `LeadRecord` rows; SL-MAS-only slugs not yet reachable from the leads landing page. Future PR: either a "SL-MAS leads" list view or a `LeadRecord.slug` column to unify the id spaces.
+  - Pitch-log join is business-name-based (legacy schema gap, not E1-specific).
 
 ### E2 — NERVE pipeline runner (parity with MC scheduler studio)
 
@@ -364,6 +373,7 @@ _Last updated: 2026-05-10 (Phase A + B + D1 + D2 complete)_
 
 > Tasks land here when their checkbox flips. Most recent at top.
 
+- **2026-05-11** PR #62 merged: E1 — NERVE lead viewer page. First Phase E surface. `/leads/[id]` extended to single-tab operator detail across all Phase A/B SL-MAS stores: stat tile strip, latest site brief + full markdown disclosure, brand analysis (palette swatches/typography/voice), sandboxed demo iframe preview, QA results, lead profile, assignment timeline, customer onboarding, pitch history (business-name join), composer iterations, API spend. Polymorphic on `[id]` — accepts either `LeadRecord.id` cuid or SL-MAS `lead_id` slug; 404 only when both id spaces miss. Header title cascades across name fallbacks. Existing LeadRecord CRUD preserved. Verified in browser against bulk-smoke seed slugs.
 - **2026-05-10** **Phase B complete.** All four Tier 2 streams live (B1 funnel timeline, B2 Stripe events, B3 SP lifecycle, B4 customer onboarding). The warehouse now sees the full sales lifecycle from signup to post-sale customer feedback.
 - **2026-05-10** PR #59 merged: B4 — onboarding response ingest. Final Tier 2 stream. `onboarding_responses` table (migration 15) using UPSERT-on-lead-assignment-id (A4 pattern) rather than event-stream (B1/B2/B3 pattern) because the form auto-saves on every keystroke. `save_count` for drop-off analytics + sticky `completed_at`. Producer fans out the full Supabase row each save so NERVE always reflects the cumulative latest state.
 - **2026-05-10** PR #57 merged: B3 — salesperson lifecycle events ingest. Third Tier 2 stream. `salesperson_events` table (migration 14) with generic event shape; HMAC-signed `/api/ingest/salesperson-event` route; producers in signup handler, payments-connect, and admin profile-edit (with diff-derived event type). Per-SP timeline now queryable from NERVE.
