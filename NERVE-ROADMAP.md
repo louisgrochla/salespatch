@@ -403,8 +403,8 @@ _Last updated: 2026-05-11 (Phase F scope-split — F2 narrowed, F4 added for far
 
 ### F1 — Business identity unification in NERVE
 
-- **Status:** not started
-- **Owner:** _(unclaimed)_
+- **Status:** in progress
+- **Owner:** claude-session-f1-2026-05-11
 - **Goal:** One business = one canonical row in NERVE, lookupable by normalised name + postcode. Everything else (briefs, demos, assignments, pitches, onboarding) hangs off it as soft FK. Today there are four id-spaces that cannot reliably dedup the same physical business: local folder slug, `LeadRecord.id` (cuid), `lead_profiles.lead_id` (slug), Supabase `lead_assignments.lead_id`. Collapse them into a single `BusinessIdentity` keyed by `slug` (or `normalised_name + postcode`), and treat the existing tables as soft FKs into it.
 - **Files:**
   - `apps/nerve/prisma/schema.prisma` — new `BusinessIdentity` model OR slug column on `LeadRecord` with a unique index on `(normalised_name, postcode)`

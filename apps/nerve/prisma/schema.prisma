@@ -962,6 +962,50 @@ model ModelRegistration {
 }
 
 
+// ─── business identity (Phase F1) ────────────────────────────────────────
+//
+// One canonical row per physical business, lookupable by normalised name +
+// postcode. Collapses the four id-spaces that exist today:
+//   - local folder slug (~/Desktop/salespatch-demos/<slug>/)
+//   - LeadRecord.id (cuid, NERVE-manual entries)
+//   - lead_profiles.lead_id (slug, skill-emitted)
+//   - Supabase lead_assignments.lead_id (slug, sales-dashboard)
+//
+// Soft FK relationship: existing tables keep their `lead_id` slug or `id`
+// cuid columns unchanged. Producers call
+// `businessIdentityStore.lookupOrCreate(name, postcode)` before scaffolding
+// a new lead so slug variations ("noose-and-needle" vs "noose-needle")
+// collapse onto the same canonical row.
+//
+// `normalisedName`: lowercase, ampersand→and, drop "the/and/&", strip
+// punctuation, collapse whitespace. See businessIdentityStore.ts for the
+// reference implementation. `postcode` is uppercased, no spaces.
+//
+// Postgres treats NULL postcodes as distinct in the composite unique
+// index, so businesses without a known postcode get separate rows per
+// call. The lookup helper handles the "name match, no postcode on either
+// side" case by falling back to normalised-name-only lookup before
+// creating a new row.
+
+model BusinessIdentity {
+  id             String   @id @default(cuid())
+  slug           String   @unique // canonical kebab-case slug
+  businessName   String   @map("business_name") // current best display name
+  normalisedName String   @map("normalised_name") // dedup key
+  postcode       String? // uppercase, no spaces
+  vertical       String?
+  firstSeenAt    DateTime @default(now()) @map("first_seen_at")
+  lastSeenAt     DateTime @default(now()) @map("last_seen_at")
+  metadata       Json     @default("{}")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @default(now()) @updatedAt @map("updated_at")
+
+  @@unique([normalisedName, postcode])
+  @@index([normalisedName])
+  @@index([postcode])
+  @@map("business_identities")
+}
+
 // ─── lead profile snapshots ──────────────────────────────────────────────
 //
 // Rich enriched-data snapshots produced by the Pi `lead-profiler-agent` or

@@ -2,6 +2,7 @@ import { prisma } from "@/lib/db";
 import Link from "next/link";
 import { PageHeader, HeaderPrimary } from "@/components/PageHeader";
 import { cn } from "@/lib/cn";
+import { normaliseName } from "@/lib/sl-mas/businessIdentityStore";
 
 export const dynamic = "force-dynamic";
 
@@ -100,6 +101,19 @@ export default async function LeadsPage({
     }
     sourcePerf.set(k, t);
   }
+
+  // F1 dedup: a manual LeadRecord that refers to the same physical
+  // business as an SL-MAS lead_profile should not surface twice. Build
+  // the normalised-name set from SL-MAS profiles and hide manual leads
+  // that collide. The SL-MAS row stays because it carries the richer
+  // data (briefs, demos, assignments).
+  const slMasNormalisedNames = new Set(
+    profiles.map((p) => normaliseName(p.businessName)),
+  );
+  const dedupedManual = leads.filter(
+    (l) => !slMasNormalisedNames.has(normaliseName(l.name)),
+  );
+  const dedupedHidden = leads.length - dedupedManual.length;
 
   const manualTotal = statusCounts.reduce((s, c) => s + c._count._all, 0);
   const slMasTotal = profiles.length;
@@ -248,9 +262,18 @@ export default async function LeadsPage({
           </div>
         )}
 
-        {leads.length === 0 ? (
+        {dedupedHidden > 0 && (
+          <div className="font-mono text-2xs text-fg-dim">
+            {dedupedHidden} manual record{dedupedHidden === 1 ? "" : "s"} hidden
+            (already present as SL-MAS lead via canonical identity).
+          </div>
+        )}
+
+        {dedupedManual.length === 0 ? (
           <div className="border border-border bg-bg-panel px-4 py-8 text-center font-mono text-xs text-fg-dim">
-            No manual lead records yet.
+            {leads.length === 0
+              ? "No manual lead records yet."
+              : "All manual records overlap with SL-MAS leads above."}
           </div>
         ) : (
           <div className="border border-border bg-bg-panel">
@@ -267,7 +290,7 @@ export default async function LeadsPage({
                 </tr>
               </thead>
               <tbody>
-                {leads.map((l) => (
+                {dedupedManual.map((l) => (
                   <tr key={l.id} className="cursor-pointer">
                     <td>
                       <Link
