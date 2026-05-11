@@ -16,6 +16,7 @@ import { leadAssignmentEventStore } from "@/lib/sl-mas/leadAssignmentEventStore"
 import { onboardingResponseStore } from "@/lib/sl-mas/onboardingResponseStore";
 import { composerIterationStore } from "@/lib/sl-mas/composerIterationStore";
 import { spendLedgerStore } from "@/lib/sl-mas/spendLedgerStore";
+import { businessIdentityStore } from "@/lib/sl-mas/businessIdentityStore";
 
 export const dynamic = "force-dynamic";
 
@@ -34,13 +35,20 @@ export default async function LeadDetailPage({
   params: { id: string };
   searchParams: { edit?: string };
 }) {
-  const id = params.id;
+  const routeParam = params.id;
   const editing = searchParams.edit === "1";
 
+  // F1: also accept canonical BusinessIdentity.id (cuid) or .slug. If the
+  // route param resolves to a canonical identity, use its slug as the
+  // working `id` for the SL-MAS fan-out below.
+  const canonicalIdentity = await businessIdentityStore.findByAnyId(routeParam);
+  const id = canonicalIdentity?.slug ?? routeParam;
+
   // The route param is polymorphic: it can be either a NERVE `LeadRecord.id`
-  // (cuid, intranet-created) OR an SL-MAS `lead_id` slug (skill-emitted).
-  // The two id-spaces don't overlap today, so we query both and render
-  // whatever we find. 404 only when neither space has a record.
+  // (cuid, intranet-created), an SL-MAS `lead_id` slug (skill-emitted), or
+  // a canonical `BusinessIdentity.id`/`.slug` (Phase F1). The id-spaces
+  // don't overlap today, so we query all of them and render whatever we
+  // find. 404 only when none of them has a record.
   const [
     lead,
     profile,
@@ -75,13 +83,14 @@ export default async function LeadDetailPage({
     composerIters.length > 0 ||
     spendRows.length > 0;
 
-  if (!lead && !hasSlMasData) notFound();
+  if (!lead && !hasSlMasData && !canonicalIdentity) notFound();
 
   const displayName =
     lead?.name ??
     profile?.business_name ??
     briefs[0]?.business_name ??
     demos[0]?.business_name ??
+    canonicalIdentity?.business_name ??
     id;
 
   const latestBrief = briefs[0];

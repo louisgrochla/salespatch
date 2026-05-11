@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { leadProfileStore, type LeadProfileInput } from "@/lib/sl-mas/leadProfileStore";
+import { businessIdentityStore } from "@/lib/sl-mas/businessIdentityStore";
 import { verifySignature } from "@/lib/sl-mas/hmac";
 
 // POST /api/ingest/lead-profile
@@ -58,6 +59,25 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   }
 
   const row = await leadProfileStore.upsert(payload);
+
+  // F1: keep BusinessIdentity in sync. Idempotent — collapses on
+  // (normalised_name, postcode), so re-profiling the same business doesn't
+  // create duplicates. Fire-and-forget pattern would be cleaner, but the
+  // call is cheap enough that the await keeps the contract simple.
+  await businessIdentityStore
+    .lookupOrCreate({
+      business_name: row.business_name,
+      postcode: row.postcode ?? null,
+      vertical: row.vertical ?? null,
+      preferred_slug: row.lead_id,
+    })
+    .catch((err) => {
+      console.warn(
+        `[lead-profile-ingest] businessIdentity upsert failed for ${row.lead_id}:`,
+        err,
+      );
+    });
+
   return NextResponse.json({
     id: row.id,
     lead_id: row.lead_id,
