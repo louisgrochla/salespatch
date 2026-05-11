@@ -2,12 +2,13 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { BarChart3, Users, MapPin, Cpu, LogOut, Zap, Settings } from 'lucide-react';
+import { BarChart3, Users, MapPin, Cpu, LogOut, Zap, Settings, Inbox } from 'lucide-react';
 
 const NAV = [
   { href: '/dashboard', label: 'Operations', icon: BarChart3 },
   { href: '/pipeline', label: 'Pipeline', icon: Cpu },
   { href: '/salesforce', label: 'Team', icon: Users },
+  { href: '/leads/queue', label: 'Queue', icon: Inbox },
   { href: '/leads', label: 'Leads', icon: MapPin },
 ];
 
@@ -15,8 +16,25 @@ const BOTTOM_NAV = [
   { href: '/settings', label: 'Settings', icon: Settings },
 ];
 
+function findActiveHref(pathname: string, hrefs: string[]): string | null {
+  // Pick the longest matching href so /leads/queue beats /leads when the
+  // user is on the queue page. Without this, prefix-startsWith makes both
+  // nav items highlight simultaneously.
+  let best: string | null = null;
+  for (const h of hrefs) {
+    if (pathname === h || pathname.startsWith(h + '/')) {
+      if (!best || h.length > best.length) best = h;
+    }
+  }
+  return best;
+}
+
 export default function Sidebar() {
   const pathname = usePathname();
+  const activeHref = findActiveHref(pathname, [
+    ...NAV.map((n) => n.href),
+    ...BOTTOM_NAV.map((n) => n.href),
+  ]);
 
   async function handleLogout() {
     await fetch('/api/auth/logout', { method: 'POST' });
@@ -43,7 +61,7 @@ export default function Sidebar() {
         <div className="text-[9px] font-semibold text-slate-600 uppercase tracking-[0.1em] px-2 mb-2">Monitor</div>
         <div className="space-y-0.5">
           {NAV.map(({ href, label, icon: Icon }) => {
-            const active = pathname.startsWith(href);
+            const active = activeHref === href;
             return (
               <Link
                 key={href}
@@ -64,7 +82,7 @@ export default function Sidebar() {
         <div className="text-[9px] font-semibold text-slate-600 uppercase tracking-[0.1em] px-2 mb-2 mt-6">System</div>
         <div className="space-y-0.5">
           {BOTTOM_NAV.map(({ href, label, icon: Icon }) => {
-            const active = pathname.startsWith(href);
+            const active = activeHref === href;
             return (
               <Link
                 key={href}
