@@ -36,6 +36,28 @@ Keep entries terse. One screen each is plenty.
 
 ---
 
+## 2026-05-12 — F2 import uploads demo HTML to Supabase Storage; `notes.demo_site_domain` is the bare slug
+
+**Context:** F2 — the admin queue's "Assign" action imports a NERVE-built demo into Supabase `lead_assignments`. Needed to set `notes.demo_site_domain` so the iOS SP app's WebView and the `/preview/<lead_assignment_id>` customer wrapper could render the demo.
+
+**Tried:** Two wrong approaches in sequence.
+1. The `/lead-json` skill defaulted `demo_site_domain` to a fabricated subdomain like `<slug>.salespatch.co.uk`. The F2 import handler preferred that value over its own fallback.
+2. PR #74/#75 fell back to the NERVE public route `nerve.salespatch.co.uk/api/public/demo/<slug>`. PR #77 then tried to flip precedence so the NERVE URL beat the placeholder.
+
+**Result:** Both broke the SP experience. Approach 1 → iOS WebView loaded `https://the-cult-of-coffee.salespatch.co.uk` and Vercel's password-protection screen caught the unknown subdomain (black screen + auth prompt on the SP's phone). Approach 2 → would have iframed the NERVE URL inside `/preview/<assignment_id>`, but that bypasses the same-origin `/api/demo-site/<slug>` proxy AND the `/preview` wrapper itself, losing the Stripe Checkout CTA + onboarding overlay that's the whole point of the customer-facing page.
+
+**Decision:** F2 import handler now uploads `bundle.demo_artefact.html_inline` to Supabase Storage at `demo-sites/<slug>.html` via the service-role client (idempotent bucket, `upsert: true`), then writes the bare slug into `notes.demo_site_domain`. Identical to the path `/api/admin/demo-upload` has used all along for manual uploads. The `/preview/<assignment_id>` wrapper resolves slug → `/api/demo-site/<slug>` proxy → Supabase Storage iframe + checkout overlay. iOS WebView resolves the same slug via `expandDemoUrl()` → same proxy. PR #77 was closed unmerged once this surfaced.
+
+**Watch out for:**
+- `notes.demo_site_domain` is ALWAYS the bare slug for spec-site demos. Not a subdomain, not a full URL, not a NERVE route. `expandDemoUrl()` at `apps/sales-dashboard/src/lib/leads-db.ts` is the canonical resolver — match its expectations.
+- The `/preview/<assignment_id>` wrapper is where commerce lives. Any change that points `demo_site_domain` somewhere `/preview` can't iframe (cross-origin, X-Frame-Options) silently breaks the payment flow without obvious symptoms — the SP-only WebView path keeps working.
+- The user-level `/lead-json` skill (`~/.claude/commands/lead-json.md`) was updated to write the slug into `pitch_brief.demo_site_domain`. Older pitch_briefs in NERVE still have the fabricated subdomain — the F2 import handler's slug-on-upload always wins so it doesn't matter, but don't trust pitch_brief.demo_site_domain values from before 2026-05-12 in any new code.
+- The NERVE public route `/api/public/demo/<slug>` still exists and works — it's useful for raw debugging and the `?` URL-paste use case. It is NOT the production demo URL.
+
+**Related:** PR #78 (commit 230c64d), PR #77 (closed unmerged). `apps/sales-dashboard/src/app/api/admin/import-from-nerve/route.ts`, `apps/sales-dashboard/src/app/preview/[leadId]/page.tsx`, `apps/sales-dashboard/src/app/api/admin/demo-upload/route.ts`. Changelog `CHANGELOG/2026-05/2026-05-12_001_f2_supabase_demo_upload.md`.
+
+---
+
 ## 2026-05-11 — Onboarding response uses UPSERT, not event-stream
 
 **Context:** B4 — mirror the customer's post-sale onboarding form into NERVE. B1/B2/B3 all use append-only event tables, so the obvious move was a fourth event table.
