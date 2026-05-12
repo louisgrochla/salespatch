@@ -27,17 +27,20 @@ import { buildEventId, postLeadAssignmentEvent } from '@/lib/nerve-ingest';
 //      join key NERVE recognises, so the existing B1 producer's status
 //      events trace back to the demo on the same key automatically.
 //
-// `demo_site_domain` points at NERVE's public demo route
-// (/api/public/demo/<slug>) so the SP gets a live, shareable URL with
-// no Supabase upload required. The demo HTML lives in NERVE Postgres
-// as inline JSONB; sales-dashboard + iOS treat the NERVE URL like any
-// external demo URL.
+// The demo HTML is uploaded to Supabase Storage at `demo-sites/<slug>.html`
+// before the assignment row is created, matching the existing
+// /api/admin/demo-upload convention. `notes.demo_site_domain` is then set
+// to the bare slug — same value the manual demo-upload flow produces.
+// The /preview/<leadId> wrapper and iOS WebView both resolve the slug
+// through the existing /api/demo-site/<slug> proxy. Do NOT use the NERVE
+// public URL — it bypasses the proxy and breaks iframe origin assumptions.
 //
 // Dual-mode (Supabase prod, SQLite dev) matching the existing
-// /api/admin/leads POST handler.
+// /api/admin/leads POST handler. In SQLite-only dev mode (no Supabase
+// env), the upload is skipped and demo_site_domain stays null.
 
-const NERVE_PUBLIC_BASE_URL =
-  process.env.NERVE_BASE_URL ?? 'https://nerve.salespatch.co.uk';
+const DEMO_BUCKET = 'demo-sites';
+const DEMO_BUCKET_SIZE_LIMIT = 25 * 1024 * 1024; // matches /api/admin/demo-upload
 
 function requireAdmin(req: NextRequest): NextResponse | null {
   const token = req.cookies.get('admin_token')?.value;
@@ -90,6 +93,7 @@ interface DemoArtefact {
   artefact_id: string;
   business_name: string;
   vertical?: string;
+  html_inline: string;
   photo_count: number;
   aesthetic_positioning?: string;
   dominant_hex?: string;
@@ -268,8 +272,46 @@ export async function POST(req: NextRequest) {
       { status: 422 },
     );
   }
+  if (!data.demo_artefact.html_inline || data.demo_artefact.html_inline.length === 0) {
+    return NextResponse.json(
+      { error: 'demo_artefact has no html_inline content — cannot import' },
+      { status: 422 },
+    );
+  }
 
-  const notes = buildNotes(data);
+  // Upload demo HTML to Supabase Storage at demo-sites/<slug>.html. This is
+  // the same bucket / path convention /api/admin/demo-upload uses, so the
+  // existing /preview/<leadId> wrapper and the /api/demo-site/<slug> proxy
+  // resolve it without any change. Skipped in SQLite-only dev mode (no
+  // Supabase env) — the lead still gets created but demo_site_domain stays
+  // null and the SP sees the "demo unavailable" fallback.
+  let demoUploaded = false;
+  if (supabaseMode) {
+    const sb = getSupabaseServer();
+    try {
+      await sb.storage.createBucket(DEMO_BUCKET, {
+        public: true,
+        fileSizeLimit: DEMO_BUCKET_SIZE_LIMIT,
+      });
+    } catch (_) {
+      // Already exists — ignore.
+    }
+    const { error: uploadErr } = await sb.storage
+      .from(DEMO_BUCKET)
+      .upload(`${slug}.html`, data.demo_artefact.html_inline, {
+        contentType: 'text/html; charset=utf-8',
+        upsert: true,
+      });
+    if (uploadErr) {
+      return NextResponse.json(
+        { error: `Supabase Storage upload failed: ${uploadErr.message}` },
+        { status: 500 },
+      );
+    }
+    demoUploaded = true;
+  }
+
+  const notes = buildNotes(data, demoUploaded);
   const assignmentId = randomUUID();
   const occurredAt = new Date().toISOString();
   const contact_name = data.pitch_brief?.contact_name ?? null;
@@ -356,7 +398,7 @@ export async function POST(req: NextRequest) {
 // Mirrors the field shape /api/admin/leads POST writes. If that handler
 // changes we update here too.
 
-function buildNotes(b: LeadBundle): NotesPayload {
+function buildNotes(b: LeadBundle, demoUploaded: boolean): NotesPayload {
   const pitch = b.pitch_brief;
   const brief = b.site_brief;
   const profile = b.lead_profile;
@@ -421,8 +463,14 @@ function buildNotes(b: LeadBundle): NotesPayload {
         : null,
     trust_badges: pitch?.trust_badges ?? [],
     avoid_topics: pitch?.avoid_topics ?? [],
-    demo_site_domain:
-      pitch?.demo_site_domain ?? buildDemoUrl(b.slug, !!demo),
+    // The bare slug — same value /api/admin/demo-upload returns. Resolved
+    // at view-time through /api/demo-site/<slug> → Supabase Storage.
+    // Falls back to pitch_brief.demo_site_domain only when the upload
+    // didn't happen (SQLite-only dev mode), and even that is best-effort:
+    // /lead-json historically wrote a fabricated subdomain there.
+    demo_site_domain: demoUploaded
+      ? b.slug
+      : pitch?.demo_site_domain ?? null,
     demo_site_qa_score: b.qa_result?.score ?? null,
     contact_name: pitch?.contact_name ?? null,
     contact_role: pitch?.contact_role ?? null,
@@ -443,11 +491,6 @@ function buildNotes(b: LeadBundle): NotesPayload {
     aesthetic_positioning: demo?.aesthetic_positioning ?? null,
     instagram_handle: profile?.instagram_handle ?? brief?.instagram_handle ?? null,
   };
-}
-
-function buildDemoUrl(slug: string, hasDemo: boolean): string | null {
-  if (!hasDemo) return null;
-  return `${NERVE_PUBLIC_BASE_URL}/api/public/demo/${encodeURIComponent(slug)}`;
 }
 
 interface NotesPayload {
