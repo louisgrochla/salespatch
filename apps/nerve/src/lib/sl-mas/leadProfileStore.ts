@@ -34,6 +34,9 @@ export interface LeadProfileInput {
   website_quality_score?: number;
   google_rating?: number;
   google_review_count?: number;
+  google_last_review_at?: string;
+  google_reviews_last_30d?: number;
+  google_reviews_last_90d?: number;
   best_reviews?: BestReview[];
   instagram_handle?: string;
   instagram_followers?: number;
@@ -74,6 +77,9 @@ export interface LeadProfileRow {
   website_quality_score?: number;
   google_rating?: number;
   google_review_count?: number;
+  google_last_review_at?: string;
+  google_reviews_last_30d?: number;
+  google_reviews_last_90d?: number;
   best_reviews?: BestReview[];
   instagram_handle?: string;
   instagram_followers?: number;
@@ -185,6 +191,9 @@ function inputToData(input: LeadProfileInput): {
     websiteQualityScore: input.website_quality_score ?? null,
     googleRating: input.google_rating ?? null,
     googleReviewCount: input.google_review_count ?? null,
+    googleLastReviewAt: input.google_last_review_at ? new Date(input.google_last_review_at) : null,
+    googleReviewsLast30d: input.google_reviews_last_30d ?? null,
+    googleReviewsLast90d: input.google_reviews_last_90d ?? null,
     bestReviews:
       input.best_reviews === undefined
         ? Prisma.JsonNull
@@ -241,6 +250,9 @@ function rowToProfile(row: NonNullable<LeadProfileDb>): LeadProfileRow {
     website_quality_score: row.websiteQualityScore ?? undefined,
     google_rating: row.googleRating ?? undefined,
     google_review_count: row.googleReviewCount ?? undefined,
+    google_last_review_at: row.googleLastReviewAt ? row.googleLastReviewAt.toISOString() : undefined,
+    google_reviews_last_30d: row.googleReviewsLast30d ?? undefined,
+    google_reviews_last_90d: row.googleReviewsLast90d ?? undefined,
     best_reviews: (row.bestReviews ?? undefined) as BestReview[] | undefined,
     instagram_handle: row.instagramHandle ?? undefined,
     instagram_followers: row.instagramFollowers ?? undefined,

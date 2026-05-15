@@ -139,6 +139,20 @@ function validatePayload(p: Partial<LeadProfileInput>): string | undefined {
       p.ig_posts_per_month_median < 0)
   )
     return "ig_posts_per_month_median must be non-negative number";
+  if (
+    isPresent(p.google_last_review_at) &&
+    (typeof p.google_last_review_at !== "string" ||
+      Number.isNaN(Date.parse(p.google_last_review_at)))
+  )
+    return "google_last_review_at must be ISO timestamp";
+  for (const k of ["google_reviews_last_30d", "google_reviews_last_90d"] as const) {
+    const v = p[k];
+    if (
+      isPresent(v) &&
+      (typeof v !== "number" || !Number.isInteger(v) || v < 0)
+    )
+      return `${k} must be non-negative integer`;
+  }
   return undefined;
 }
 
