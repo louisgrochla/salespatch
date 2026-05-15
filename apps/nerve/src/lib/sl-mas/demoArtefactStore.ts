@@ -48,6 +48,30 @@ export interface DemoArtefactIngestResult {
 // Lighter row shape for list endpoints — drops the heavy html_inline blob.
 export type DemoArtefactSummary = Omit<DemoArtefactRow, "html_inline">;
 
+// ── Brief-drift aggregation ──────────────────────────────────────────────
+//
+// PR #80 introduced the `metadata.photo_classifications` drift shape:
+//   { filename: { role, brief_role, drift } }
+// Legacy rows (Blackbird v1/v2, Nevermind, The Cult of Coffee) carry the
+// old shape:
+//   { filename: role_string }
+// This summary handles both, treating the legacy shape as "no_brief_role"
+// because there was no commitment to drift against.
+
+export interface BriefDriftSummary {
+  vertical: string | null;
+  total_artefacts: number; // demo_artefacts rows with at least one classified photo
+  total_classified_photos: number; // sum of entries across all photo_classifications maps
+  drift_count: number; // entries where the build's role differed from the brief's
+  drift_rate: number; // drift_count / (total_classified_photos - no_brief_role_count); 0 if denominator is 0
+  drift_by_brief_role: Record<
+    string,
+    { n: number; overrode_to: Record<string, number> }
+  >;
+  no_brief_role_count: number; // entries with brief_role null OR a legacy string-shaped value
+  generated_at: string;
+}
+
 /**
  * NERVE-side store for `demo_artefacts`. Idempotent on `artefact_id` so the
  * build-demo skill / Pi composer can retry on transient network failure
@@ -138,6 +162,103 @@ export const demoArtefactStore = {
       orderBy: { generatedAt: "desc" },
     });
     return row ? rowToArtefact(row) : null;
+  },
+
+  /**
+   * Aggregate the brief→build drift signal across `demo_artefacts`.
+   *
+   * Optional `vertical` scopes the rollup. SQL handles both metadata shapes:
+   *   legacy { filename: "role_string" } → counted toward no_brief_role
+   *   new    { filename: { role, brief_role, drift } } → drift counted
+   *           when `drift` is true; `brief_role: null` falls under
+   *           no_brief_role too.
+   *
+   * Returns counts plus a drift-by-brief-role breakdown describing where
+   * each rejected brief role was overridden to.
+   */
+  async briefDriftSummary(
+    vertical?: string,
+  ): Promise<BriefDriftSummary> {
+    // Pull every classification entry as one row, with a flag for legacy
+    // shape. CROSS JOIN LATERAL jsonb_each unnests the map. Pre-filter
+    // rows that actually have a photo_classifications key — most do, but
+    // a missing key is legal and would otherwise return null rows.
+    const rows = await prisma.$queryRaw<
+      Array<{
+        artefact_id: string;
+        classification: unknown;
+        kind: "object" | "string" | "other";
+      }>
+    >`
+      SELECT
+        da.artefact_id,
+        e.value AS classification,
+        jsonb_typeof(e.value) AS kind
+      FROM demo_artefacts da
+      CROSS JOIN LATERAL jsonb_each(da.metadata -> 'photo_classifications') AS e
+      WHERE da.metadata ? 'photo_classifications'
+        AND (${vertical ?? null}::text IS NULL OR da.vertical = ${vertical ?? null})
+    `;
+
+    const artefactIds = new Set<string>();
+    let totalClassifiedPhotos = 0;
+    let driftCount = 0;
+    let noBriefRoleCount = 0;
+    const driftByBriefRole: Record<
+      string,
+      { n: number; overrode_to: Record<string, number> }
+    > = {};
+
+    for (const r of rows) {
+      artefactIds.add(r.artefact_id);
+      totalClassifiedPhotos += 1;
+
+      if (r.kind === "string") {
+        // Legacy shape — no brief commitment was recorded.
+        noBriefRoleCount += 1;
+        continue;
+      }
+      if (r.kind !== "object" || r.classification === null) {
+        // Unexpected shape (null, array). Don't count as drift; treat as
+        // unparseable and bucket with no_brief_role to keep the
+        // denominator honest.
+        noBriefRoleCount += 1;
+        continue;
+      }
+
+      const obj = r.classification as Record<string, unknown>;
+      const briefRole = (obj.brief_role ?? null) as string | null;
+      const finalRole = (obj.role ?? null) as string | null;
+      const drift = obj.drift === true;
+
+      if (briefRole === null) {
+        noBriefRoleCount += 1;
+        continue;
+      }
+      if (drift && finalRole) {
+        driftCount += 1;
+        const bucket =
+          driftByBriefRole[briefRole] ??
+          (driftByBriefRole[briefRole] = { n: 0, overrode_to: {} });
+        bucket.n += 1;
+        bucket.overrode_to[finalRole] =
+          (bucket.overrode_to[finalRole] ?? 0) + 1;
+      }
+    }
+
+    const denom = totalClassifiedPhotos - noBriefRoleCount;
+    const driftRate = denom > 0 ? driftCount / denom : 0;
+
+    return {
+      vertical: vertical ?? null,
+      total_artefacts: artefactIds.size,
+      total_classified_photos: totalClassifiedPhotos,
+      drift_count: driftCount,
+      drift_rate: Number(driftRate.toFixed(4)),
+      drift_by_brief_role: driftByBriefRole,
+      no_brief_role_count: noBriefRoleCount,
+      generated_at: new Date().toISOString(),
+    };
   },
 };
 
