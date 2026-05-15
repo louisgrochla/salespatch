@@ -1037,7 +1037,10 @@ model LeadProfile {
   bestReviews          Json?    @map("best_reviews") // [{ author, rating, text, date }]
   instagramHandle      String?  @map("instagram_handle")
   instagramFollowers   Int?     @map("instagram_followers")
-  instagramPostCount   Int?     @map("instagram_post_count")
+  instagramPostCount   Int?     @map("instagram_post_count") // lifetime count
+  igLastPostAt         DateTime? @map("ig_last_post_at") // most recent post timestamp
+  igPostsLast90d       Int?     @map("ig_posts_last_90d") // posts in last 90 days
+  igPostsPerMonthMedian Float?  @map("ig_posts_per_month_median") // median posts/month across scraped window
   instagramBio         String?  @map("instagram_bio")
   photoCount           Int      @default(0) @map("photo_count")
   hasLogo              Boolean  @default(false) @map("has_logo")
@@ -1060,6 +1063,7 @@ model LeadProfile {
   @@index([vertical, profiledAt(sort: Desc)])
   @@index([qualifierVerdict, profiledAt(sort: Desc)])
   @@index([postcode])
+  @@index([igLastPostAt(sort: Desc), igPostsLast90d(sort: Desc)], map: "lead_profiles_ig_recency_idx")
   @@map("lead_profiles")
 }
 
