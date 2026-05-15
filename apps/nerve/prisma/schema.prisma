@@ -1045,6 +1045,7 @@ model LeadProfile {
   igPostsLast90d       Int?     @map("ig_posts_last_90d") // posts in last 90 days
   igPostsPerMonthMedian Float?  @map("ig_posts_per_month_median") // median posts/month across scraped window
   instagramBio         String?  @map("instagram_bio")
+  bioCtaType           String?  @map("bio_cta_type") // enum-by-convention: call|dm|link_in_bio|fresha|booksy|treatwell|website|none
   photoCount           Int      @default(0) @map("photo_count")
   hasLogo              Boolean  @default(false) @map("has_logo")
   hasHeroImage         Boolean  @default(false) @map("has_hero_image")
@@ -1068,6 +1069,7 @@ model LeadProfile {
   @@index([postcode])
   @@index([igLastPostAt(sort: Desc), igPostsLast90d(sort: Desc)], map: "lead_profiles_ig_recency_idx")
   @@index([googleLastReviewAt(sort: Desc), googleReviewsLast30d(sort: Desc)], map: "lead_profiles_google_review_recency_idx")
+  @@index([vertical, bioCtaType], map: "lead_profiles_bio_cta_idx")
   @@map("lead_profiles")
 }
 
