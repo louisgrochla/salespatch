@@ -45,6 +45,7 @@ export interface LeadProfileInput {
   ig_posts_last_90d?: number; // count of posts within trailing 90 days; null if scrape window < 90d
   ig_posts_per_month_median?: number; // median posts/month across the scraped window
   instagram_bio?: string;
+  bio_cta_type?: string; // enum-by-convention; route validates against known list
   photo_count?: number;
   has_logo?: boolean;
   has_hero_image?: boolean;
@@ -88,6 +89,7 @@ export interface LeadProfileRow {
   ig_posts_last_90d?: number;
   ig_posts_per_month_median?: number;
   instagram_bio?: string;
+  bio_cta_type?: string; // enum-by-convention; route validates against known list
   photo_count: number;
   has_logo: boolean;
   has_hero_image: boolean;
@@ -205,6 +207,7 @@ function inputToData(input: LeadProfileInput): {
     igPostsLast90d: input.ig_posts_last_90d ?? null,
     igPostsPerMonthMedian: input.ig_posts_per_month_median ?? null,
     instagramBio: input.instagram_bio ?? null,
+    bioCtaType: input.bio_cta_type ?? null,
     photoCount: input.photo_count ?? 0,
     hasLogo: input.has_logo ?? false,
     hasHeroImage: input.has_hero_image ?? false,
@@ -261,6 +264,7 @@ function rowToProfile(row: NonNullable<LeadProfileDb>): LeadProfileRow {
     ig_posts_last_90d: row.igPostsLast90d ?? undefined,
     ig_posts_per_month_median: row.igPostsPerMonthMedian ?? undefined,
     instagram_bio: row.instagramBio ?? undefined,
+    bio_cta_type: row.bioCtaType ?? undefined,
     photo_count: row.photoCount,
     has_logo: row.hasLogo,
     has_hero_image: row.hasHeroImage,

@@ -410,4 +410,57 @@ to do when the scrape window is shorter than 90 days.
 
 ---
 
+## 2026-05-15 — bio_cta_type: TEXT column, hard-validated against an in-route enum
+
+**Context:** Adding `bio_cta_type` to `lead_profiles` (call / dm /
+link_in_bio / fresha / booksy / treatwell / website / none). Postgres
+gives us two reasonable options: a native `ENUM` type or a `TEXT` column
+plus application-layer validation.
+
+**Tried:** Native Postgres enum. Three friction points surfaced.
+1. Every new value needs a migration (`ALTER TYPE ... ADD VALUE`).
+   We expect this list to evolve as new booking platforms become
+   common in the spec-site target market (e.g. Square, Vagaro).
+2. Prisma's enum support requires both the schema enum definition and
+   careful generator settings; mixing `String?` and Prisma enum in the
+   same wire format gets noisy.
+3. The qualifier-style queries we want (`GROUP BY bio_cta_type`) work
+   identically against TEXT and ENUM. No real query benefit.
+
+**Result:** Postgres ENUM is the "correct" solution in textbook terms,
+but the iteration cost wins. We're going to discover new CTA values by
+running real leads through the producer — every discovery should be
+a one-line PR, not a migration + enum-add + Prisma regen.
+
+**Decision:** TEXT column with hard-validation at the route layer.
+The validator's `known` Set is the source of truth; the migration
+comment and SKILL.md Phase 1 bullet are docs that point at it.
+
+Hard-validate (not warn-and-accept) because:
+- The warehouse gets noise-free analytics — no `phone` typos masquerading
+  as `call`.
+- Producer typos surface immediately as HTTP 400, not as silently bad data.
+- Adding a value is a one-PR, one-line change — low enough friction that
+  the validation is worth keeping strict.
+
+**Watch out for:**
+- The enum values live in THREE places: the route validator's `Set`, the
+  migration 21 SQL comment, and the SKILL.md Phase 1 bullet. The route
+  is the source of truth — if the others drift, fix them, don't relax
+  the route. Tests against the validator would be the right long-term
+  fix; haven't added them yet.
+- "When two CTAs are present, pick the primary" is judgement. The
+  current heuristic in SKILL.md is "prefer higher-friction" — bias
+  toward the channel where the booking actually happens. After a few
+  closed leads we can compare close-rates by `bio_cta_type` and revise
+  the heuristic empirically.
+
+**Related:** PR (TBD),
+`CHANGELOG/2026-05/2026-05-15_006_bio_cta_type.md`,
+`apps/nerve/prisma/migrations/21_bio_cta_type/migration.sql`,
+`apps/nerve/src/app/api/ingest/lead-profile/route.ts`,
+`~/.claude/skills/spec-site-brief/SKILL.md` Phase 1.
+
+---
+
 <!-- New entries go above this line -->

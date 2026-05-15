@@ -153,6 +153,24 @@ function validatePayload(p: Partial<LeadProfileInput>): string | undefined {
     )
       return `${k} must be non-negative integer`;
   }
+  if (isPresent(p.bio_cta_type)) {
+    // Enum-by-convention. Kept in sync with migration 21's known-values
+    // comment and the SKILL.md Phase 1 extraction bullet. Adding a new
+    // value here is a one-line code change — no migration needed.
+    const known = new Set([
+      "call",
+      "dm",
+      "link_in_bio",
+      "fresha",
+      "booksy",
+      "treatwell",
+      "website",
+      "none",
+    ]);
+    if (typeof p.bio_cta_type !== "string" || !known.has(p.bio_cta_type)) {
+      return `bio_cta_type must be one of: ${[...known].join("|")}`;
+    }
+  }
   return undefined;
 }
 
