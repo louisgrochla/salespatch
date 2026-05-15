@@ -38,6 +38,9 @@ export interface LeadProfileInput {
   instagram_handle?: string;
   instagram_followers?: number;
   instagram_post_count?: number;
+  ig_last_post_at?: string; // ISO 8601 — most recent post timestamp
+  ig_posts_last_90d?: number; // count of posts within trailing 90 days; null if scrape window < 90d
+  ig_posts_per_month_median?: number; // median posts/month across the scraped window
   instagram_bio?: string;
   photo_count?: number;
   has_logo?: boolean;
@@ -75,6 +78,9 @@ export interface LeadProfileRow {
   instagram_handle?: string;
   instagram_followers?: number;
   instagram_post_count?: number;
+  ig_last_post_at?: string;
+  ig_posts_last_90d?: number;
+  ig_posts_per_month_median?: number;
   instagram_bio?: string;
   photo_count: number;
   has_logo: boolean;
@@ -186,6 +192,9 @@ function inputToData(input: LeadProfileInput): {
     instagramHandle: input.instagram_handle ?? null,
     instagramFollowers: input.instagram_followers ?? null,
     instagramPostCount: input.instagram_post_count ?? null,
+    igLastPostAt: input.ig_last_post_at ? new Date(input.ig_last_post_at) : null,
+    igPostsLast90d: input.ig_posts_last_90d ?? null,
+    igPostsPerMonthMedian: input.ig_posts_per_month_median ?? null,
     instagramBio: input.instagram_bio ?? null,
     photoCount: input.photo_count ?? 0,
     hasLogo: input.has_logo ?? false,
@@ -236,6 +245,9 @@ function rowToProfile(row: NonNullable<LeadProfileDb>): LeadProfileRow {
     instagram_handle: row.instagramHandle ?? undefined,
     instagram_followers: row.instagramFollowers ?? undefined,
     instagram_post_count: row.instagramPostCount ?? undefined,
+    ig_last_post_at: row.igLastPostAt ? row.igLastPostAt.toISOString() : undefined,
+    ig_posts_last_90d: row.igPostsLast90d ?? undefined,
+    ig_posts_per_month_median: row.igPostsPerMonthMedian ?? undefined,
     instagram_bio: row.instagramBio ?? undefined,
     photo_count: row.photoCount,
     has_logo: row.hasLogo,

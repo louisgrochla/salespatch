@@ -121,6 +121,24 @@ function validatePayload(p: Partial<LeadProfileInput>): string | undefined {
       p.website_quality_score > 100)
   )
     return "website_quality_score must be number in [0,100]";
+  if (
+    isPresent(p.ig_last_post_at) &&
+    (typeof p.ig_last_post_at !== "string" || Number.isNaN(Date.parse(p.ig_last_post_at)))
+  )
+    return "ig_last_post_at must be ISO timestamp";
+  if (
+    isPresent(p.ig_posts_last_90d) &&
+    (typeof p.ig_posts_last_90d !== "number" ||
+      !Number.isInteger(p.ig_posts_last_90d) ||
+      p.ig_posts_last_90d < 0)
+  )
+    return "ig_posts_last_90d must be non-negative integer";
+  if (
+    isPresent(p.ig_posts_per_month_median) &&
+    (typeof p.ig_posts_per_month_median !== "number" ||
+      p.ig_posts_per_month_median < 0)
+  )
+    return "ig_posts_per_month_median must be non-negative number";
   return undefined;
 }
 

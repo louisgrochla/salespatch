@@ -354,4 +354,60 @@ Files: `apps/nerve/prisma/schema.prisma`,
 
 ---
 
+## 2026-05-15 — IG post recency: Float column + honest-null scrape window
+
+**Context:** Adding `ig_last_post_at` / `ig_posts_last_90d` /
+`ig_posts_per_month_median` to `lead_profiles` so the qualifier can tell
+alive accounts from dormant ones. The pipeline-enrichment plan originally
+drafted `posts_per_month_median NUMERIC(6,2)` and didn't pin down what
+to do when the scrape window is shorter than 90 days.
+
+**Tried:** Two judgement calls during implementation.
+1. `NUMERIC(6,2)` for the median. Prisma's `Decimal` type is a runtime
+   class — producers have to construct it from a JS number via
+   `new Prisma.Decimal(...)`, and the route validator has to accept both
+   numbers and Decimal-ish strings.
+2. For `ig_posts_last_90d` when the Apify scrape only covers, say, the
+   last 30 days (active accounts at resultsLimit=50): write the
+   undercounted value as-is, write 0, or write `null`.
+
+**Result:** Neither initial draft worked cleanly.
+1. Decimal added type-conversion noise on every producer hop with zero
+   precision benefit — posts/month is not currency.
+2. Writing the undercount tells downstream queries "this account posted
+   7 times in 90d" when the truth is "we observed 7 in 30d, the other
+   60d are unknown". Indistinguishable from a real low-cadence account.
+   Writing 0 is worse. Writing the undercount is misleading.
+
+**Decision:** Two changes from the original plan.
+1. Use `DOUBLE PRECISION` (`Float` in Prisma) for `ig_posts_per_month_median`.
+   JS-native number throughout, no Decimal round-tripping. Migration
+   `19_ig_post_recency` writes `DOUBLE PRECISION`.
+2. The producer writes `null` for `ig_posts_last_90d` whenever the scrape
+   window is shorter than 90 days. Honest null beats misleading
+   lower-bound. Documented in the SKILL.md aggregation block and the
+   route validator accepts null cleanly.
+
+**Watch out for:**
+- Bumping `resultsLimit` past 50 buys longer windows but cost climbs
+  linearly. At 100, even very active bakeries reliably cover 90 days,
+  but cost doubles. Current default of 50 covers ~80% of bakery/barber
+  posting cadences; raise it only if `null` becomes the common case in
+  the warehouse.
+- The `_per_month_median` bucket math uses calendar months (`YYYY-MM`).
+  For a 45-day scrape, that's 2-3 buckets — median is sensitive to short
+  windows. The PR's known-issues block flags this; the long-term fix is
+  bigger resultsLimit, not richer math.
+- If we ever want `ig_posts_last_30d` too, do NOT special-case the null
+  contract per-window. Standardise: any aggregate over a trailing window
+  is `null` when the scrape didn't cover that window. The qualifier
+  can't infer "0 posts in 30d" from "30 posts in observed 30d window
+  starting today" without window metadata.
+
+**Related:** PR (TBD), `CHANGELOG/2026-05/2026-05-15_004_ig_post_recency.md`,
+`apps/nerve/prisma/migrations/19_ig_post_recency/migration.sql`,
+`~/.claude/skills/spec-site-brief/SKILL.md` Phase 1.5.
+
+---
+
 <!-- New entries go above this line -->
