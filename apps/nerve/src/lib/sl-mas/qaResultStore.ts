@@ -137,7 +137,149 @@ export const qaResultStore = {
     });
     return rows.map(rowToQa);
   },
+
+  /**
+   * Score histogram bucketed by pitch outcome.
+   *
+   * Closes the loop opened by the QA producer in /build-demo and the
+   * outcome stream in `lead_assignment_events`: do high-QA demos close
+   * better than low-QA demos?
+   *
+   * Methodology:
+   *   - One QA row per artefact (latest by ranAt) — re-runs don't get
+   *     double-counted.
+   *   - One outcome per lead (latest by occurredAt). Leads with no
+   *     assignment event roll into `no_visit`.
+   *   - Outcome status normalised into five buckets matching the
+   *     funnel's terminal states.
+   *   - Vertical filter joins through `demo_artefacts.vertical` because
+   *     QaResult doesn't carry vertical directly.
+   *
+   * `sample_size_warning` fires when no bucket reaches n>=10. Until then
+   * the means are noise.
+   */
+  async byOutcome(vertical?: string): Promise<QaByOutcomeSummary> {
+    const rows = await prisma.$queryRaw<
+      Array<{ score: number; outcome_status: string | null }>
+    >`
+      WITH latest_qa AS (
+        SELECT DISTINCT ON (qr.artefact_id)
+          qr.artefact_id,
+          qr.lead_id,
+          qr.score
+        FROM qa_results qr
+        ORDER BY qr.artefact_id, qr.ran_at DESC
+      ),
+      latest_event AS (
+        SELECT DISTINCT ON (lae.lead_id)
+          lae.lead_id,
+          lae.status
+        FROM lead_assignment_events lae
+        ORDER BY lae.lead_id, lae.occurred_at DESC
+      )
+      SELECT
+        lq.score,
+        le.status AS outcome_status
+      FROM latest_qa lq
+      LEFT JOIN demo_artefacts da ON da.artefact_id = lq.artefact_id
+      LEFT JOIN latest_event le ON le.lead_id = lq.lead_id
+      WHERE ${vertical ?? null}::text IS NULL OR da.vertical = ${vertical ?? null}
+    `;
+
+    const byBucket: Record<string, number[]> = {
+      closed: [],
+      rejected: [],
+      pitched_pending: [],
+      visited_no_pitch: [],
+      no_visit: [],
+    };
+
+    for (const r of rows) {
+      byBucket[mapStatusToBucket(r.outcome_status)].push(r.score);
+    }
+
+    const buckets: QaByOutcomeSummary["buckets"] = {
+      closed: scoreStats(byBucket.closed),
+      rejected: scoreStats(byBucket.rejected),
+      pitched_pending: scoreStats(byBucket.pitched_pending),
+      visited_no_pitch: scoreStats(byBucket.visited_no_pitch),
+      no_visit: scoreStats(byBucket.no_visit),
+    };
+
+    const meaningful = Object.values(buckets).some((b) => b.n >= 10);
+
+    return {
+      vertical: vertical ?? null,
+      buckets,
+      sample_size_warning: meaningful
+        ? null
+        : "n<10 for every bucket; results not statistically meaningful yet",
+      generated_at: new Date().toISOString(),
+    };
+  },
 };
+
+// ── Outcome bucketing ────────────────────────────────────────────────────
+//
+// LeadAssignmentEvent.status uses the AssignmentStatus enum (knowledge/
+// contracts/shared-enums.md): new | visited | pitched | sold | rejected.
+// We normalise into five buckets that match the closed-rate question:
+//
+//   sold        → closed            (the win)
+//   rejected    → rejected
+//   pitched     → pitched_pending   (pitched, no terminal flip yet)
+//   visited     → visited_no_pitch  (visited but never pitched)
+//   new / null  → no_visit          (assignment exists but not visited,
+//                                    or no assignment events at all)
+function mapStatusToBucket(status: string | null): string {
+  switch (status) {
+    case "sold":
+      return "closed";
+    case "rejected":
+      return "rejected";
+    case "pitched":
+      return "pitched_pending";
+    case "visited":
+      return "visited_no_pitch";
+    case "new":
+    case null:
+    default:
+      return "no_visit";
+  }
+}
+
+function scoreStats(
+  scores: number[],
+): { n: number; score_mean: number | null; score_p50: number | null } {
+  if (scores.length === 0) {
+    return { n: 0, score_mean: null, score_p50: null };
+  }
+  const sorted = [...scores].sort((a, b) => a - b);
+  const mean = sorted.reduce((s, v) => s + v, 0) / sorted.length;
+  const mid = Math.floor(sorted.length / 2);
+  const p50 =
+    sorted.length % 2 === 0
+      ? (sorted[mid - 1] + sorted[mid]) / 2
+      : sorted[mid];
+  return {
+    n: sorted.length,
+    score_mean: Math.round(mean * 100) / 100,
+    score_p50: Math.round(p50 * 100) / 100,
+  };
+}
+
+export interface QaByOutcomeSummary {
+  vertical: string | null;
+  buckets: {
+    closed: { n: number; score_mean: number | null; score_p50: number | null };
+    rejected: { n: number; score_mean: number | null; score_p50: number | null };
+    pitched_pending: { n: number; score_mean: number | null; score_p50: number | null };
+    visited_no_pitch: { n: number; score_mean: number | null; score_p50: number | null };
+    no_visit: { n: number; score_mean: number | null; score_p50: number | null };
+  };
+  sample_size_warning: string | null;
+  generated_at: string;
+}
 
 // ── Mappers ──────────────────────────────────────────────────────────────
 
