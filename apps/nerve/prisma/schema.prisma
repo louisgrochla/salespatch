@@ -1033,7 +1033,10 @@ model LeadProfile {
   websiteUrl           String?  @map("website_url")
   websiteQualityScore  Int?     @map("website_quality_score") // 0-100
   googleRating         Float?   @map("google_rating")
-  googleReviewCount    Int?     @map("google_review_count")
+  googleReviewCount    Int?     @map("google_review_count") // lifetime count
+  googleLastReviewAt   DateTime? @map("google_last_review_at") // most recent review timestamp (lifetime)
+  googleReviewsLast30d Int?     @map("google_reviews_last_30d") // reviews in trailing 30 days
+  googleReviewsLast90d Int?     @map("google_reviews_last_90d") // reviews in trailing 90 days
   bestReviews          Json?    @map("best_reviews") // [{ author, rating, text, date }]
   instagramHandle      String?  @map("instagram_handle")
   instagramFollowers   Int?     @map("instagram_followers")
@@ -1064,6 +1067,7 @@ model LeadProfile {
   @@index([qualifierVerdict, profiledAt(sort: Desc)])
   @@index([postcode])
   @@index([igLastPostAt(sort: Desc), igPostsLast90d(sort: Desc)], map: "lead_profiles_ig_recency_idx")
+  @@index([googleLastReviewAt(sort: Desc), googleReviewsLast30d(sort: Desc)], map: "lead_profiles_google_review_recency_idx")
   @@map("lead_profiles")
 }
 
