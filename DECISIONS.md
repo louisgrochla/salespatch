@@ -297,4 +297,61 @@ is the truth — the JSON's value is best-effort metadata.
 
 ---
 
+## 2026-05-15 — photo_roles is a column, not nested under metadata
+
+**Context:** `/spec-site-brief` Phase 2 reads every photo to do brand
+decode; `/build-demo` reads every photo again to classify them for
+placement. No role-map passed between the two — brief's implicit "logo
+is in photo X" never reached the builder, who classified independently.
+Fixing by passing classification forward as `brand-analysis.json.
+photo_roles` raised the question of where to land it in NERVE.
+
+**Tried:** Two options. (1) Stuff `photo_roles` into the existing
+`brand_analyses.metadata Json` column. (2) Add a new top-level
+`photo_roles JSONB` column on `brand_analyses`.
+
+**Result:** Option 1 ingests with zero schema changes — `metadata` is
+opaque passthrough JSON. But the AI layer's learning loop wants to query
+"for vertical=X, what fraction of brief.product_close assignments
+survived to demo.product_close" — that requires GROUP BY / aggregation
+over photo_roles values, which against a nested
+`metadata->'photo_roles'->>'foo.jpg'` path is uglier, slower, and
+GIN-indexable only at the whole-metadata level (not per-key).
+
+**Decision:** Top-level column. Schema migration is one safe ALTER TABLE
+(`JSONB NOT NULL DEFAULT '{}'::jsonb`), and the column can take a
+dedicated GIN index later if the learning queries get heavy. Drift
+tracking on the build side stays in `demo_artefacts.metadata.
+photo_classifications` because that's per-build state (whether the build
+overrode the brief), not the brief's commitment itself — and the
+metadata path is fine for less frequent overrides.
+
+**Watch out for:**
+- The shape of `demo_artefacts.metadata.photo_classifications` changed
+  from `{ filename: role }` to `{ filename: { role, brief_role, drift } }`.
+  Any analytics SQL that queries this column must handle both shapes via
+  `jsonb_typeof(value)`. Backfilling old rows isn't justified — they
+  predate the brief-side commitment, so `brief_role` would always be
+  null anyway.
+- Existing `brand_analyses` rows get `photo_roles = '{}'` by column
+  default. The build-demo skill's fallback path treats an empty map as
+  "no brief commitment, classify from scratch" — same as a pre-sidecar
+  lead. Replays through `/spec-site-brief` create a new `analysis_id`
+  row rather than updating the old one (intentional SL-MAS pattern).
+- The `photo_roles` value enum is replicated in three places:
+  `~/.claude/skills/spec-site-brief/SKILL.md` (Phase 2 sub-section),
+  `~/.claude/commands/build-demo.md` (photo classification table), and
+  implicitly in NERVE-side analytics. The NERVE store does NOT enum-check
+  the role string — only that values are strings. If the enum changes,
+  all three locations need updating; analytics queries against
+  `photo_roles` will silently include the new values.
+
+**Related:** `CHANGELOG/2026-05/2026-05-15_001_brand_analysis_photo_roles.md`.
+Files: `apps/nerve/prisma/schema.prisma`,
+`apps/nerve/prisma/migrations/18_brand_analysis_photo_roles/migration.sql`,
+`apps/nerve/src/lib/sl-mas/brandAnalysisStore.ts`,
+`apps/nerve/src/app/api/ingest/brand-analysis/route.ts`.
+
+---
+
 <!-- New entries go above this line -->

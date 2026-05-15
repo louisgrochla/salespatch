@@ -94,6 +94,14 @@ function validatePayload(p: Partial<BrandAnalysisInput>): string | undefined {
     if (isPresent(v) && (typeof v !== "string" || !/^#[0-9A-Fa-f]{3,8}$/.test(v)))
       return `${k} must be a hex string starting with #`;
   }
+  if (isPresent(p.photo_roles)) {
+    if (typeof p.photo_roles !== "object" || Array.isArray(p.photo_roles))
+      return "photo_roles must be an object { filename: role }";
+    for (const [filename, role] of Object.entries(p.photo_roles)) {
+      if (typeof role !== "string")
+        return `photo_roles["${filename}"] must be a string role`;
+    }
+  }
   return undefined;
 }
 

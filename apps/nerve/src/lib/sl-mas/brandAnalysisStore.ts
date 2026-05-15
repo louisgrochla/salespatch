@@ -28,6 +28,7 @@ export interface BrandAnalysisInput {
   positioning_reference?: string;
   positioning_rationale?: string;
   asset_notes?: string[];
+  photo_roles?: Record<string, string>; // filename → role; Phase 2 commits placement defaults so /build-demo doesn't re-classify
   analysis_markdown?: string;
   source?: string;
   metadata?: Record<string, unknown>;
@@ -58,6 +59,7 @@ export interface BrandAnalysisRow {
   positioning_reference?: string;
   positioning_rationale?: string;
   asset_notes: string[];
+  photo_roles: Record<string, string>;
   analysis_markdown?: string;
   source: string;
   metadata: Record<string, unknown>;
@@ -165,6 +167,7 @@ function inputToCreate(input: BrandAnalysisInput): Prisma.BrandAnalysisCreateInp
     positioningReference: input.positioning_reference ?? null,
     positioningRationale: input.positioning_rationale ?? null,
     assetNotes: input.asset_notes ?? [],
+    photoRoles: (input.photo_roles ?? {}) as Prisma.InputJsonValue,
     analysisMarkdown: input.analysis_markdown ?? null,
     source: input.source ?? "manual_skill",
     metadata: (input.metadata ?? {}) as Prisma.InputJsonValue,
@@ -197,6 +200,7 @@ function rowToAnalysis(row: NonNullable<BrandAnalysisDb>): BrandAnalysisRow {
     positioning_reference: row.positioningReference ?? undefined,
     positioning_rationale: row.positioningRationale ?? undefined,
     asset_notes: row.assetNotes,
+    photo_roles: (row.photoRoles ?? {}) as Record<string, string>,
     analysis_markdown: row.analysisMarkdown ?? undefined,
     source: row.source,
     metadata: (row.metadata ?? {}) as Record<string, unknown>,
