@@ -1211,6 +1211,7 @@ model BrandAnalysis {
   positioningReference  String?  @map("positioning_reference")
   positioningRationale  String?  @map("positioning_rationale")
   assetNotes            String[] @default([]) @map("asset_notes")
+  photoRoles            Json     @default("{}") @map("photo_roles") // { filename: role } map from Phase 2 — build-demo default placement
   analysisMarkdown      String?  @map("analysis_markdown") // Phase 2 verbatim
   source                String   @default("manual_skill")
   metadata              Json     @default("{}")
