@@ -43,6 +43,8 @@ const REQUIRED_SYMBOLS = [
   // Layer-1 (Bugs)
   "BUGS_SYSTEM_PROMPT",
   "buildBugsUserMessage",
+  // Layer-1 dynamic-scan input shape (consumed by buildBugsUserMessage)
+  "DynamicScanSummary",
   // Layer-2 (Brand fidelity)
   "BRAND_FIDELITY_SYSTEM_PROMPT",
   "buildBrandFidelityUserMessage",
