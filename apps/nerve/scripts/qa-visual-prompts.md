@@ -72,8 +72,25 @@ Each layer answers a different question. Combining them into one pass dilutes at
 2. Overlap / clipping
 3. Tap targets (≥ 36×36 px)
 4. Broken images
-5. Above-the-fold CTA presence at 375×812
-6. Form controls (label-input pairing, clipping, fields off-screen)
+5. Above-the-fold primary action — must be a verb-led tappable CTA, NOT a status badge ("CLOSED · BACK AT 8:30"). Status-as-CTA confusion = critical.
+6. CTA hierarchy — same CTA in nav + hero body = warning (redundancy); three or more primary-weight CTAs in hero = warning (dilution).
+7. Live-content honesty — text that looks live (date, status, queue counter) must actually be wired to a date/time JS API. The static-source scan output (see below) tells the model which phrases are hardcoded; mismatch = critical.
+8. Form controls (label-input pairing, clipping, fields off-screen)
+
+**Static-source scan input.** Before Layer 1 runs, `qa-visual-dynamic.ts` greps the demo's HTML for phrases that look live ("Today · Wed 7 May", "OPEN UNTIL 5PM", "BACK AT 8:30", "walk-ins from 12", "sold out", "8 spaces left", "today's specials") and separately checks whether the demo contains any date/time JS APIs (`new Date`, `.getDay`, `.getHours`, `toLocaleDateString`, `Intl.DateTimeFormat`, etc.). The result lands at `outputs/.qa-visual/dynamic-scan.json` with the `DynamicScanSummary` shape (defined in `qa-visual-prompts.ts`):
+
+```json
+{
+  "has_date_logic": true,
+  "has_time_logic": true,
+  "candidates": [
+    { "text": "Today · Wed 7 May", "looks_live": true, "is_dynamic": false, "severity_hint": "critical" }
+  ],
+  "summary": "5 live-looking phrase(s); NO date/time JS APIs found, phrases are hardcoded — critical credibility risk when rep opens demo on a different day"
+}
+```
+
+`buildBugsUserMessage({ ..., dynamicScan })` injects the candidate list and summary into the user message. The Layer 1 vision pass then judges each visible live-looking phrase against this ground-truth: phrases marked `is_dynamic: false` get flagged critical; phrases marked `is_dynamic: true` get an info-level note that vision should confirm matches the rendered DOM. The dynamic-detection is intentionally crude (presence of ANY date/time API flips `is_dynamic` true for all candidates) — a precise per-phrase wiring check would require AST analysis and is out of scope. The crude check is conservative: false positives (flagging a wired phrase as hardcoded) would generate annoying noise, which crude-mode avoids.
 
 ## Layer 2 — Brand fidelity
 

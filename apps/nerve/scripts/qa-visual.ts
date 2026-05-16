@@ -43,6 +43,7 @@ import {
   type BugFinding,
   type BrandFidelityResult,
   type OwnerReaction,
+  type DynamicScanSummary,
 } from "./qa-visual-prompts";
 
 const VIEWPORT = { width: 375, height: 812 };
@@ -86,6 +87,33 @@ function ensureRender(htmlPath: string): { heroPath: string; fullPath: string } 
     throw new Error(`qa-visual-render.ts failed (exit ${result.status})`);
   }
   return { heroPath, fullPath };
+}
+
+/**
+ * Run the static-source dynamic-content scan (PR-B). Spawns
+ * qa-visual-dynamic.ts as a subprocess; reads the result back from
+ * .qa-visual/dynamic-scan.json. The scan is deterministic + fast
+ * (~50ms), so we always run it fresh rather than cache.
+ */
+function runDynamicScan(htmlPath: string): DynamicScanSummary {
+  const outputsDir = dirname(htmlPath);
+  const qaDir = join(outputsDir, ".qa-visual");
+  const scanPath = join(qaDir, "dynamic-scan.json");
+
+  const dynamicScript = resolve(__dirname, "qa-visual-dynamic.ts");
+  const result = spawnSync("npx", ["tsx", dynamicScript, htmlPath, scanPath], {
+    stdio: ["inherit", "pipe", "inherit"],
+  });
+  if (result.status !== 0) {
+    throw new Error(`qa-visual-dynamic.ts failed (exit ${result.status})`);
+  }
+  const raw = JSON.parse(readFileSync(scanPath, "utf8"));
+  return {
+    has_date_logic: raw.has_date_logic,
+    has_time_logic: raw.has_time_logic,
+    candidates: raw.candidates,
+    summary: raw.summary,
+  };
 }
 
 interface BriefSubset {
@@ -238,6 +266,12 @@ async function main(): Promise<void> {
     `qa-visual: rendered (hero=${(heroB64.length / 1024).toFixed(0)}KB b64, full=${(fullB64.length / 1024).toFixed(0)}KB b64)`,
   );
 
+  // Run the static-source dynamic-content scan before Layer 1 so the
+  // bugs prompt has ground-truth on which "live-looking" phrases are
+  // wired vs hardcoded. Cheap, deterministic, no API spend.
+  const dynamicScan = runDynamicScan(htmlPath);
+  console.error(`qa-visual: dynamic-scan — ${dynamicScan.summary}`);
+
   const { brief, brand, artefactId, leadId } = loadContext(htmlPath);
 
   // ── LAYER 1: Bugs ───────────────────────────────────────────────────
@@ -249,6 +283,7 @@ async function main(): Promise<void> {
       businessName: brief.business_name,
       viewportWidth: VIEWPORT.width,
       viewportHeight: VIEWPORT.height,
+      dynamicScan,
     }),
     heroB64,
     fullB64,

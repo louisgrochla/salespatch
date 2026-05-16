@@ -144,9 +144,15 @@ Bug categories to flag:
 
 4. **Broken images** — placeholder backgrounds leaking through, base64 not decoding, alt text rendered as visible body copy because src failed.
 
-5. **Above-the-fold CTA** — at 375×812 (iPhone 13 mini), is the primary call-to-action visible without scrolling? If no, flag as critical.
+5. **Above-the-fold primary action** — at 375×812 (iPhone 13 mini), the hero must contain ONE clear primary CTA that is a tappable verb-led action ("Book a chair", "Tell me what you need", "Find your artist", "Order ahead"). A status badge ("CLOSED · BACK AT 8:30", "Currently fully booked", "OPEN UNTIL 5PM") is NOT a CTA — it tells the user the shop's state but gives them nothing to do. If the hero has no verb-led tappable action above the fold, flag as **critical** with finding "above-the-fold has no primary action — only a status indicator". This is the "status-as-CTA confusion" failure.
 
-6. **Form controls** — labels disconnected from inputs, select chevrons clipped by container, fields off-screen at this width.
+6. **CTA hierarchy** — the hero must have one PRIMARY CTA. Specifically flag two failure modes:
+   - Same CTA appearing twice in the same viewport (e.g. identical "BOOK A CHAIR" label + style in both nav and hero body). That's redundancy, not hierarchy — flag as **warning** ("redundant hero/nav CTA — pick one location").
+   - Three or more primary-weight CTAs competing in the same viewport (e.g. "RESERVE A SEAT" / "SEE WHAT'S ON" / "FIND THE DOOR" all sized + coloured equally). That dilutes attention — flag as **warning** ("three competing primary CTAs in hero — promote one, demote the rest").
+
+7. **Live-content honesty** — text that looks live (today's date, current open/closed status, "back at HH:MM", artist availability, queue counters, "X items remaining") must actually be wired to a date/time API. The user message will include a static-source scan summary listing every live-looking phrase found in the demo's HTML and whether the demo contains any date/time JS APIs. If a phrase is marked "is_dynamic: false" and "severity_hint: critical", that means the page will display stale state the moment the rep opens the demo on a different day — flag as **critical** ("live status hardcoded — will read stale on any date other than the one baked in"). Use the static scan as ground truth; do not second-guess from the screenshot alone (you cannot see whether a phrase is JS-generated).
+
+8. **Form controls** — labels disconnected from inputs, select chevrons clipped by container, fields off-screen at this width.
 
 Severity rubric:
 - "critical" — must-fix-before-ship. A UK shop owner would notice in the first 5 seconds. Hard-gates the build verdict.
@@ -165,17 +171,54 @@ Respond ONLY with valid JSON matching this shape, no markdown fences, no preambl
 }`;
 
 /**
+ * Shape of the dynamic-content scan result produced by
+ * `qa-visual-dynamic.ts`. Layer 1 receives this as additional context
+ * so the vision pass can grade live-content honesty against ground
+ * truth from the source rather than guessing from pixels.
+ */
+export interface DynamicScanCandidate {
+  text: string;
+  looks_live: true;
+  is_dynamic: boolean;
+  severity_hint: "critical" | "info";
+}
+
+export interface DynamicScanSummary {
+  has_date_logic: boolean;
+  has_time_logic: boolean;
+  candidates: DynamicScanCandidate[];
+  summary: string;
+}
+
+/**
  * Build the user-side message for Layer 1.
  * The SDK call sends this as the user message; the manual flow follows it as the spec.
+ *
+ * `dynamicScan` is the result of `qa-visual-dynamic.ts` — pass it
+ * when available so the vision pass can grade live-content honesty
+ * against source-truth rather than guessing from pixels.
  */
 export function buildBugsUserMessage(opts: {
   businessName: string;
   viewportWidth: number;
   viewportHeight: number;
+  dynamicScan?: DynamicScanSummary;
 }): string {
+  let dynamicSection = "";
+  if (opts.dynamicScan) {
+    const ds = opts.dynamicScan;
+    if (ds.candidates.length === 0) {
+      dynamicSection = `\n\nStatic-source scan: ${ds.summary}.`;
+    } else {
+      const lines = ds.candidates
+        .map((c) => `  - "${c.text}" — is_dynamic=${c.is_dynamic}, severity_hint=${c.severity_hint}`)
+        .join("\n");
+      dynamicSection = `\n\nStatic-source scan of the demo's HTML for live-looking content:\n${lines}\n\nSummary: ${ds.summary}.\n\nApply the live-content honesty rule (#7): any phrase marked severity_hint=critical should be flagged as a critical Layer-1 bug if you also see it in the rendered screenshots.`;
+    }
+  }
   return `Here are two screenshots of the ${opts.businessName} demo rendered at ${opts.viewportWidth}×${opts.viewportHeight} (iPhone 13 mini). The first is the above-the-fold hero crop. The second is the full-page scroll.
 
-Flag visual bugs only. No aesthetic judgement, no brand commentary, no opinions on copy quality — those are scored in separate layers.`;
+Flag visual bugs only. No aesthetic judgement, no brand commentary, no opinions on copy quality — those are scored in separate layers.${dynamicSection}`;
 }
 
 // ─────────────────────────────────────────────────────────────────────
