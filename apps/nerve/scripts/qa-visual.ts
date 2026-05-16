@@ -38,6 +38,7 @@ import {
   buildBugsUserMessage,
   buildBrandFidelityUserMessage,
   buildOwnerReactionUserMessage,
+  validateVisualQaResult,
   type VisualQaResult,
   type BugFinding,
   type BrandFidelityResult,
@@ -305,6 +306,16 @@ async function main(): Promise<void> {
     owner_reaction: reactionResult,
     notes: bugsResult.notes,
   };
+
+  // Guard: validate the canonical shape BEFORE writing. A schema drift
+  // here would silently contaminate the warehouse — catch it at the
+  // producer with a clear error message instead.
+  const validation = validateVisualQaResult(result);
+  if (!validation.valid) {
+    console.error(`qa-visual: SCHEMA VIOLATION — refusing to write`);
+    for (const err of validation.errors) console.error(`  - ${err}`);
+    process.exit(2);
+  }
 
   const outPath = join(dirname(htmlPath), "qa-visual-result.json");
   writeFileSync(outPath, JSON.stringify(result, null, 2));

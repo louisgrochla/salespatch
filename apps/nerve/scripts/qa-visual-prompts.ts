@@ -19,7 +19,15 @@
  *
  * The README counterpart is `qa-visual-prompts.md` — same intent in
  * human-readable form for skill text + reviewers.
+ *
+ * Runtime validation: the Zod schemas at the bottom of this file enforce
+ * the canonical shape at write time. qa-visual.ts (and the manual flow)
+ * must call validateVisualQaResult() before writing qa-visual-result.json
+ * so a drift between the TS interfaces and the actual produced shape is
+ * caught at the producer, not at the NERVE ingest endpoint.
  */
+
+import { z } from "zod";
 
 // ─────────────────────────────────────────────────────────────────────
 // Canonical result shape — what both paths must produce
@@ -322,3 +330,128 @@ The brief committed that if the demo is good, your reaction will be:
 
 The rep has put their phone in front of you and is showing you the two screenshots below. React.`;
 }
+
+// ─────────────────────────────────────────────────────────────────────
+// Runtime validation (Zod) — guards every write to qa-visual-result.json
+// ─────────────────────────────────────────────────────────────────────
+
+/**
+ * The Zod schemas mirror the TS interfaces above 1-to-1. They exist for
+ * runtime validation at the producer side (both manual flow and SDK
+ * runner call validateVisualQaResult before writing) so a schema drift
+ * is caught at write time, not at the NERVE ingest endpoint.
+ *
+ * The `_typeParity` const below uses TypeScript's structural typing to
+ * compile-error if the Zod-inferred shape and the hand-written
+ * interfaces drift. If you add a field to one, you'll get a compile
+ * error pointing at the other.
+ */
+
+export const BugSeverity = z.enum(["critical", "warning", "info"]);
+
+export const BugFindingSchema = z.object({
+  severity: BugSeverity,
+  location: z.string().min(1),
+  finding: z.string().min(1),
+});
+
+export const BrandGradeValue = z.union([
+  z.literal(1),
+  z.literal(2),
+  z.literal(3),
+  z.literal(4),
+  z.literal(5),
+]);
+
+export const BrandDimensionGradeSchema = z.object({
+  grade: BrandGradeValue,
+  drift_note: z.string().min(1),
+});
+
+export const BrandFidelityResultSchema = z.object({
+  palette: BrandDimensionGradeSchema,
+  typography: BrandDimensionGradeSchema,
+  logo_placement: BrandDimensionGradeSchema,
+  positioning: BrandDimensionGradeSchema,
+  brand_signature: BrandDimensionGradeSchema,
+  overall_grade: z.number().min(1).max(5),
+  notes: z.string().min(1),
+});
+
+export const OwnerReactionSchema = z.object({
+  recognition: z.enum(["high", "partial", "low"]),
+  first_reaction: z.string().min(1),
+  pushbacks: z.array(z.string().min(1)),
+  would_buy: z.enum(["yes", "maybe", "no"]),
+  buy_reason: z.string().min(1),
+  test_of_success_passes: z.boolean(),
+  test_of_success_note: z.string().min(1),
+});
+
+export const VisualQaResultSchema = z
+  .object({
+    qa_visual_id: z.string().min(1),
+    artefact_id: z.string().nullable(),
+    lead_id: z.string().min(1),
+    demo_path: z.string().min(1),
+    viewport: z.object({
+      width: z.number().int().positive(),
+      height: z.number().int().positive(),
+    }),
+    ran_at: z.string().datetime(),
+    producer: z.enum(["manual_skill", "sdk_runner"]),
+    model: z.string().min(1),
+    bugs: z.array(BugFindingSchema),
+    has_critical: z.boolean(),
+    bug_count: z.number().int().min(0),
+    brand_fidelity: BrandFidelityResultSchema,
+    owner_reaction: OwnerReactionSchema,
+    notes: z.string().optional(),
+  })
+  // Cross-field invariants: catches the producer claiming bug_count or
+  // has_critical that doesn't match the actual bugs array. Cheap insurance
+  // against the producer composing a result file by hand and forgetting
+  // to update one of the derived fields.
+  .refine((r) => r.bug_count === r.bugs.length, {
+    message: "bug_count must equal bugs.length",
+    path: ["bug_count"],
+  })
+  .refine((r) => r.has_critical === r.bugs.some((b) => b.severity === "critical"), {
+    message: "has_critical must be true iff any bug has severity=critical",
+    path: ["has_critical"],
+  });
+
+/**
+ * Validate a candidate VisualQaResult. Returns either `{valid: true,
+ * data}` (data is the parsed/normalised value) or `{valid: false, errors}`
+ * (errors is a flat list of human-readable messages).
+ *
+ * Call this before every writeFileSync of qa-visual-result.json — both
+ * in the SDK runner and in any future programmatic producer. The
+ * manual /build-demo flow obeys the same schema by spec; this validator
+ * is the safety net for when the spec drifts from the implementation.
+ */
+export function validateVisualQaResult(
+  input: unknown,
+): { valid: true; data: z.infer<typeof VisualQaResultSchema> } | { valid: false; errors: string[] } {
+  const parsed = VisualQaResultSchema.safeParse(input);
+  if (parsed.success) return { valid: true, data: parsed.data };
+  const errors = parsed.error.issues.map(
+    (i) => `${i.path.join(".") || "(root)"}: ${i.message}`,
+  );
+  return { valid: false, errors };
+}
+
+/**
+ * Compile-time drift guard. If you add a field to the TS interfaces
+ * above without adding it to the Zod schemas (or vice versa), this
+ * assignment fails to type-check.
+ *
+ * Reading: "the Zod-inferred shape must be assignable to the hand-written
+ * VisualQaResult interface". Bidirectional check via the two intersection
+ * lines.
+ */
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+const _typeParityForwards: VisualQaResult = {} as z.infer<typeof VisualQaResultSchema>;
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+const _typeParityBackwards: z.infer<typeof VisualQaResultSchema> = {} as VisualQaResult;
