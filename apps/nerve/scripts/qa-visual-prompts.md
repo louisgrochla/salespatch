@@ -83,7 +83,7 @@ Each layer answers a different question. Combining them into one pass dilutes at
 
 **Inputs:** hero.png + full.png + the brand decode subset (dominant/neutral/accent hex + pct, display/body font, logo_description, positioning_reference, positioning_rationale, asset_notes).
 
-**Output schema (BrandFidelityResult):**
+**Output schema (BrandFidelityResult):** Each of the five dimensions is a `BrandDimensionGrade` (1-5 integer + drift_note string) per the TS interface.
 
 ```json
 {
@@ -176,6 +176,18 @@ The full per-demo result, written to `outputs/qa-visual-result.json`:
 ```
 
 NERVE accepts this exact shape on `/api/ingest/qa-visual-result` regardless of `producer`. The warehouse cannot tell whether a manual or SDK run produced any given row — by design.
+
+## Runtime validation
+
+Both implementations must call `validateVisualQaResult(candidate)` (exported from `qa-visual-prompts.ts`) **before writing** the canonical result file. The Zod-backed validator checks:
+
+- All required fields present with the right primitive types
+- Enum fields match the documented literals (`severity ∈ {critical,warning,info}`, `recognition ∈ {high,partial,low}`, `would_buy ∈ {yes,maybe,no}`, `producer ∈ {manual_skill,sdk_runner}`)
+- Brand-fidelity dimension grades are integers 1-5; `overall_grade` is a number 1-5
+- Cross-field invariants: `bug_count === bugs.length`, `has_critical` iff any bug has severity=critical
+- `ran_at` parses as ISO 8601
+
+A schema violation aborts the write with a clear error message naming the offending field. This catches the producer composing a result by hand and forgetting a derived field (the most common drift source observed in early manual runs). The SDK runner (`qa-visual.ts`) exits with code 2 on validation failure; the manual flow surfaces the validator errors in the `/build-demo` chat output and writes nothing until the producer fixes them.
 
 ## Producer parity contract
 

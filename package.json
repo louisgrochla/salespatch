@@ -19,8 +19,9 @@
     "mc:start": "npm --prefix apps/mission-control run start",
     "mc:start:safe": "npm --prefix apps/mission-control run start:safe",
     "mc:push:pi": "bash scripts/pi/mc-push-pi.sh",
+    "qa-visual:drift-test": "tsx apps/nerve/scripts/qa-visual-drift-test.ts",
     "test": "npm run build && node --test dist/tests/**/*.test.js",
-    "verify": "npm run typecheck && npm run build && npm test"
+    "verify": "npm run typecheck && npm run build && npm run qa-visual:drift-test && npm test"
   },
   "devDependencies": {
     "@playwright/test": "^1.58.2",
