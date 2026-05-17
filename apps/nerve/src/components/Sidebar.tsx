@@ -61,38 +61,36 @@ export function Sidebar({ counts }: { counts: SidebarCounts }) {
 
   const groups: NavGroup[] = [
     {
-      label: "overview",
+      label: "pipeline",
       items: [
         { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-        { href: "/search", label: "Search", icon: Search },
-        { href: "/ask", label: "Ask", icon: Sparkles },
-      ],
-    },
-    {
-      label: "operations",
-      items: [
         { href: "/sales", label: "Sales Intelligence", icon: BarChart3, count: counts.pitches },
-        { href: "/operations", label: "Operations Log", icon: ClipboardList, count: counts.operations },
-        { href: "/financial", label: "Financial Tracker", icon: Coins, count: counts.revenue },
-        { href: "/product", label: "Product & System", icon: Cpu, count: counts.prompts },
-        { href: "/demos", label: "Demo Library", icon: Boxes, count: counts.demos },
         { href: "/leads", label: "Lead Intelligence", icon: Briefcase, count: counts.leads },
+        { href: "/pipeline", label: "Pivot", icon: Workflow },
+        { href: "/pipeline/episodes", label: "Episodes", icon: GitBranch },
+        { href: "/pipeline/strategies", label: "Strategies", icon: Target },
+        { href: "/demos", label: "Demo Library", icon: Boxes, count: counts.demos },
         { href: "/builds", label: "Customer Builds", icon: Hammer, count: counts.builds },
       ],
     },
     {
-      label: "pipeline",
+      label: "capture",
       items: [
-        { href: "/pipeline", label: "Pivot", icon: Workflow },
-        { href: "/pipeline/episodes", label: "Episodes", icon: GitBranch },
-        { href: "/pipeline/strategies", label: "Strategies", icon: Target },
+        { href: "/notes", label: "Notes", icon: NotebookPen, count: counts.notes },
+        { href: "/operations", label: "Operations Log", icon: ClipboardList, count: counts.operations },
+        { href: "/changelog", label: "Changelog", icon: GitCommit, count: counts.changelog },
+        { href: "/financial", label: "Financial Tracker", icon: Coins, count: counts.revenue },
       ],
     },
     {
-      label: "build",
+      label: "knowledge",
       items: [
-        { href: "/changelog", label: "Changelog", icon: GitCommit, count: counts.changelog },
-        { href: "/notes", label: "Notes", icon: NotebookPen, count: counts.notes },
+        { href: "/ask", label: "Ask", icon: Sparkles },
+        { href: "/search", label: "Search", icon: Search },
+        { href: "/knowledge", label: "Knowledge Base", icon: FileText, count: counts.brand },
+        { href: "/product", label: "Product & System", icon: Cpu, count: counts.prompts },
+        { href: "/legal", label: "Legal & Compliance", icon: Gavel, count: counts.legal },
+        { href: "/system", label: "System Status", icon: Activity },
       ],
     },
     {
@@ -101,14 +99,6 @@ export function Sidebar({ counts }: { counts: SidebarCounts }) {
         { href: "/dissertation", label: "Research Project", icon: GraduationCap, count: counts.sections },
         { href: "/dissertation/literature", label: "Literature", icon: BookOpen, count: counts.literature },
         { href: "/dissertation/methodology", label: "Methodology", icon: Beaker },
-      ],
-    },
-    {
-      label: "reference",
-      items: [
-        { href: "/knowledge", label: "Knowledge Base", icon: FileText, count: counts.brand },
-        { href: "/legal", label: "Legal & Compliance", icon: Gavel, count: counts.legal },
-        { href: "/system", label: "System Status", icon: Activity },
       ],
     },
   ];
