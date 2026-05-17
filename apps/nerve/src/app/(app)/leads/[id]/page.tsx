@@ -26,7 +26,9 @@ import { EmbeddingsPanel } from "./_components/EmbeddingsPanel";
 import { QaVisualPanel } from "./_components/QaVisualPanel";
 import { StripeEventsPanel } from "./_components/StripeEventsPanel";
 import { LeadChatPanel } from "./_components/LeadChatPanel";
+import { BusinessFactsPanel } from "./_components/BusinessFactsPanel";
 import { getLeadSourceIds } from "@/lib/sl-mas/leadEmbeddings";
+import { businessFactStore } from "@/lib/sl-mas/businessFactStore";
 import { isAskAvailable } from "@/lib/anthropic";
 
 export const dynamic = "force-dynamic";
@@ -75,6 +77,7 @@ export default async function LeadDetailPage({
     pitchBriefs,
     latestPitchBrief,
     notes,
+    businessFacts,
   ] = await Promise.all([
     prisma.leadRecord.findUnique({ where: { id } }),
     leadProfileStore.getByLeadId(id),
@@ -94,6 +97,7 @@ export default async function LeadDetailPage({
       orderBy: { updatedAt: "desc" },
       take: 50,
     }),
+    businessFactStore.listForLead(id, 200),
   ]);
 
   const hasSlMasData =
@@ -107,7 +111,8 @@ export default async function LeadDetailPage({
     composerIters.length > 0 ||
     spendRows.length > 0 ||
     pitchBriefs.length > 0 ||
-    notes.length > 0;
+    notes.length > 0 ||
+    businessFacts.length > 0;
 
   if (!lead && !hasSlMasData && !canonicalIdentity) notFound();
 
@@ -317,6 +322,12 @@ export default async function LeadDetailPage({
           updatedAt: s.updatedAt,
           messageCount: s._count.messages,
         }))}
+      />
+
+      <BusinessFactsPanel
+        leadSlug={id}
+        displayName={displayName}
+        facts={businessFacts}
       />
 
       <NotesPanel notes={notes} />
