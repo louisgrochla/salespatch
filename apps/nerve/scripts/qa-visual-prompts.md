@@ -289,8 +289,9 @@ The full per-demo result, written to `outputs/qa-visual-result.json`:
   "customer_reaction": {...},     // PR-C — Layer 5
   "section_grades": [...],        // PR-C — Layer 6 (empty array if no sections)
 
-  "baseline_comparison": {...},   // PR-G — cohort-relative grading (optional)
-  "photo_quality": {...} | null,  // PR-H — opt-in per-photo grading (optional + nullable)
+  "baseline_comparison": {...},        // PR-G — cohort-relative grading (optional)
+  "photo_quality": {...} | null,       // PR-H — opt-in per-photo grading (optional + nullable)
+  "competitor_comparison": {...} | null, // PR-J — opt-in competitor ranking (optional + nullable)
 
   "notes": "optional one-line global summary"
 }
@@ -309,6 +310,8 @@ NERVE accepts this exact shape on `/api/ingest/qa-visual-result` regardless of `
 > **Schema bump in PR-G:** new optional top-level `baseline_comparison` field. Producers fetch the vertical's cohort baseline via `GET /api/read/qa-visual/baselines?vertical=X` at the start of each run, then attach a `BaselineComparison` to the canonical result. The field is OPTIONAL (absent on pre-PR-G producers) but, when present, must conform to `BaselineComparisonSchema`. See "Cohort baselines (PR-G)" below.
 
 > **Schema bump in PR-H:** new opt-in top-level `photo_quality` field. Per-photo grading on focus/composition/lighting/role_fit. Gated default-off (cost: ~£0.075/demo at 15 photos). Field has three states: absent (producer didn't request), null (requested + vision failed), populated (requested + succeeded). NOT part of `failed_layers[]` — gated by request, not by failure-recovery. See "Photo quality (PR-H — opt-in)" below.
+
+> **Schema bump in PR-J:** new opt-in top-level `competitor_comparison` field. Renders top N competitor sites + asks vision to comparatively rank trust-at-glance. Gated on `outputs/competitors.json` being present (captured by the spec-site-brief skill). Same three-state pattern as `photo_quality`. See "Competitor comparison (PR-J — opt-in)" below.
 
 ## Runtime validation
 
@@ -421,6 +424,58 @@ Owner-reaction (Layer 3) accepts richer persona context when available — Compa
 **Cross-field invariants** enforced by Zod:
 - `overall` MUST equal the arithmetic mean of the four sub-grades to 1 d.p. (catches the producer composing a grade block by hand and forgetting to recompute the mean after editing a sub-grade).
 - `weakest_photo_index` MUST point at an existing photo OR be `null` when `photos: []`.
+
+## Competitor comparison (PR-J — opt-in)
+
+**System prompt:** `COMPETITOR_COMPARE_SYSTEM_PROMPT` in `qa-visual-prompts.ts`.
+
+**User message:** `buildCompetitorCompareUserMessage({ thisDemoName, entries })` — lists every entry (this demo + each competitor) with rendered/failed status so the model knows what to expect among the screenshots.
+
+`competitor_comparison` renders the top N competitor sites for the lead's vertical at the same 375×812 mobile viewport this demo was scored at, then runs a comparative-trust vision call. Output is a ranked list + per-entry rationale + one-line takeaway the rep can quote at the door ("you ranked #2 of 4 — better than Anastasia and Bauers, behind Flower Vogue's editorial polish").
+
+**Opt-in trigger:** activates when `outputs/competitors.json` exists (the spec-site-brief skill captures competitor URLs in Phase 1 verify; this layer activates when that capture happened). When the manifest is absent, the layer is skipped entirely and the field stays absent on the result.
+
+**`competitors.json` shape** (written by spec-site-brief):
+
+```json
+{
+  "this_demo_name": "The Bouquet Bar",
+  "competitors": [
+    { "name": "Anastasia Florists", "url": "https://aflorists.com/" },
+    { "name": "Flower Vogue",       "url": "https://www.flowervogueaberdeen.co.uk/" }
+  ]
+}
+```
+
+**Failure isolation:** per-URL renders are independently fault-tolerant. A login wall / 4xx / timeout / network error on competitor 3 doesn't break the comparison — that entry lands with `rendered: false` and a `render_failure_reason`, and the vision pass ranks only the successfully-rendered subset. `MAX_COMPETITORS = 5` caps the cohort for cost predictability; `RENDER_TIMEOUT_MS = 15000` caps each render.
+
+**Output shape (`CompetitorCompareResult` + `CompetitorEntry`):**
+
+```json
+{
+  "competitor_comparison": {
+    "entries": [
+      { "name": "Flower Vogue",    "url": "https://...", "is_this_demo": false, "rendered": true,  "render_failure_reason": null,      "trust_at_glance": 5, "rank": 1, "why": "Editorial-grade hero, clear pricing, real reviews visible" },
+      { "name": "The Bouquet Bar", "url": null,          "is_this_demo": true,  "rendered": true,  "render_failure_reason": null,      "trust_at_glance": 4, "rank": 2, "why": "Strong brand, warm tone, clear enquiry path" },
+      { "name": "Anastasia",       "url": "https://...", "is_this_demo": false, "rendered": true,  "render_failure_reason": null,      "trust_at_glance": 3, "rank": 3, "why": "Functional but feels dated" },
+      { "name": "Bauers",          "url": "https://...", "is_this_demo": false, "rendered": false, "render_failure_reason": "HTTP 403", "trust_at_glance": null, "rank": null, "why": "Could not load to compare" }
+    ],
+    "this_demo_rank": 2,
+    "ranked_total": 3,
+    "takeaway": "Ranked #2 of 3 — beats Anastasia for warmth, loses to Flower Vogue on editorial polish.",
+    "notes": "1 of 4 competitors (Bauers) was behind a 403 wall."
+  }
+}
+```
+
+**Cross-field invariants** enforced by Zod:
+- Exactly one entry must have `is_this_demo: true`.
+- When `rendered: true`, `render_failure_reason` must be null AND `trust_at_glance` + `rank` must be set.
+- When `rendered: false`, `render_failure_reason` must be set AND `trust_at_glance` + `rank` must both be null.
+- `ranked_total` must equal the count of entries with `rendered: true`.
+- `this_demo_rank` must match the rank of the `is_this_demo` entry (or null when that entry failed to render).
+
+**Door-ready takeaway:** the `takeaway` field is the headline the rep can quote. Honest — if this demo ranks last, the takeaway says so. Reps need to know if they're walking in with a weak hand.
 
 ## Producer parity contract
 
