@@ -331,6 +331,24 @@ _Append per round: branch name, PR number, what changed, what's deferred._
 
 ---
 
+### R9 — Visit event ingest (post-audit follow-up, in review)
+
+- **Branch:** `feat/nerve-r9-visit-event-ingest`
+- **CHANGELOG:** `CHANGELOG/2026-05/2026-05-17_022_nerve_r9_visit_event_ingest.md`
+- **Plan:** `apps/nerve/LEADS-OPS-PLAN.md` § R9
+- **Why it landed:** R8 shipped /leads ops view but its visit-time + (future) feedback cells lived on a Supabase live-pull. R9 mirrors the data into NERVE Postgres so the column survives any Supabase outage and so SP feedback text flows into the RAG vault (`/ask`, `/search`, R3 scoped chat) for free.
+- **Shipped:**
+  - `apps/nerve/prisma/migrations/26_visit_events/migration.sql` + `VisitEvent` model in `schema.prisma` (next to `LeadAssignmentEvent`, same Phase B family).
+  - `apps/nerve/src/lib/sl-mas/visitEventStore.ts` — `ingest` / `listForLead` / `listForAssignment` / `aggregateForLead` / `aggregateAcrossLeads`. Append-only, idempotent on `event_id`. Pattern mirrors `leadAssignmentEventStore`.
+  - `apps/nerve/src/app/api/ingest/visit-event/route.ts` — HMAC-signed POST handler sharing `OUTCOME_INGEST_SECRET` with the other Phase B endpoints. Auto-embeds the `feedback` field with `sourceType = "VisitEvent"` so the chunks reach `/ask` and the per-lead scoped chat. Embedding failure is swallowed (the row stays queryable).
+  - `apps/nerve/src/lib/sl-mas/leadEmbeddings.ts` — `getLeadSourceIds()` now picks up `VisitEvent.id`s with non-null `feedback` so R2/R3 surfaces feedback text alongside notes + business facts.
+  - `apps/nerve/src/lib/sl-mas/leadOpsQuery.ts` — visit-time + feedback-count cells switched to NERVE-first via `aggregateAcrossLeads()`. Supabase `fetchVisits()` stays as a fallback for leads with no NERVE rows yet, so R9 is safe to ship before mobile-api wire-up propagates for every lead.
+- **Deferred (out of scope for R9):**
+  - Producer wire-up in mobile-api (`POST /visits` + `PATCH /visits/:id` fan-out to NERVE). Sketched in the changelog with the exact curl.
+  - Backfill of historical Supabase `visits` rows into NERVE — one-off script under `apps/nerve/scripts/backfill-visit-events.ts` if wanted.
+  - Removing the Supabase `fetchVisits` fallback from `leadOpsQuery` entirely. Revisit once mobile-api has propagated to every lead.
+- **Verification:** `npx prisma generate && npx tsc --noEmit` clean. Local DB unavailable — Vercel preview is the verification path. Signed-curl recipe + golden-path walkthrough in the changelog.
+
 ### R8 — Leads operations view (post-audit follow-up, in review)
 
 - **Branch:** `feat/nerve-r8-leads-ops-view`
@@ -366,4 +384,4 @@ _Append per round: branch name, PR number, what changed, what's deferred._
 
 ## Wrap
 
-The six rounds from the original audit are done. R7 + R8 above are post-audit follow-ups — R7 fixed table-rename drift in the demo library, R8 introduces the cross-lead ops surface the audit never planned for. Future surface work of that shape (own plan doc, own PR, own changelog) is encouraged; future bugs of R7's shape belong in `NERVE-ROADMAP.md` as their own tasks rather than reopening this doc.
+The six rounds from the original audit are done. R7 + R8 + R9 above are post-audit follow-ups — R7 fixed table-rename drift in the demo library, R8 introduces the cross-lead ops surface the audit never planned for, R9 mirrors SP visit data into NERVE so the ops view doesn't depend on Supabase being reachable from Vercel and feedback text flows into the RAG vault. Future surface work of that shape (own plan doc, own PR, own changelog) is encouraged; future bugs of R7's shape belong in `NERVE-ROADMAP.md` as their own tasks rather than reopening this doc.
