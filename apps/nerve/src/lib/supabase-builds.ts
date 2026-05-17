@@ -1,5 +1,6 @@
 /**
- * Read-only Supabase client + queries for the customer builds dashboard.
+ * Read-only Supabase client + queries for the customer builds dashboard
+ * and the leads ops view (R8).
  *
  * Lives at /builds in NERVE. Pulls paid + sold leads with their onboarding
  * answers and photos so we can see who's awaiting delivery without bouncing
@@ -16,7 +17,7 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
 let _client: SupabaseClient | null = null;
-function getSupabase(): SupabaseClient | null {
+export function getSupabase(): SupabaseClient | null {
   if (_client) return _client;
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -229,4 +230,115 @@ function parseNotes(raw: string | null): NotesMeta {
   } catch {
     return {};
   }
+}
+
+// ─── R8 live-pull helpers ───────────────────────────────────────────────
+//
+// The R8 leads ops view needs two slices of Supabase data that NERVE doesn't
+// (yet) mirror:
+//
+//   - SP identity — `lead_assignments.user_id` resolves to `sales_users.id`,
+//     which only Supabase knows about. Without this lookup the "assigned
+//     to" column would render a raw UUID. R9 may move salesperson identity
+//     into NERVE via `SalespersonEvent`, but today the canonical name
+//     lookup still lives in Supabase.
+//   - Visit sessions — `visits` records SP time-on-business; R9 will move
+//     these into NERVE via a `VisitEvent` ingest. For R8 we live-pull so
+//     the column has something to render.
+//
+// Both degrade to empty arrays when `SUPABASE_SERVICE_ROLE_KEY` is missing
+// (the local dev case) — the caller renders `—`.
+
+export interface SalesUser {
+  userId: string;
+  displayName: string;
+  areaPostcode: string | null;
+}
+
+interface RawSalesUser {
+  id: string;
+  display_name: string | null;
+  first_name: string | null;
+  last_name: string | null;
+  area_postcode: string | null;
+}
+
+/**
+ * Pull every salesperson so the ops view can map `userId` → display name.
+ * Display-name fallback chain: explicit display_name → "First Last" →
+ * raw user id (last-resort — uniquely identifies but ugly).
+ */
+export async function fetchSalesUsers(): Promise<SalesUser[]> {
+  const sb = getSupabase();
+  if (!sb) return [];
+  const { data, error } = await sb
+    .from('sales_users')
+    .select('id, display_name, first_name, last_name, area_postcode')
+    .limit(1000);
+  if (error) {
+    console.error('[ops] sales_users fetch failed:', error.message);
+    return [];
+  }
+  return ((data ?? []) as RawSalesUser[]).map((u) => ({
+    userId: u.id,
+    displayName: pickDisplayName(u),
+    areaPostcode: u.area_postcode,
+  }));
+}
+
+function pickDisplayName(u: RawSalesUser): string {
+  if (u.display_name && u.display_name.trim()) return u.display_name.trim();
+  const composed = [u.first_name, u.last_name].filter(Boolean).join(' ').trim();
+  return composed || u.id;
+}
+
+export interface VisitSummary {
+  assignmentId: string;
+  durationMinutes: number;
+  startedAt: string | null;
+}
+
+interface RawVisit {
+  lead_assignment_id: string | null;
+  duration_minutes: number | null;
+  started_at: string | null;
+}
+
+/**
+ * Sum visit duration per assignment id. Filters out NULL durations (an
+ * in-progress visit hasn't recorded a leave-time yet) and unknown
+ * assignment ids. R9 supersedes this by reading from NERVE's
+ * `visit_events`; this is the live-pull placeholder.
+ */
+export async function fetchVisits(
+  assignmentIds: string[],
+): Promise<Map<string, VisitSummary>> {
+  const result = new Map<string, VisitSummary>();
+  if (assignmentIds.length === 0) return result;
+  const sb = getSupabase();
+  if (!sb) return result;
+  const { data, error } = await sb
+    .from('visits')
+    .select('lead_assignment_id, duration_minutes, started_at')
+    .in('lead_assignment_id', assignmentIds);
+  if (error) {
+    console.error('[ops] visits fetch failed:', error.message);
+    return result;
+  }
+  for (const v of (data ?? []) as RawVisit[]) {
+    if (!v.lead_assignment_id) continue;
+    const prev = result.get(v.lead_assignment_id) ?? {
+      assignmentId: v.lead_assignment_id,
+      durationMinutes: 0,
+      startedAt: null as string | null,
+    };
+    if (typeof v.duration_minutes === 'number') {
+      prev.durationMinutes += v.duration_minutes;
+    }
+    if (v.started_at && (!prev.startedAt || v.started_at > prev.startedAt)) {
+      prev.startedAt = v.started_at;
+    }
+    result.set(v.lead_assignment_id, prev);
+  }
+  return result;
 }
