@@ -4,7 +4,7 @@ import { prisma } from "@/lib/db";
  * R3 (ask-the-business): given a lead's polymorphic id (LeadRecord cuid OR
  * SL-MAS slug), return every `Embedding.sourceId` that's tied to it today.
  *
- * Today, three source types are embedded per-lead in NERVE's pipeline:
+ * Today, four source types are embedded per-lead in NERVE's pipeline:
  *
  * - `LeadRecord` (sourceId = LeadRecord.id, the cuid) — written by
  *   `apps/nerve/src/app/(app)/leads/actions.ts`
@@ -13,6 +13,10 @@ import { prisma } from "@/lib/db";
  * - `BusinessFact` (sourceId = BusinessFact.id, the cuid) where
  *   `leadSlug` matches — written by `/api/ingest/business-fact` and the
  *   inline `addFact` server action (R4)
+ * - `VisitEvent` (sourceId = VisitEvent.id, the cuid) where `leadId`
+ *   matches — written by `/api/ingest/visit-event` (R9) when the SP
+ *   leaves per-visit feedback. Only feedback rows are embedded; pure
+ *   arrived/departed timing rows have no embeddable text.
  *
  * When sl-mas stores start writing embeddings for site briefs / brand /
  * demos / qa, those source IDs will need to be added here too. Until
@@ -25,7 +29,7 @@ import { prisma } from "@/lib/db";
  * "filter wide open".
  */
 export async function getLeadSourceIds(leadIdOrSlug: string): Promise<string[]> {
-  const [lead, notes, facts] = await Promise.all([
+  const [lead, notes, facts, visits] = await Promise.all([
     prisma.leadRecord.findUnique({
       where: { id: leadIdOrSlug },
       select: { id: true },
@@ -38,10 +42,18 @@ export async function getLeadSourceIds(leadIdOrSlug: string): Promise<string[]> 
       where: { leadSlug: leadIdOrSlug },
       select: { id: true },
     }),
+    prisma.visitEvent.findMany({
+      where: {
+        leadId: leadIdOrSlug,
+        feedback: { not: null },
+      },
+      select: { id: true },
+    }),
   ]);
   return [
     ...(lead ? [lead.id] : []),
     ...notes.map((n) => n.id),
     ...facts.map((f) => f.id),
+    ...visits.map((v) => v.id),
   ];
 }
