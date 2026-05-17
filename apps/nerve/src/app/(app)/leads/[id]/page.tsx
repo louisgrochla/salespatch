@@ -12,12 +12,19 @@ import { siteBriefStore } from "@/lib/sl-mas/siteBriefStore";
 import { brandAnalysisStore } from "@/lib/sl-mas/brandAnalysisStore";
 import { demoArtefactStore } from "@/lib/sl-mas/demoArtefactStore";
 import { qaResultStore } from "@/lib/sl-mas/qaResultStore";
+import { qaVisualResultStore } from "@/lib/sl-mas/qaVisualResultStore";
 import { leadAssignmentEventStore } from "@/lib/sl-mas/leadAssignmentEventStore";
 import { onboardingResponseStore } from "@/lib/sl-mas/onboardingResponseStore";
 import { composerIterationStore } from "@/lib/sl-mas/composerIterationStore";
 import { spendLedgerStore } from "@/lib/sl-mas/spendLedgerStore";
 import { businessIdentityStore } from "@/lib/sl-mas/businessIdentityStore";
 import { pitchBriefStore } from "@/lib/sl-mas/pitchBriefStore";
+import { stripeEventStore } from "@/lib/sl-mas/stripeEventStore";
+import { Section, Panel, Row, Swatch, formatIso, safeHost, outcomeColor } from "./_components/primitives";
+import { NotesPanel } from "./_components/NotesPanel";
+import { EmbeddingsPanel } from "./_components/EmbeddingsPanel";
+import { QaVisualPanel } from "./_components/QaVisualPanel";
+import { StripeEventsPanel } from "./_components/StripeEventsPanel";
 
 export const dynamic = "force-dynamic";
 
@@ -58,11 +65,13 @@ export default async function LeadDetailPage({
     demos,
     latestDemo,
     qaResults,
+    qaVisualResults,
     assignmentEvents,
     composerIters,
     spendRows,
     pitchBriefs,
     latestPitchBrief,
+    notes,
   ] = await Promise.all([
     prisma.leadRecord.findUnique({ where: { id } }),
     leadProfileStore.getByLeadId(id),
@@ -71,11 +80,17 @@ export default async function LeadDetailPage({
     demoArtefactStore.listForLead(id, 20),
     demoArtefactStore.latestForLead(id),
     qaResultStore.listForLead(id, 20),
+    qaVisualResultStore.listForLead(id, 20),
     leadAssignmentEventStore.listForLead(id, 50),
     composerIterationStore.listByLead(id, 20),
     spendLedgerStore.listRecent(200, { lead_id: id }),
     pitchBriefStore.listForLead(id, 10),
     pitchBriefStore.latestForLead(id),
+    prisma.note.findMany({
+      where: { relatedSlug: id },
+      orderBy: { updatedAt: "desc" },
+      take: 50,
+    }),
   ]);
 
   const hasSlMasData =
@@ -84,10 +99,12 @@ export default async function LeadDetailPage({
     !!brand ||
     demos.length > 0 ||
     qaResults.length > 0 ||
+    qaVisualResults.length > 0 ||
     assignmentEvents.length > 0 ||
     composerIters.length > 0 ||
     spendRows.length > 0 ||
-    pitchBriefs.length > 0;
+    pitchBriefs.length > 0 ||
+    notes.length > 0;
 
   if (!lead && !hasSlMasData && !canonicalIdentity) notFound();
 
@@ -115,6 +132,44 @@ export default async function LeadDetailPage({
   const onboarding = latestAssignmentId
     ? await onboardingResponseStore.getByLeadAssignmentId(latestAssignmentId)
     : null;
+
+  // R2: Stripe events across every assignment ever tied to this lead. A
+  // lead might have been re-assigned, so iterate the assignment-event log
+  // for unique assignment ids rather than only the latest.
+  const assignmentIds = Array.from(
+    new Set(
+      assignmentEvents
+        .map((e) => e.assignment_id)
+        .filter((v): v is string => !!v),
+    ),
+  );
+  const stripeEvents = await stripeEventStore.listForAssignments(
+    assignmentIds,
+    50,
+  );
+
+  // R2: RAG coverage for this lead — what does the vault actually know?
+  // Aggregate embeddings whose sourceId matches any of the records we've
+  // fetched for this lead. Today only LeadRecord and Note get auto-embedded
+  // per NERVE's existing pipeline, but the query is forward-compatible: if
+  // sl-mas stores start writing embeddings, those rows will appear here
+  // without further code changes.
+  const knownSourceIds = [
+    ...(lead ? [lead.id] : []),
+    ...notes.map((n) => n.id),
+  ];
+  const embeddingGroups = knownSourceIds.length > 0
+    ? await prisma.embedding.groupBy({
+        by: ["sourceType"],
+        where: { sourceId: { in: knownSourceIds } },
+        _count: { _all: true },
+        _max: { createdAt: true },
+      })
+    : [];
+  const totalEmbeddingChunks = embeddingGroups.reduce(
+    (s, g) => s + g._count._all,
+    0,
+  );
 
   const subtitleBits: string[] = [];
   if (lead?.contactedStatus) subtitleBits.push(lead.contactedStatus.replace("_", " "));
@@ -237,6 +292,8 @@ export default async function LeadDetailPage({
           )}
         </section>
       )}
+
+      <NotesPanel notes={notes} />
 
       {lead && (
         <Section title="Lead record">
@@ -527,6 +584,8 @@ export default async function LeadDetailPage({
         </Section>
       )}
 
+      <QaVisualPanel rows={qaVisualResults} />
+
       {profile && (
         <Section
           title="Lead profile"
@@ -682,6 +741,8 @@ export default async function LeadDetailPage({
         </Section>
       )}
 
+      <StripeEventsPanel events={stripeEvents} />
+
       {pitchLog.length > 0 && (
         <Section
           title="Pitch history"
@@ -809,6 +870,16 @@ export default async function LeadDetailPage({
         </Section>
       )}
 
+      <EmbeddingsPanel
+        totalChunks={totalEmbeddingChunks}
+        groups={embeddingGroups.map((g) => ({
+          sourceType: g.sourceType,
+          count: g._count._all,
+          lastEmbeddedAt: g._max.createdAt,
+        }))}
+        sourceRecordCount={knownSourceIds.length}
+      />
+
       <p className="font-mono text-2xs text-fg-dim pt-2">
         id <span className="text-fg-muted">{id}</span>{" "}
         {lead
@@ -821,97 +892,3 @@ export default async function LeadDetailPage({
   );
 }
 
-function Section({
-  title,
-  subtitle,
-  children,
-}: {
-  title: string;
-  subtitle?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <section>
-      <div className="flex items-baseline justify-between mb-2 gap-4">
-        <h2 className="font-sans text-base font-medium text-fg">{title}</h2>
-        {subtitle && (
-          <div className="font-mono text-2xs text-fg-dim text-right">{subtitle}</div>
-        )}
-      </div>
-      {children}
-    </section>
-  );
-}
-
-function Panel({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="border border-border bg-bg-panel divide-y divide-border">
-      {children}
-    </div>
-  );
-}
-
-function Row({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div className="grid grid-cols-[10rem_1fr] gap-3 px-4 py-2">
-      <div className="h-section pt-0.5">{label}</div>
-      <div className="font-mono text-xs text-fg">{children}</div>
-    </div>
-  );
-}
-
-function Swatch({
-  hex,
-  label,
-  pct,
-}: {
-  hex?: string;
-  label: string;
-  pct?: number;
-}) {
-  if (!hex) return null;
-  return (
-    <div className="flex items-center gap-2 font-mono text-2xs">
-      <span
-        className="inline-block w-7 h-7 border border-border"
-        style={{ backgroundColor: hex }}
-      />
-      <div>
-        <div className="text-fg">{hex}</div>
-        <div className="text-fg-dim">
-          {label}
-          {pct !== undefined ? ` ${pct}%` : ""}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function formatIso(iso: string | undefined | null): string {
-  if (!iso) return "—";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return iso;
-  return d.toISOString().replace("T", " ").slice(0, 16) + "Z";
-}
-
-function safeHost(url?: string): string | undefined {
-  if (!url) return undefined;
-  try {
-    return new URL(url).hostname;
-  } catch {
-    return url;
-  }
-}
-
-function outcomeColor(o: string): string {
-  switch (o) {
-    case "closed":
-      return "text-status-closed";
-    case "rejected":
-      return "text-status-rejected";
-    case "followup":
-      return "text-status-followup";
-    default:
-      return "text-fg-muted";
-  }
-}

@@ -107,6 +107,22 @@ export const stripeEventStore = {
     return rows.map(rowToEvent);
   },
 
+  // R2: lead-detail page needs events across every assignment a lead has
+  // ever had (in case the lead has been re-assigned). Empty `assignmentIds`
+  // short-circuits to avoid Prisma generating an `IN ()` Postgres syntax error.
+  async listForAssignments(
+    assignmentIds: string[],
+    limit = 100,
+  ): Promise<StripeEventRow[]> {
+    if (assignmentIds.length === 0) return [];
+    const rows = await prisma.stripeEvent.findMany({
+      where: { assignmentId: { in: assignmentIds } },
+      orderBy: { occurredAt: "desc" },
+      take: limit,
+    });
+    return rows.map(rowToEvent);
+  },
+
   async listByType(type: string, limit = 100): Promise<StripeEventRow[]> {
     const rows = await prisma.stripeEvent.findMany({
       where: { type },
