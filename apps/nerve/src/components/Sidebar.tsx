@@ -9,6 +9,7 @@ import {
   BookOpen,
   Boxes,
   Briefcase,
+  CheckCircle2,
   ClipboardList,
   Coins,
   Cpu,
@@ -54,6 +55,7 @@ export interface SidebarCounts {
   legal?: number;
   changelog?: number;
   notes?: number;
+  qaVisual?: number;
 }
 
 export function Sidebar({ counts }: { counts: SidebarCounts }) {
@@ -70,6 +72,7 @@ export function Sidebar({ counts }: { counts: SidebarCounts }) {
         { href: "/pipeline/episodes", label: "Episodes", icon: GitBranch },
         { href: "/pipeline/strategies", label: "Strategies", icon: Target },
         { href: "/demos", label: "Demo Library", icon: Boxes, count: counts.demos },
+        { href: "/qa", label: "Visual QA", icon: CheckCircle2, count: counts.qaVisual },
         { href: "/builds", label: "Customer Builds", icon: Hammer, count: counts.builds },
       ],
     },

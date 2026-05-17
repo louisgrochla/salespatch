@@ -199,7 +199,7 @@ Mark a round complete by filling in the PR column and ticking the box below.
 - [ ] R3 — Ask-the-business chat _(in review on `feat/nerve-rethink-r3-ask-business`)_
 - [ ] R4 — BusinessFact model + UI _(in review on `feat/nerve-rethink-r4-business-facts`)_
 - [ ] R5 — External RAG API _(in review on `feat/nerve-rethink-r5-rag-api`)_
-- [ ] R6 — Visual-QA surface + finish stubs
+- [ ] R6 — Visual-QA surface + finish stubs _(in review on `feat/nerve-rethink-r6-qa-surface`)_
 
 ---
 
@@ -317,3 +317,20 @@ _Append per round: branch name, PR number, what changed, what's deferred._
   - `knowledge/contracts/api-surface.md` — NERVE section added covering read + RAG + ingest + public endpoints, plus a pointer to the rag-api contract.
 - **Deferred:** Streaming responses (SSE) for `/api/ask`. Tool use. Server-side session persistence via `/api/ask` (today only the web UI creates `ChatSession` rows; the API is one-shot). Consumer-side wire-ups in iOS / Pi runtime / sales-dashboard — those happen app-side, not NERVE-side.
 - **Verification:** `npx tsc --noEmit` clean. Test via signed curl once on Vercel preview. Cost & latency notes in the contract doc so any future consumer scopes its call rate appropriately.
+
+### R6 — Visual-QA surface + finish stubs
+
+- **Branch:** `feat/nerve-rethink-r6-qa-surface`
+- **CHANGELOG:** `CHANGELOG/2026-05/2026-05-17_019_nerve_rethink_r6_qa_surface.md`
+- **Shipped:**
+  - New `/qa` operator page promoting the visual-QA stack from CLI-only / markdown-report into a first-class NERVE surface. Sections: state of play (total reviews + critical rate over last 50 + reviews-this-week + latest-run), cohort baselines (medians + cohort rates via `qaVisualResultStore.computeBaselines`, hidden below n=10), latest critical bugs (top three findings per row), recent reviews table with filter form (critical-only / lead / vertical).
+  - Added "Visual QA" entry under the `pipeline` sidebar group with a live count. `loadCounts` in `(app)/layout.tsx` extended to query `prisma.qaVisualResult.count()`.
+- **Stub-page handling (re: audit's "finish stubs"):** R1 already labelled `/product` Stage 6 placeholders with `planned` pills + framer copy and gave `/knowledge` / `/legal` narrative intros. R6 leaves them as-is — the "stub-or-real rule" was applied with the "clearly label" branch, which is the honest call until those pages have real demand.
+- **Deferred:** Per-layer drill-down (today the page shows the top three critical bugs; drilling into brand-fidelity / customer-reaction / section-grades JSON is one click away via `/leads/[id]` which already has the per-lead `QaVisualPanel` from R2). Vertical autocomplete on the filter form. Trend chart (critical-rate over time). All low-day-1-leverage; revisit if the QA cohort grows past a few hundred reviews.
+- **Verification:** `npx tsc --noEmit` clean. Local DB unavailable — Vercel preview is the verification path.
+
+---
+
+## Wrap
+
+With R6 in review, every round in this audit is either shipped or in review. The audit is the live source of truth across sessions; when each PR merges, flip the checkbox at the top and move on. Future visual / RAG / data-layer work on NERVE should land in its own roadmap entry (or extend `NERVE-ROADMAP.md` directly) rather than reopening this doc.
