@@ -35,14 +35,23 @@ import {
   BUGS_SYSTEM_PROMPT,
   BRAND_FIDELITY_SYSTEM_PROMPT,
   OWNER_REACTION_SYSTEM_PROMPT,
+  VOICE_CONSISTENCY_SYSTEM_PROMPT,
+  CUSTOMER_REACTION_SYSTEM_PROMPT,
+  SECTION_GRADING_SYSTEM_PROMPT,
   buildBugsUserMessage,
   buildBrandFidelityUserMessage,
   buildOwnerReactionUserMessage,
+  buildVoiceConsistencyUserMessage,
+  buildCustomerReactionUserMessage,
+  buildSectionGradingUserMessage,
   validateVisualQaResult,
   type VisualQaResult,
   type BugFinding,
   type BrandFidelityResult,
   type OwnerReaction,
+  type VoiceConsistencyResult,
+  type CustomerReaction,
+  type SectionGrade,
   type DynamicScanSummary,
 } from "./qa-visual-prompts";
 
@@ -124,6 +133,9 @@ interface BriefSubset {
   diagnosis: string;
   test_of_success: string;
   brief_id: string | null;
+  vertical: string | null;
+  /** Voice quotes the brief committed to preserving in the demo (Layer 4 input). */
+  voice_quotes: string[];
 }
 
 interface BrandAnalysisSubset {
@@ -139,6 +151,14 @@ interface BrandAnalysisSubset {
   positioning_reference: string;
   positioning_rationale: string;
   asset_notes?: string[];
+  /** Voice quotes — lives on brand-analysis.json per the spec-site-brief skill. Brief.json may also carry these. */
+  voice_quotes?: string[];
+}
+
+interface SectionSlice {
+  index: number;
+  label: string;
+  path: string;
 }
 
 function loadContext(htmlPath: string): {
@@ -164,6 +184,16 @@ function loadContext(htmlPath: string): {
     ? JSON.parse(readFileSync(artefactPath, "utf8"))
     : null;
 
+  // Voice quotes can live on either brief.json (Layer 4 input per the
+  // spec-site-brief skill) OR brand-analysis.json. Prefer brand-analysis
+  // (Phase 2 of the brief skill writes voice_quotes there) and fall
+  // back to brief if absent.
+  const voiceQuotes: string[] = Array.isArray(brand.voice_quotes)
+    ? brand.voice_quotes
+    : Array.isArray(brief.voice_quotes)
+      ? brief.voice_quotes
+      : [];
+
   return {
     brief: {
       business_name: brief.business_name,
@@ -173,6 +203,8 @@ function loadContext(htmlPath: string): {
       diagnosis: brief.diagnosis,
       test_of_success: brief.test_of_success,
       brief_id: brief.brief_id,
+      vertical: brief.vertical ?? null,
+      voice_quotes: voiceQuotes,
     },
     brand: {
       dominant_hex: brand.dominant_hex,
@@ -212,26 +244,21 @@ async function callVision(
   client: Anthropic,
   systemPrompt: string,
   userMessage: string,
-  heroB64: string,
-  fullB64: string,
+  imageB64s: string[],
 ): Promise<string> {
   const msg = await client.messages.create({
     model: MODEL,
-    max_tokens: 2000,
+    max_tokens: 3500,
     system: systemPrompt,
     messages: [
       {
         role: "user",
         content: [
           { type: "text", text: userMessage },
-          {
-            type: "image",
-            source: { type: "base64", media_type: "image/png", data: heroB64 },
-          },
-          {
-            type: "image",
-            source: { type: "base64", media_type: "image/png", data: fullB64 },
-          },
+          ...imageB64s.map((data) => ({
+            type: "image" as const,
+            source: { type: "base64" as const, media_type: "image/png" as const, data },
+          })),
         ],
       },
     ],
@@ -241,6 +268,30 @@ async function callVision(
     throw new Error("vision call returned no text block");
   }
   return text.text;
+}
+
+/**
+ * Load the per-section slice paths from the renderer's
+ * render-result.json. Returns empty array if the file is missing
+ * (running against a demo rendered by a pre-PR-C renderer) or if the
+ * renderer detected no sections.
+ */
+function loadSectionSlices(htmlPath: string): SectionSlice[] {
+  const renderResultPath = join(dirname(htmlPath), ".qa-visual", "render-result.json");
+  if (!existsSync(renderResultPath)) return [];
+  try {
+    const raw = JSON.parse(readFileSync(renderResultPath, "utf8"));
+    if (!Array.isArray(raw.sections)) return [];
+    return raw.sections
+      .filter((s: { path?: string }) => typeof s.path === "string" && existsSync(s.path))
+      .map((s: { index: number; label: string; path: string }) => ({
+        index: s.index,
+        label: s.label,
+        path: s.path,
+      }));
+  } catch {
+    return [];
+  }
 }
 
 async function main(): Promise<void> {
@@ -274,6 +325,12 @@ async function main(): Promise<void> {
 
   const { brief, brand, artefactId, leadId } = loadContext(htmlPath);
 
+  // Load per-section slices (PR-C). If the renderer was pre-PR-C or the
+  // page has no sections, sectionSlices is [] and Layer 6 emits an empty
+  // section_grades array.
+  const sectionSlices = loadSectionSlices(htmlPath);
+  console.error(`qa-visual: sections=${sectionSlices.length}`);
+
   // ── LAYER 1: Bugs ───────────────────────────────────────────────────
   console.error(`qa-visual: layer 1 (bugs)...`);
   const bugsRaw = await callVision(
@@ -285,8 +342,7 @@ async function main(): Promise<void> {
       viewportHeight: VIEWPORT.height,
       dynamicScan,
     }),
-    heroB64,
-    fullB64,
+    [heroB64, fullB64],
   );
   const bugsResult = parseJsonResponse<{ bugs: BugFinding[]; notes?: string }>(bugsRaw);
 
@@ -299,8 +355,7 @@ async function main(): Promise<void> {
       businessName: brief.business_name,
       brandAnalysis: brand,
     }),
-    heroB64,
-    fullB64,
+    [heroB64, fullB64],
   );
   const brandResult = parseJsonResponse<BrandFidelityResult>(brandRaw);
 
@@ -317,10 +372,59 @@ async function main(): Promise<void> {
       diagnosis: brief.diagnosis,
       testOfSuccess: brief.test_of_success,
     }),
-    heroB64,
-    fullB64,
+    [heroB64, fullB64],
   );
   const reactionResult = parseJsonResponse<OwnerReaction>(reactionRaw);
+
+  // ── LAYER 4: Voice consistency (PR-C) ───────────────────────────────
+  console.error(`qa-visual: layer 4 (voice consistency, ${brief.voice_quotes.length} quotes)...`);
+  const voiceRaw = await callVision(
+    client,
+    VOICE_CONSISTENCY_SYSTEM_PROMPT,
+    buildVoiceConsistencyUserMessage({
+      businessName: brief.business_name,
+      voiceQuotes: brief.voice_quotes,
+    }),
+    [heroB64, fullB64],
+  );
+  const voiceResult = parseJsonResponse<VoiceConsistencyResult>(voiceRaw);
+
+  // ── LAYER 5: Customer reaction (PR-C) ───────────────────────────────
+  console.error(`qa-visual: layer 5 (customer reaction)...`);
+  const customerRaw = await callVision(
+    client,
+    CUSTOMER_REACTION_SYSTEM_PROMPT,
+    buildCustomerReactionUserMessage({
+      businessName: brief.business_name,
+      businessType: brief.business_type,
+      address: brief.address,
+      vertical: brief.vertical,
+    }),
+    [heroB64, fullB64],
+  );
+  const customerResult = parseJsonResponse<CustomerReaction>(customerRaw);
+
+  // ── LAYER 6: Section grading (PR-C) ─────────────────────────────────
+  let sectionGrades: SectionGrade[] = [];
+  if (sectionSlices.length > 0) {
+    console.error(`qa-visual: layer 6 (section grading, ${sectionSlices.length} slices)...`);
+    const sectionImagesB64 = sectionSlices.map((s) =>
+      readFileSync(s.path).toString("base64"),
+    );
+    const sectionRaw = await callVision(
+      client,
+      SECTION_GRADING_SYSTEM_PROMPT,
+      buildSectionGradingUserMessage({
+        businessName: brief.business_name,
+        sectionLabels: sectionSlices.map((s) => s.label),
+      }),
+      sectionImagesB64,
+    );
+    const sectionParsed = parseJsonResponse<{ section_grades: SectionGrade[] }>(sectionRaw);
+    sectionGrades = sectionParsed.section_grades;
+  } else {
+    console.error(`qa-visual: layer 6 (section grading) — skipped, no slices`);
+  }
 
   // ── Compose canonical result ────────────────────────────────────────
   const ranAt = new Date().toISOString();
@@ -339,6 +443,9 @@ async function main(): Promise<void> {
     bug_count: bugsResult.bugs.length,
     brand_fidelity: brandResult,
     owner_reaction: reactionResult,
+    voice_consistency: voiceResult,
+    customer_reaction: customerResult,
+    section_grades: sectionGrades,
     notes: bugsResult.notes,
   };
 
@@ -359,13 +466,23 @@ async function main(): Promise<void> {
   const critCount = result.bugs.filter((b) => b.severity === "critical").length;
   const warnCount = result.bugs.filter((b) => b.severity === "warning").length;
   const infoCount = result.bugs.filter((b) => b.severity === "info").length;
+  const sectionMean =
+    result.section_grades.length > 0
+      ? (
+          result.section_grades.reduce((acc, s) => acc + s.grade, 0) /
+          result.section_grades.length
+        ).toFixed(1)
+      : "n/a";
   console.error(
     `qa-visual: bugs=${result.bug_count} ` +
       `(${critCount}c/${warnCount}w/${infoCount}i)` +
       (result.has_critical ? " HAS_CRITICAL" : "") +
       ` brand=${result.brand_fidelity.overall_grade.toFixed(1)}/5` +
-      ` reaction=${result.owner_reaction.would_buy.toUpperCase()}` +
-      ` recognition=${result.owner_reaction.recognition}` +
+      ` voice=${result.voice_consistency.overall_grade}/5` +
+      ` owner=${result.owner_reaction.would_buy.toUpperCase()}` +
+      ` customer=${result.customer_reaction.would_act.toUpperCase()}` +
+      ` trust=${result.customer_reaction.trust_at_glance}` +
+      ` sections=${sectionMean}/5 (n=${result.section_grades.length})` +
       ` test_pass=${result.owner_reaction.test_of_success_passes}`,
   );
   console.error(`qa-visual: result → ${outPath}`);

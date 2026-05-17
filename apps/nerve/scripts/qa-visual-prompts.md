@@ -165,6 +165,103 @@ Each layer answers a different question. Combining them into one pass dilutes at
 
 **Test of success** — every brief commits to one specific reaction line ("wait, that's my pink wrap" / "how did you know we sell out by lunchtime?"). The owner-reaction prompt receives that line and grades whether the rendered demo plausibly triggers it.
 
+## Layer 4 — Voice consistency (PR-C)
+
+**System prompt:** `VOICE_CONSISTENCY_SYSTEM_PROMPT` in `qa-visual-prompts.ts`.
+
+**User message:** `buildVoiceConsistencyUserMessage({ businessName, voiceQuotes })`.
+
+**Inputs:** hero.png + full.png + the brief's `voice_quotes[]` array (lifted from `outputs/brand-analysis.json` first, then `outputs/brief.json` as fallback).
+
+**Output schema (VoiceConsistencyResult):**
+
+```json
+{
+  "quotes_preserved": [
+    { "quote": "Beautiful flowers for all occasions", "rendered": true, "near_verbatim": true, "location_if_rendered": "hero h1" },
+    { "quote": "DM to contact or enquire 🩷", "rendered": false, "near_verbatim": false, "location_if_rendered": null }
+  ],
+  "voice_drift_phrases": [
+    { "rendered": "Welcome to our premier flower experience", "why_off": "generic-template opener; brief said warm + personal, this reads corporate" }
+  ],
+  "overall_grade": 4,
+  "notes": "Most quotes preserved; one minor opener drift in the About section."
+}
+```
+
+**Two-pass grading:**
+1. **Quote preservation** — for each `brief.voice_quotes[]` entry, did the build keep it verbatim or near-verbatim, and where? Verbatim = exact match. Near-verbatim = minor case/punctuation drift but the spirit intact. Missing = build dropped or paraphrased it.
+2. **Voice drift detection** — phrases the build INSERTED that contradict the brief's voice. Common culprits: welcome-openers ("Welcome to..."), marketing-mush vocab (transform/elevate/seamless/journey/curated/premium/world-class), generic templates.
+
+**Grading rubric (apply consistently):**
+- `5` — every quote preserved + zero drift
+- `4` — quotes preserved with minor drift
+- `3` — some quotes preserved + some drift
+- `2` — most quotes missing or paraphrased + clear drift
+- `1` — nothing preserved + page reads like a generic template
+
+## Layer 5 — Customer reaction (PR-C)
+
+**System prompt:** `CUSTOMER_REACTION_SYSTEM_PROMPT` in `qa-visual-prompts.ts`.
+
+**User message:** `buildCustomerReactionUserMessage({ businessName, businessType, address, vertical })`.
+
+**Inputs:** hero.png + full.png + the lead's identity from `outputs/brief.json` (business_name, business_type, address, vertical).
+
+**Output schema (CustomerReaction):**
+
+```json
+{
+  "first_glance": "Looks like a real local florist, not a template. The hero photo is clearly a real bouquet.",
+  "trust_at_glance": "high",
+  "would_act": "maybe",
+  "first_question": "What's the minimum order and how long does delivery take?",
+  "bounce_risks": ["No prices visible anywhere"],
+  "notes": "Trust is high; would convert with one visible price or starting-from line."
+}
+```
+
+**Persona instructions baked into the prompt:**
+- UK consumer who landed from a Google search ("[vertical] [neighbourhood]")
+- doesn't know this business yet, has competitor options one back-click away
+- needs trust signals fast — reviews, real photos, clear contact, quick way to act
+- distrusts template-feel
+- skim-reads, 5 seconds to decide
+
+**Different signal from Layer 3.** Owner reaction grades "is this me?". Customer reaction grades "should I trust this enough to act?". A demo that lands high on owner reaction can still bounce search-traffic customers because the owner already trusts themselves; the cold customer doesn't.
+
+## Layer 6 — Section grading (PR-C)
+
+**System prompt:** `SECTION_GRADING_SYSTEM_PROMPT` in `qa-visual-prompts.ts`.
+
+**User message:** `buildSectionGradingUserMessage({ businessName, sectionLabels })`.
+
+**Inputs:** per-section slice PNGs (one per `<section>`, `<footer>`, or `<main > div>` with meaningful bounding box) captured by `qa-visual-render.ts` and listed in `render-result.json.sections[]`. The slices are sent in DOM order, one image per section.
+
+**Output schema (SectionGrade[]):**
+
+```json
+{
+  "section_grades": [
+    { "index": 0, "label": "hero", "grade": 5, "note": "Clean rhythm, photo + headline + CTA stack feels intentional" },
+    { "index": 1, "label": "enquire", "grade": 4, "note": "Form is well-paced but the heading sits awkwardly close to the field labels" },
+    { "index": 5, "label": "how", "grade": 3, "note": "Three-step grid is generic; numbers feel large for the supporting copy" },
+    { "index": 8, "label": "footer", "grade": 4, "note": "Dark footer balanced; tagline + logo + links rhythm works" }
+  ]
+}
+```
+
+**Grading rubric (apply consistently):**
+- `5` — intentional, well-paced, clearly on-brand
+- `4` — solid with minor rhythm/density quibbles
+- `3` — functional but unmemorable, reads as competent default
+- `2` — noticeably weaker than the rest (awkward whitespace, copy density off, brand drift)
+- `1` — broken-feeling section pulling the whole page down
+
+**Why per-section.** Layers 1-3 are hero-biased. Below-the-fold sections get hand-waved by Layer 1's "above-the-fold" framing. Many cohort demos have a strong hero and a weak About / Visit / Footer that nobody scored. Per-section grading surfaces those weak sections so the rep can pre-empt them at the pitch ("the About is a placeholder; we'll fill it in with your story").
+
+**Renderer dependency.** `qa-visual-render.ts` slices `full.png` into per-section PNGs via element-handle screenshots (which auto-scroll). Slices land at `.qa-visual/sections/section-NN-<label>.png`. The label is derived from the element's `id` OR its first `<h2>`/`<h3>` text, sanitised to a-z0-9-. If no recognisable sections exist, the slice list is empty and Layer 6 emits `"section_grades": []` rather than erroring.
+
 ## Canonical result file
 
 The full per-demo result, written to `outputs/qa-visual-result.json`:
@@ -188,19 +285,25 @@ The full per-demo result, written to `outputs/qa-visual-result.json`:
 
   "owner_reaction": {...},
 
+  "voice_consistency": {...},     // PR-C — Layer 4
+  "customer_reaction": {...},     // PR-C — Layer 5
+  "section_grades": [...],        // PR-C — Layer 6 (empty array if no sections)
+
   "notes": "optional one-line global summary"
 }
 ```
 
 NERVE accepts this exact shape on `/api/ingest/qa-visual-result` regardless of `producer`. The warehouse cannot tell whether a manual or SDK run produced any given row — by design.
 
+> **Schema bump in PR-C:** the three new top-level fields (`voice_consistency`, `customer_reaction`, `section_grades`) are REQUIRED. Pre-PR-C `qa-visual-result.json` files (the v1 spike's output) won't validate against the new schema — re-run the visual-QA pass to refresh.
+
 ## Runtime validation
 
 Both implementations must call `validateVisualQaResult(candidate)` (exported from `qa-visual-prompts.ts`) **before writing** the canonical result file. The Zod-backed validator checks:
 
 - All required fields present with the right primitive types
-- Enum fields match the documented literals (`severity ∈ {critical,warning,info}`, `recognition ∈ {high,partial,low}`, `would_buy ∈ {yes,maybe,no}`, `producer ∈ {manual_skill,sdk_runner}`)
-- Brand-fidelity dimension grades are integers 1-5; `overall_grade` is a number 1-5
+- Enum fields match the documented literals (`severity ∈ {critical,warning,info}`, `recognition ∈ {high,partial,low}`, `would_buy ∈ {yes,maybe,no}`, `producer ∈ {manual_skill,sdk_runner}`, `trust_at_glance ∈ {high,medium,low}`, `would_act ∈ {yes,maybe,no}`)
+- Brand-fidelity, voice-consistency, and section grades are integers 1-5; brand-fidelity `overall_grade` is a number 1-5
 - Cross-field invariants: `bug_count === bugs.length`, `has_critical` iff any bug has severity=critical
 - `ran_at` parses as ISO 8601
 
