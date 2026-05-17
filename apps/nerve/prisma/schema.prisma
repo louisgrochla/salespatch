@@ -1616,6 +1616,50 @@ model SalespersonEvent {
 // increments on each ingest so analytics can spot drop-off ("they
 // made 12 saves but never hit complete").
 
+// ─── notes ───────────────────────────────────────────────────────────────
+//
+// Free-form markdown captures for operator context AND agent context.
+// The /notes section in NERVE is the canonical place to drop "remember
+// this for next session" content — qa-visual follow-ups, lead-specific
+// observations, system gotchas. Differs from DECISIONS.md (team-facing,
+// committed) and CHANGELOG/ (per-change record): notes are mutable
+// scratch + context.
+//
+// scope distinguishes what kind of context a note carries — agents that
+// query /api/read/notes filter on it. relatedSlug joins a note to a
+// specific lead so /build-demo can pull just the relevant notes.
+//
+// Embeddings: every save calls embedRecord({sourceType:"Note", ...})
+// so notes flow into /search and /ask alongside everything else.
+
+enum NoteScope {
+  lead       // about a specific demo/lead (use relatedSlug)
+  system     // about NERVE / agents / pipeline behaviour
+  pitch      // about a pitch interaction / objection / sales pattern
+  research   // about the dissertation / methodology
+  other
+}
+
+model Note {
+  id          String   @id @default(cuid())
+  title       String
+  body        String   // markdown
+  scope       NoteScope
+  // Optional. When scope=lead, this should be the canonical slug
+  // (e.g. "the-tartan-pig"). Agents filter by this to pull
+  // per-lead context in a single GET.
+  relatedSlug String?
+  tags        String[] @default([])
+  phaseLabel  String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([scope])
+  @@index([relatedSlug])
+  @@index([phaseLabel])
+  @@index([createdAt(sort: Desc)])
+}
+
 model OnboardingResponse {
   id                String    @id @default(cuid())
   leadAssignmentId  String    @unique @map("lead_assignment_id")

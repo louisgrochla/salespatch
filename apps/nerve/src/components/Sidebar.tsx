@@ -19,6 +19,7 @@ import {
   GraduationCap,
   Hammer,
   LayoutDashboard,
+  NotebookPen,
   Search,
   Sparkles,
   Target,
@@ -52,6 +53,7 @@ export interface SidebarCounts {
   brand?: number;
   legal?: number;
   changelog?: number;
+  notes?: number;
 }
 
 export function Sidebar({ counts }: { counts: SidebarCounts }) {
@@ -90,6 +92,7 @@ export function Sidebar({ counts }: { counts: SidebarCounts }) {
       label: "build",
       items: [
         { href: "/changelog", label: "Changelog", icon: GitCommit, count: counts.changelog },
+        { href: "/notes", label: "Notes", icon: NotebookPen, count: counts.notes },
       ],
     },
     {
