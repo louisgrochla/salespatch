@@ -85,6 +85,12 @@ const REQUIRED_SYMBOLS = [
   "PhotoQualityGrade",
   "PHOTO_QUALITY_SYSTEM_PROMPT",
   "buildPhotoQualityUserMessage",
+  // PR-J — opt-in competitor comparison
+  "competitor_comparison",
+  "CompetitorCompareResult",
+  "CompetitorEntry",
+  "COMPETITOR_COMPARE_SYSTEM_PROMPT",
+  "buildCompetitorCompareUserMessage",
   // Runtime validation surface
   "validateVisualQaResult",
 ];

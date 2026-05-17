@@ -256,6 +256,17 @@ export interface VisualQaResult {
    */
   photo_quality?: PhotoQualityResult | null;
 
+  /**
+   * PR-J: competitor comparison. Opt-in — activates when
+   * `outputs/competitors.json` exists (captured by the
+   * spec-site-brief skill in Phase 1 verify). Renders top N
+   * competitors at the same viewport this demo was scored at,
+   * runs a comparative-trust vision call, returns ranked output
+   * the rep can quote at the door. Three states like
+   * `photo_quality`: absent / null (failed) / populated.
+   */
+  competitor_comparison?: CompetitorCompareResult | null;
+
   /** Optional 1-line global note across all layers. */
   notes?: string;
 }
@@ -365,6 +376,55 @@ export interface PhotoQualityResult {
   /** Index of the lowest-`overall` photo. Null when photos.length === 0. */
   weakest_photo_index: number | null;
   /** One-line overall verdict on the demo's photo set as a whole. */
+  notes: string;
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// PR-J — Competitor comparison (opt-in)
+// ─────────────────────────────────────────────────────────────────────
+//
+// Renders the top N competitor sites for the lead's vertical at the
+// same 375×812 mobile viewport this demo was scored at, then asks
+// vision to comparatively rank trust-at-glance across the cohort.
+// Output is a rank list + per-entry rationale + one-line takeaway the
+// rep can use at the door ("we ranked #1 of 4 vs Anastasia/Bauers/...").
+//
+// Opt-in — needs `outputs/competitors.json` to exist. The
+// spec-site-brief skill captures competitor URLs in Phase 1 verify
+// already; this layer activates when that capture happened.
+//
+// NOT part of LAYER_NAMES because gated by external input + the
+// network roundtrips it requires.
+
+export interface CompetitorEntry {
+  /** Display name — "Anastasia Florists" / "this demo" / "Flower Vogue". */
+  name: string;
+  /** URL rendered. Null for the "this demo" entry. */
+  url: string | null;
+  /** True for the row representing this demo. Exactly one entry must have this true. */
+  is_this_demo: boolean;
+  /** True when the renderer succeeded. False on timeout / login wall / 4xx / network error. */
+  rendered: boolean;
+  /** Reason rendering failed, when `rendered` is false. Null otherwise. */
+  render_failure_reason: string | null;
+  /** 1-5 trust-at-glance rating. Null when `rendered` is false (can't grade an unrendered page). */
+  trust_at_glance: 1 | 2 | 3 | 4 | 5 | null;
+  /** Final rank (1 = best). Null when `rendered` is false. */
+  rank: number | null;
+  /** One line on why this entry got the rating it did, in customer-first-impression voice. */
+  why: string;
+}
+
+export interface CompetitorCompareResult {
+  /** Sorted by `rank` ascending; unrendered entries at the bottom. */
+  entries: CompetitorEntry[];
+  /** Rank of the "this demo" entry. Null when this demo couldn't be rendered (shouldn't happen). */
+  this_demo_rank: number | null;
+  /** Total entries that were successfully rendered + ranked. Excludes failed renders. */
+  ranked_total: number;
+  /** One-line pitch-floor takeaway for the rep. "You ranked #2 of 4 — better than Anastasia and Bauers, behind Flower Vogue's editorial polish." */
+  takeaway: string;
+  /** Optional one-line note on the cohort as a whole. */
   notes: string;
 }
 
@@ -913,6 +973,89 @@ The images follow, one per index. Grade each on the four-dimension rubric. Make 
 }
 
 // ─────────────────────────────────────────────────────────────────────
+// PR-J — Competitor comparison (opt-in)
+// ─────────────────────────────────────────────────────────────────────
+
+export const COMPETITOR_COMPARE_SYSTEM_PROMPT = `You are a comparative-trust reviewer scoring N+1 small-business websites side by side, all viewed at the same mobile viewport (375×812 — iPhone 13 mini). One of the screenshots is "this demo" — a spec site a UK door-to-door sales rep built for a specific local business. The others are real competitor sites in the same vertical and neighbourhood.
+
+Your job: rank every screenshot by trust-at-glance, score each on 1-5, and produce a one-line takeaway the rep can use at the door ("you ranked #2 of 4 — better than Anastasia and Bauers, behind Flower Vogue's editorial polish").
+
+This isn't a brand judgement. It's a CUSTOMER-FIRST-IMPRESSION judgement. Imagine the customer just searched "[vertical] [neighbourhood]" on Google, clicked one of these results, and has 3 seconds to decide if it's worth their time. The customer doesn't care about heritage / authenticity / craft — they care about: does this look like a real business, is the product/service obvious, is there a clear way to contact / book / order, does anything feel template-y or broken.
+
+For each entry, output:
+- \`trust_at_glance\`: 1-5
+  - 5: instantly trustworthy, looks like the rep would feel proud showing this
+  - 4: solid, customer would book without hesitation
+  - 3: acceptable but not memorable
+  - 2: noticeable friction (template feel, broken-looking, missing trust signals)
+  - 1: customer would back-click in <3 seconds
+- \`rank\`: 1 (best) to N. No ties — pick the marginal winner when scores are close.
+- \`why\`: one line in customer voice. "Polished, clear menu, real reviews visible" / "Looks like a Square stub, nothing to act on".
+
+Then write a \`takeaway\`: one sentence the rep can quote at the door comparing THIS DEMO to the cohort. Honest, not generous — if this demo ranks last, say so. Reps need to know if they're walking into the shop with a weak hand.
+
+Some entries may be marked "rendered: false" (the URL failed to load — timeout / login wall / 4xx). Those entries get \`trust_at_glance: null\` and \`rank: null\`; don't rank them or count them in totals. Mention in \`notes\` how many failed to render.
+
+Respond ONLY with valid JSON matching this shape, no markdown fences, no preamble:
+
+{
+  "entries": [
+    {
+      "name": "...",
+      "url": "...",
+      "is_this_demo": true|false,
+      "rendered": true|false,
+      "render_failure_reason": null,
+      "trust_at_glance": <1-5 or null>,
+      "rank": <1..N or null>,
+      "why": "..."
+    }
+  ],
+  "this_demo_rank": <N or null>,
+  "ranked_total": <int>,
+  "takeaway": "<one-line door-ready sentence>",
+  "notes": "<one-line cohort note, mention failed renders>"
+}`;
+
+/**
+ * Build the user-side message for the competitor comparison call.
+ *
+ * `entries` are listed in the SAME ORDER as the images that will follow
+ * the message. The vision call uses positional alignment to know which
+ * screenshot corresponds to which entry.
+ *
+ * Failed renders (rendered=false) are STILL listed in this preamble so
+ * the model knows they exist, but no image is sent for them — they go
+ * in the response as `rendered: false` with `trust_at_glance: null`
+ * and `rank: null`. Position alignment skips them.
+ */
+export function buildCompetitorCompareUserMessage(opts: {
+  thisDemoName: string;
+  entries: Array<{ name: string; url: string | null; is_this_demo: boolean; rendered: boolean; render_failure_reason: string | null }>;
+}): string {
+  const renderedCount = opts.entries.filter((e) => e.rendered).length;
+  const failedCount = opts.entries.length - renderedCount;
+  const list = opts.entries
+    .map((e, i) => {
+      const label = e.is_this_demo ? "(this demo)" : "(competitor)";
+      const urlPart = e.url ? ` — ${e.url}` : "";
+      const status = e.rendered
+        ? "rendered ✓"
+        : `RENDER FAILED: ${e.render_failure_reason ?? "unknown"}`;
+      return `  ${String(i).padStart(2, "0")} ${e.name} ${label}${urlPart} — ${status}`;
+    })
+    .join("\n");
+  return `Comparing "${opts.thisDemoName}" (this demo) against ${opts.entries.filter((e) => !e.is_this_demo).length} competitor site(s), all at 375×812 mobile viewport.
+
+Entries in order:
+${list}
+
+${renderedCount} screenshot${renderedCount === 1 ? "" : "s"} follow${renderedCount === 1 ? "s" : ""} this message, one per rendered entry in the order above (failed renders are skipped — no image sent for them, they appear as rendered=false in your output).
+
+Rank by trust-at-glance from a UK consumer's perspective. Be honest about where this demo lands.`;
+}
+
+// ─────────────────────────────────────────────────────────────────────
 // Runtime validation (Zod) — guards every write to qa-visual-result.json
 // ─────────────────────────────────────────────────────────────────────
 
@@ -1104,6 +1247,76 @@ export const PhotoQualityResultSchema = z
     },
   );
 
+// ── PR-J — Competitor comparison (opt-in) ───────────────────────────
+
+export const CompetitorEntrySchema = z
+  .object({
+    name: z.string().min(1),
+    url: z.string().nullable(),
+    is_this_demo: z.boolean(),
+    rendered: z.boolean(),
+    render_failure_reason: z.string().nullable(),
+    trust_at_glance: BrandGradeValue.nullable(),
+    rank: z.number().int().min(1).nullable(),
+    why: z.string().min(1),
+  })
+  // Cross-field: when rendered=false, trust_at_glance + rank MUST be
+  // null (can't grade an unrendered page); render_failure_reason must
+  // be set. When rendered=true, the inverse.
+  .refine(
+    (e) =>
+      e.rendered
+        ? e.render_failure_reason === null &&
+          e.trust_at_glance !== null &&
+          e.rank !== null
+        : e.render_failure_reason !== null &&
+          e.trust_at_glance === null &&
+          e.rank === null,
+    {
+      message:
+        "rendered=true requires trust_at_glance + rank + null reason; rendered=false requires reason + null grade + null rank",
+      path: ["rendered"],
+    },
+  );
+
+export const CompetitorCompareResultSchema = z
+  .object({
+    entries: z.array(CompetitorEntrySchema),
+    this_demo_rank: z.number().int().min(1).nullable(),
+    ranked_total: z.number().int().min(0),
+    takeaway: z.string().min(1),
+    notes: z.string().min(1),
+  })
+  // Cross-field: exactly one entry must have is_this_demo=true.
+  .refine(
+    (r) => r.entries.filter((e) => e.is_this_demo).length === 1,
+    {
+      message: "exactly one entry must have is_this_demo=true",
+      path: ["entries"],
+    },
+  )
+  // Cross-field: ranked_total must equal count of rendered entries.
+  .refine(
+    (r) => r.ranked_total === r.entries.filter((e) => e.rendered).length,
+    {
+      message: "ranked_total must equal count of entries with rendered=true",
+      path: ["ranked_total"],
+    },
+  )
+  // Cross-field: this_demo_rank must match the rank of the is_this_demo entry,
+  // or be null when the this-demo entry failed to render.
+  .refine(
+    (r) => {
+      const thisDemo = r.entries.find((e) => e.is_this_demo);
+      if (!thisDemo) return false; // already caught by the earlier refine
+      return r.this_demo_rank === thisDemo.rank;
+    },
+    {
+      message: "this_demo_rank must match the rank of the is_this_demo entry (or null when that entry failed to render)",
+      path: ["this_demo_rank"],
+    },
+  );
+
 // ── Canonical result ────────────────────────────────────────────────
 
 export const LayerNameSchema = z.enum(LAYER_NAMES);
@@ -1135,6 +1348,8 @@ export const VisualQaResultSchema = z
     // PR-H: optional + nullable. Optional when the producer didn't
     // request photo grading; null when they did + the vision call failed.
     photo_quality: PhotoQualityResultSchema.nullable().optional(),
+    // PR-J: same optional + nullable pattern as photo_quality.
+    competitor_comparison: CompetitorCompareResultSchema.nullable().optional(),
     notes: z.string().optional(),
   })
   // Cross-field invariants. Skip the bug_count/has_critical checks
