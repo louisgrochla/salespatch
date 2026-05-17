@@ -95,6 +95,73 @@ export interface OwnerReaction {
   test_of_success_note: string;
 }
 
+// ─────────────────────────────────────────────────────────────────────
+// LAYER 4 — Voice consistency (rendered copy vs brief.voice_quotes)
+// ─────────────────────────────────────────────────────────────────────
+
+export interface VoicePreservedQuote {
+  /** The verbatim quote the brief committed to. */
+  quote: string;
+  /** True if the quote appears in the rendered demo, verbatim or near-verbatim (case + minor punctuation drift allowed). */
+  rendered: boolean;
+  /** True if it appears with minor edits but the spirit intact. False if missing entirely or contradicted. */
+  near_verbatim: boolean;
+  /** If rendered: short human-readable region ("hero h1", "pull-quote in About"). Else null. */
+  location_if_rendered: string | null;
+}
+
+export interface VoiceDriftPhrase {
+  /** A rendered phrase that contradicts the brief's voice — marketing-mush, generic-template, or off-tone language the build inserted on its own. */
+  rendered: string;
+  /** One line on why this phrase is off — what brief-voice rule it breaks. */
+  why_off: string;
+}
+
+export interface VoiceConsistencyResult {
+  /** For each brief.voice_quotes entry: was it preserved? */
+  quotes_preserved: VoicePreservedQuote[];
+  /** Generic/marketing-mush phrases the build inserted that don't match the brief's voice. Empty array if none. */
+  voice_drift_phrases: VoiceDriftPhrase[];
+  /** 1-5 overall coverage + voice-fidelity score. 5 = every quote preserved + no drift. 1 = nothing preserved, lots of drift. */
+  overall_grade: 1 | 2 | 3 | 4 | 5;
+  /** One line: overall verdict on whether the rendered copy still sounds like the owner. */
+  notes: string;
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// LAYER 5 — Customer reaction (search-traffic perspective, not owner)
+// ─────────────────────────────────────────────────────────────────────
+
+export interface CustomerReaction {
+  /** First-glance impression in the customer's voice, 2 sentences max. */
+  first_glance: string;
+  /** Would the customer trust this enough to act? */
+  trust_at_glance: "high" | "medium" | "low";
+  /** Would the customer take the primary action (book / enquire / order)? */
+  would_act: "yes" | "maybe" | "no";
+  /** The one question the customer would ask before acting — surfaces missing trust signals. */
+  first_question: string;
+  /** Specific things that would make this customer bounce. Empty array if none. */
+  bounce_risks: string[];
+  /** One line: overall verdict on the customer-side conversion likelihood. */
+  notes: string;
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// LAYER 6 — Section grading (per-section design rhythm, below-the-fold)
+// ─────────────────────────────────────────────────────────────────────
+
+export interface SectionGrade {
+  /** Zero-indexed position in the page. 0 = hero. */
+  index: number;
+  /** Human label inferred from the section's id or first heading. Matches the slice filename suffix. */
+  label: string;
+  /** 1-5 grade for this section's design rhythm, whitespace, copy density, and brand consistency. */
+  grade: 1 | 2 | 3 | 4 | 5;
+  /** One line on this section's specific strengths or weaknesses. */
+  note: string;
+}
+
 /**
  * The full canonical result. NERVE expects this exact shape on
  * /api/ingest/qa-visual-result regardless of which path produced it.
@@ -122,7 +189,16 @@ export interface VisualQaResult {
   // Layer 3
   owner_reaction: OwnerReaction;
 
-  /** Optional 1-line global note across all three layers. */
+  // Layer 4 (PR-C)
+  voice_consistency: VoiceConsistencyResult;
+
+  // Layer 5 (PR-C)
+  customer_reaction: CustomerReaction;
+
+  // Layer 6 (PR-C) — empty array if the page has no recognisable sections
+  section_grades: SectionGrade[];
+
+  /** Optional 1-line global note across all layers. */
   notes?: string;
 }
 
@@ -375,6 +451,180 @@ The rep has put their phone in front of you and is showing you the two screensho
 }
 
 // ─────────────────────────────────────────────────────────────────────
+// LAYER 4 — Voice consistency (rendered copy vs brief.voice_quotes)
+// ─────────────────────────────────────────────────────────────────────
+
+export const VOICE_CONSISTENCY_SYSTEM_PROMPT = `You are a brand-voice auditor checking whether the rendered demo page preserves the verbatim language the brief committed to.
+
+Context: every spec-site brief captures a small set of "voice quotes" — verbatim lines from the owner's existing Instagram bio, Facebook captions, or press coverage. The brief commits these to the demo so the owner reads their own words back and instantly recognises the page as theirs. The build pass executes the brief — but builds drift. The model writes generic-template language ("Welcome to The Bouquet Bar, your premier florist"), drops the owner's signature signoff ("from everyone at The Bouquet Bar 🩷"), or paraphrases verbatim quotes into bland approximations.
+
+Your job: grade whether the rendered demo still sounds like the owner.
+
+Two passes:
+
+**Pass A — quote preservation.** For each quote the brief committed to, check the rendered screenshots and report:
+- "rendered": true if you can see the quote verbatim or near-verbatim in the page
+- "near_verbatim": true if it's there with minor case/punctuation drift but the spirit intact; false if missing or paraphrased
+- "location_if_rendered": short label naming where ("hero h1", "About pull-quote", "footer tagline"), or null if absent
+
+**Pass B — voice drift detection.** Look for phrases the build INSERTED that contradict the brief's voice. Common culprits:
+- Welcome openers ("Welcome to [name], where...")
+- Generic-template language ("At [name], we believe...", "Discover...")
+- Marketing-mush vocabulary (transform, elevate, seamless, journey, curated, premium, world-class)
+- Phrases that contradict the brief's stated tone (e.g. brief said "warm + personal" but rendered text reads corporate)
+
+For each drift phrase, record the rendered text + one line on why it's off-voice.
+
+**Overall grade (1-5).** 5 = every quote preserved + zero drift. 4 = quotes preserved with minor drift. 3 = some quotes preserved + some drift. 2 = most quotes missing or paraphrased + clear drift. 1 = nothing preserved + page reads like a generic template.
+
+Be honest. The warehouse needs honest signal — flattering a voice-drift build helps nobody.
+
+Respond ONLY with valid JSON matching this shape, no markdown fences, no preamble:
+
+{
+  "quotes_preserved": [
+    { "quote": "...", "rendered": true, "near_verbatim": true, "location_if_rendered": "..." }
+  ],
+  "voice_drift_phrases": [
+    { "rendered": "...", "why_off": "..." }
+  ],
+  "overall_grade": <1-5>,
+  "notes": "one-line overall verdict on whether the page still sounds like the owner"
+}`;
+
+/**
+ * Build the user-side message for Layer 4.
+ * Injects the brief's voice_quotes[] array so the model knows what to look for.
+ */
+export function buildVoiceConsistencyUserMessage(opts: {
+  businessName: string;
+  voiceQuotes: string[];
+}): string {
+  const quotes =
+    opts.voiceQuotes.length > 0
+      ? opts.voiceQuotes.map((q) => `  - "${q}"`).join("\n")
+      : "  (the brief surfaced no voice quotes — grade purely on the absence of drift)";
+  return `The brief for ${opts.businessName} committed to these verbatim voice quotes:
+
+${quotes}
+
+Below are two screenshots of the rendered demo (mobile hero crop + full-page scroll). Grade whether the rendered copy still preserves these quotes and is free of voice drift.`;
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// LAYER 5 — Customer reaction (search-traffic perspective)
+// ─────────────────────────────────────────────────────────────────────
+
+export const CUSTOMER_REACTION_SYSTEM_PROMPT = `You are role-playing as a UK consumer who just landed on a small-business website from a Google search. You searched something like "[vertical] [neighbourhood]" (e.g. "florist Aberdeen", "barber Bridge of Don"). You don't know this business yet. You have 5 seconds to decide if it's worth your time.
+
+Stay in character. React like a real customer would, not like a marketer would. The customer:
+- has options — they could click back to Google and pick a competitor
+- needs trust signals fast (reviews count, photos that look real, clear address/hours, a quick way to act)
+- distrusts anything that feels like a template or a placeholder
+- skim-reads — they don't read paragraphs, they scan
+
+Your task: produce an honest first-impression reaction. Be honest, not generous. Most demos that satisfy the owner still bounce search-traffic customers because they're built for the existing audience, not the cold one.
+
+What to assess:
+
+1. **first_glance** — Two sentences max, in your own voice. The actual words you'd think while looking at the phone. Not analysis — reaction.
+
+2. **trust_at_glance** — Within 3 seconds, would you trust this enough to consider acting?
+   - "high" — feels like a real local business; clear contact, real photos, social proof visible
+   - "medium" — looks legit but you'd need to scroll to be sure
+   - "low" — feels like a template or placeholder; you'd back-click to Google
+
+3. **would_act** — Honest: would you take the primary action (book / enquire / order)? "yes" / "maybe" / "no" + the one reason behind your answer is the next field.
+
+4. **first_question** — The ONE question you'd want answered before acting. This surfaces the missing trust signal (e.g. "Are they actually open tomorrow?", "What does delivery cost?", "How long is the wait?").
+
+5. **bounce_risks** — Specific things on this page that would push you back to Google. Could be design (looks like a template), copy (vague pricing), missing info (no phone visible), or trust signals (no real reviews shown). Empty array if nothing would bounce you.
+
+Different signal from Layer 3 (owner reaction). The owner reacts to "is this me?"; the customer reacts to "should I trust this enough to act?". A demo that lands high on owner reaction can still bounce customers because the owner already trusts themselves — the customer doesn't.
+
+Respond ONLY with valid JSON matching this shape, no markdown fences, no preamble:
+
+{
+  "first_glance": "...",
+  "trust_at_glance": "high|medium|low",
+  "would_act": "yes|maybe|no",
+  "first_question": "...",
+  "bounce_risks": ["...", "..."],
+  "notes": "one-line overall verdict on customer-side conversion likelihood"
+}`;
+
+/**
+ * Build the user-side message for Layer 5.
+ * Injects business identity so the customer persona knows what they searched for.
+ */
+export function buildCustomerReactionUserMessage(opts: {
+  businessName: string;
+  businessType: string;
+  address: string;
+  vertical: string | null;
+}): string {
+  // Construct the search query the customer plausibly used. Vertical takes precedence,
+  // fallback to business_type when the vertical wasn't classified in the brief.
+  const searchTerm = opts.vertical ?? opts.businessType;
+  // Strip everything after the first comma in the address to extract a neighbourhood/city.
+  const area = opts.address.split(",")[0]?.trim() ?? opts.address;
+  return `You just searched Google for "${searchTerm} ${area}". You clicked the result for ${opts.businessName} and the screenshots below loaded.
+
+You've never heard of this business before. React.`;
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// LAYER 6 — Section grading (per-section design rhythm)
+// ─────────────────────────────────────────────────────────────────────
+
+export const SECTION_GRADING_SYSTEM_PROMPT = `You are a design-rhythm reviewer scoring each section of a demo page individually. The renderer has sliced the mobile fullPage screenshot into per-section PNGs (one per <section>, <footer>, or <main > div> with meaningful bounding box). You'll receive the slices in DOM order with their labels.
+
+Your job: grade each section on a 1-5 scale for design rhythm, whitespace, copy density, and brand consistency. Two sentences per section: one line of grade reasoning.
+
+This layer addresses the audit gap: Layers 1-3 are hero-biased and treat the full-page screenshot as a sanity check. Below-the-fold sections get hand-waved. Many cohort demos have a strong hero and a weak About / Visit / Footer that the rep can't pre-empt because no one graded them.
+
+Grading rubric (apply consistently):
+- 5 — this section feels intentional, well-paced, and clearly belongs to this brand
+- 4 — solid execution with minor rhythm/density quibbles
+- 3 — functional but unmemorable; reads as competent default
+- 2 — noticeably weaker than the rest of the page (awkward whitespace, copy density off, brand drift)
+- 1 — broken-feeling section that pulls the whole page down
+
+For the per-section "note" field: one specific line on what works or what doesn't. NOT generic ("looks good"). Concrete ("dense paragraph block in the About — eyes glaze before reaching the pull-quote").
+
+The "index" field MUST match the index in the slice filename (0 = first slice, 1 = second, etc.). The "label" field should mirror the label in the slice filename so the warehouse can join slices back to their grade.
+
+Respond ONLY with valid JSON matching this shape, no markdown fences, no preamble:
+
+{
+  "section_grades": [
+    { "index": 0, "label": "hero", "grade": 5, "note": "..." },
+    { "index": 1, "label": "enquire", "grade": 4, "note": "..." }
+  ]
+}`;
+
+/**
+ * Build the user-side message for Layer 6.
+ * Lists the section labels in render order so the model knows what it's about to see.
+ */
+export function buildSectionGradingUserMessage(opts: {
+  businessName: string;
+  sectionLabels: string[];
+}): string {
+  if (opts.sectionLabels.length === 0) {
+    return `The ${opts.businessName} demo has no recognisable sections (no <section>, <footer>, or <main > div> elements with meaningful bounding boxes). Return {"section_grades": []}.`;
+  }
+  const list = opts.sectionLabels
+    .map((l, i) => `  ${String(i).padStart(2, "0")} — ${l}`)
+    .join("\n");
+  return `The ${opts.businessName} demo's mobile fullPage screenshot has been sliced into ${opts.sectionLabels.length} per-section PNGs, in DOM order:
+
+${list}
+
+The slices follow this message, one image per section in the order above. Grade each on the 1-5 rubric.`;
+}
+
+// ─────────────────────────────────────────────────────────────────────
 // Runtime validation (Zod) — guards every write to qa-visual-result.json
 // ─────────────────────────────────────────────────────────────────────
 
@@ -431,6 +681,49 @@ export const OwnerReactionSchema = z.object({
   test_of_success_note: z.string().min(1),
 });
 
+// ── Layer 4 (PR-C) ──────────────────────────────────────────────────
+
+export const VoicePreservedQuoteSchema = z.object({
+  quote: z.string().min(1),
+  rendered: z.boolean(),
+  near_verbatim: z.boolean(),
+  location_if_rendered: z.string().nullable(),
+});
+
+export const VoiceDriftPhraseSchema = z.object({
+  rendered: z.string().min(1),
+  why_off: z.string().min(1),
+});
+
+export const VoiceConsistencyResultSchema = z.object({
+  quotes_preserved: z.array(VoicePreservedQuoteSchema),
+  voice_drift_phrases: z.array(VoiceDriftPhraseSchema),
+  overall_grade: BrandGradeValue,
+  notes: z.string().min(1),
+});
+
+// ── Layer 5 (PR-C) ──────────────────────────────────────────────────
+
+export const CustomerReactionSchema = z.object({
+  first_glance: z.string().min(1),
+  trust_at_glance: z.enum(["high", "medium", "low"]),
+  would_act: z.enum(["yes", "maybe", "no"]),
+  first_question: z.string().min(1),
+  bounce_risks: z.array(z.string().min(1)),
+  notes: z.string().min(1),
+});
+
+// ── Layer 6 (PR-C) ──────────────────────────────────────────────────
+
+export const SectionGradeSchema = z.object({
+  index: z.number().int().min(0),
+  label: z.string().min(1),
+  grade: BrandGradeValue,
+  note: z.string().min(1),
+});
+
+// ── Canonical result ────────────────────────────────────────────────
+
 export const VisualQaResultSchema = z
   .object({
     qa_visual_id: z.string().min(1),
@@ -449,6 +742,9 @@ export const VisualQaResultSchema = z
     bug_count: z.number().int().min(0),
     brand_fidelity: BrandFidelityResultSchema,
     owner_reaction: OwnerReactionSchema,
+    voice_consistency: VoiceConsistencyResultSchema,
+    customer_reaction: CustomerReactionSchema,
+    section_grades: z.array(SectionGradeSchema),
     notes: z.string().optional(),
   })
   // Cross-field invariants: catches the producer claiming bug_count or

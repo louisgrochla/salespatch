@@ -51,12 +51,25 @@ const REQUIRED_SYMBOLS = [
   // Layer-3 (Owner reaction)
   "OWNER_REACTION_SYSTEM_PROMPT",
   "buildOwnerReactionUserMessage",
+  // Layer-4 (Voice consistency) — PR-C
+  "VOICE_CONSISTENCY_SYSTEM_PROMPT",
+  "buildVoiceConsistencyUserMessage",
+  // Layer-5 (Customer reaction) — PR-C
+  "CUSTOMER_REACTION_SYSTEM_PROMPT",
+  "buildCustomerReactionUserMessage",
+  // Layer-6 (Section grading) — PR-C
+  "SECTION_GRADING_SYSTEM_PROMPT",
+  "buildSectionGradingUserMessage",
   // TS interfaces / canonical result shape
   "VisualQaResult",
   "BugFinding",
   "BrandFidelityResult",
   "OwnerReaction",
   "BrandDimensionGrade",
+  // New interfaces — PR-C
+  "VoiceConsistencyResult",
+  "CustomerReaction",
+  "SectionGrade",
   // Runtime validation surface
   "validateVisualQaResult",
 ];
