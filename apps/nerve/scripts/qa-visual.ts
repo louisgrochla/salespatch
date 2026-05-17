@@ -45,6 +45,7 @@ import {
   buildCustomerReactionUserMessage,
   buildSectionGradingUserMessage,
   validateVisualQaResult,
+  BASELINE_DRIFT_THRESHOLD,
   type VisualQaResult,
   type BugFinding,
   type BrandFidelityResult,
@@ -53,6 +54,8 @@ import {
   type CustomerReaction,
   type SectionGrade,
   type DynamicScanSummary,
+  type BaselineComparison,
+  type BaselineDimensionComparison,
 } from "./qa-visual-prompts";
 
 const VIEWPORT = { width: 375, height: 812 };
@@ -96,6 +99,141 @@ function ensureRender(htmlPath: string): { heroPath: string; fullPath: string } 
     throw new Error(`qa-visual-render.ts failed (exit ${result.status})`);
   }
   return { heroPath, fullPath };
+}
+
+const NERVE_BASE_URL =
+  process.env.NERVE_BASE_URL ?? "https://nerve.salespatch.co.uk";
+
+/**
+ * PR-G: pre-fetch cohort baselines for the lead's vertical from the
+ * /api/read/qa-visual/baselines NERVE endpoint. Read-only call, no
+ * HMAC needed. Returns null on any failure (network down, endpoint
+ * missing, vertical unknown) — the caller treats null as "no cohort
+ * yet" and emits an empty baseline_comparison so downstream queries
+ * can still distinguish that case from "pre-PR-G producer".
+ */
+async function fetchBaselineSummary(
+  vertical: string | null,
+): Promise<{
+  total_n: number;
+  baselines_available: boolean;
+  medians: {
+    brand_fidelity: number | null;
+    voice_consistency: number | null;
+    section_grades_mean: number | null;
+  } | null;
+  cohort_rates: BaselineComparison["cohort_rates"];
+} | null> {
+  const params = vertical ? `?vertical=${encodeURIComponent(vertical)}` : "";
+  const url = `${NERVE_BASE_URL}/api/read/qa-visual/baselines${params}`;
+  try {
+    const res = await fetch(url);
+    if (!res.ok) {
+      console.error(
+        `qa-visual: baselines fetch returned ${res.status} — proceeding without cohort comparison`,
+      );
+      return null;
+    }
+    const data = (await res.json()) as {
+      total_n: number;
+      baselines_available: boolean;
+      medians: {
+        brand_fidelity: number | null;
+        voice_consistency: number | null;
+        section_grades_mean: number | null;
+      } | null;
+      cohort_rates: BaselineComparison["cohort_rates"];
+    };
+    return data;
+  } catch (e) {
+    console.error(
+      `qa-visual: baselines fetch failed (${(e as Error).message}) — proceeding without cohort comparison`,
+    );
+    return null;
+  }
+}
+
+/**
+ * PR-G: compose the baseline_comparison field from this demo's results
+ * and the pre-fetched cohort baseline. Pure function — no IO.
+ *
+ * When the cohort hasn't reached n>=10 yet, returns the
+ * baselines_available: false shape with empty dimensions and null
+ * cohort_rates. Producers should still attach this so downstream
+ * queries can distinguish "no cohort yet" from "pre-PR-G producer".
+ *
+ * When a layer failed in this demo (null), the corresponding
+ * dimension's this_grade is null AND below_baseline is null. The
+ * vision-call failure doesn't mean the demo is below baseline; it
+ * means we don't know.
+ */
+function composeBaselineComparison(opts: {
+  vertical: string | null;
+  baselineSummary: Awaited<ReturnType<typeof fetchBaselineSummary>>;
+  thisBrandFidelity: BrandFidelityResult | null;
+  thisVoiceConsistency: VoiceConsistencyResult | null;
+  thisSectionGrades: SectionGrade[] | null;
+}): BaselineComparison {
+  const { vertical, baselineSummary } = opts;
+  if (!baselineSummary || !baselineSummary.baselines_available) {
+    return {
+      vertical,
+      baseline_n: baselineSummary?.total_n ?? 0,
+      baselines_available: false,
+      dimensions: [],
+      cohort_rates: null,
+    };
+  }
+  const medians = baselineSummary.medians!; // guaranteed by baselines_available=true contract
+  const dimensions: BaselineDimensionComparison[] = [];
+
+  if (medians.brand_fidelity !== null) {
+    const thisGrade = opts.thisBrandFidelity?.overall_grade ?? null;
+    dimensions.push({
+      name: "brand_fidelity",
+      this_grade: thisGrade,
+      vertical_median: medians.brand_fidelity,
+      below_baseline:
+        thisGrade === null
+          ? null
+          : thisGrade < medians.brand_fidelity - BASELINE_DRIFT_THRESHOLD,
+    });
+  }
+  if (medians.voice_consistency !== null) {
+    const thisGrade = opts.thisVoiceConsistency?.overall_grade ?? null;
+    dimensions.push({
+      name: "voice_consistency",
+      this_grade: thisGrade,
+      vertical_median: medians.voice_consistency,
+      below_baseline:
+        thisGrade === null
+          ? null
+          : thisGrade < medians.voice_consistency - BASELINE_DRIFT_THRESHOLD,
+    });
+  }
+  if (medians.section_grades_mean !== null) {
+    const thisMean =
+      opts.thisSectionGrades && opts.thisSectionGrades.length > 0
+        ? opts.thisSectionGrades.reduce((sum, s) => sum + s.grade, 0) /
+          opts.thisSectionGrades.length
+        : null;
+    dimensions.push({
+      name: "section_grades_mean",
+      this_grade: thisMean,
+      vertical_median: medians.section_grades_mean,
+      below_baseline:
+        thisMean === null
+          ? null
+          : thisMean < medians.section_grades_mean - BASELINE_DRIFT_THRESHOLD,
+    });
+  }
+  return {
+    vertical,
+    baseline_n: baselineSummary.total_n,
+    baselines_available: true,
+    dimensions,
+    cohort_rates: baselineSummary.cohort_rates,
+  };
 }
 
 /**
@@ -405,6 +543,19 @@ async function main(): Promise<void> {
   const sectionSlices = loadSectionSlices(htmlPath);
   console.error(`qa-visual: sections=${sectionSlices.length}`);
 
+  // PR-G: pre-fetch cohort baselines for the lead's vertical. Read-only
+  // fetch, ~50ms when the warehouse responds. Null on any failure — the
+  // composer treats null as "no cohort yet" and emits an empty
+  // baseline_comparison so downstream queries can still distinguish
+  // that case from "pre-PR-G producer".
+  const baselineSummary = await fetchBaselineSummary(brief.vertical);
+  if (baselineSummary) {
+    console.error(
+      `qa-visual: baselines — n=${baselineSummary.total_n}` +
+        (baselineSummary.baselines_available ? "" : " (below n=10 threshold)"),
+    );
+  }
+
   // PR-D: each layer call goes through tryLayer, which retries once on
   // transient failures and records permanent failures in failedLayers[]
   // rather than aborting the whole run. A partial result with documented
@@ -569,6 +720,17 @@ async function main(): Promise<void> {
     customer_reaction: customerResult,
     section_grades: sectionGrades,
     ...(failedLayers.length > 0 ? { failed_layers: failedLayers as VisualQaResult["failed_layers"] } : {}),
+    // PR-G: per-demo comparison against the cohort baseline (when available).
+    // Always present so downstream queries can distinguish "no cohort yet"
+    // (baselines_available: false, dimensions: []) from "pre-PR-G producer"
+    // (field absent entirely).
+    baseline_comparison: composeBaselineComparison({
+      vertical: brief.vertical,
+      baselineSummary,
+      thisBrandFidelity: brandResult,
+      thisVoiceConsistency: voiceResult,
+      thisSectionGrades: sectionGrades,
+    }),
     notes: bugsResult?.notes,
   };
 
@@ -620,8 +782,18 @@ async function main(): Promise<void> {
     result.failed_layers && result.failed_layers.length > 0
       ? ` failed_layers=[${result.failed_layers.join(",")}]`
       : "";
+  // PR-G: surface below-baseline dimensions in the chat-output summary.
+  const baselineStr = (() => {
+    const bc = result.baseline_comparison;
+    if (!bc) return "";
+    if (!bc.baselines_available) return ` baselines=n/a(n=${bc.baseline_n})`;
+    const below = bc.dimensions.filter((d) => d.below_baseline === true);
+    if (below.length === 0)
+      return ` baselines=on_par(n=${bc.baseline_n})`;
+    return ` baselines=below(n=${bc.baseline_n})[${below.map((d) => d.name).join(",")}]`;
+  })();
   console.error(
-    `qa-visual: ${bugsStr} ${brandStr} ${voiceStr} ${ownerStr} ${customerStr} ${sectionsStr} ${testPassStr}${failedStr}`,
+    `qa-visual: ${bugsStr} ${brandStr} ${voiceStr} ${ownerStr} ${customerStr} ${sectionsStr} ${testPassStr}${failedStr}${baselineStr}`,
   );
   console.error(`qa-visual: result → ${outPath}`);
 

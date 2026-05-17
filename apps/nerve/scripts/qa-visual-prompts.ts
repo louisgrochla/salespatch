@@ -235,9 +235,82 @@ export interface VisualQaResult {
    */
   failed_layers?: LayerName[];
 
+  /**
+   * PR-G: cohort-relative grading. When the warehouse holds enough
+   * prior runs in the same vertical (n >= 10), the producer pre-fetches
+   * the vertical's medians and rates, then composes a per-dimension
+   * comparison flagging which dimensions of this demo are below the
+   * cohort baseline. Optional because not every vertical has cohort
+   * data yet; when the producer skips the pre-fetch (no network, no
+   * NERVE, vertical missing) this field is simply absent.
+   */
+  baseline_comparison?: BaselineComparison;
+
   /** Optional 1-line global note across all layers. */
   notes?: string;
 }
+
+// ─────────────────────────────────────────────────────────────────────
+// PR-G — Cohort baselines
+// ─────────────────────────────────────────────────────────────────────
+
+/**
+ * Per-dimension comparison: this demo's grade vs the vertical's
+ * cohort median. `below_baseline` fires when the demo's grade is
+ * more than `BASELINE_DRIFT_THRESHOLD` (0.5) below the median —
+ * a single integer-grade gap is meaningful; floating noise isn't.
+ */
+export interface BaselineDimensionComparison {
+  name: "brand_fidelity" | "voice_consistency" | "section_grades_mean";
+  /** This demo's grade for the dimension. Null when the corresponding layer failed in this demo. */
+  this_grade: number | null;
+  /** The vertical's median grade across the cohort (this demo excluded). */
+  vertical_median: number;
+  /** `this_grade < vertical_median - BASELINE_DRIFT_THRESHOLD`. Null when this_grade is null. */
+  below_baseline: boolean | null;
+}
+
+/**
+ * Cohort-wide rates that contextualise this demo's qualitative layer
+ * results. Informational only — there's no per-demo "below_baseline"
+ * for a percentage (you either are or aren't in the cohort that
+ * produced the rate).
+ */
+export interface BaselineCohortRates {
+  has_critical_pct: number;
+  would_buy_yes_pct: number;
+  would_act_yes_pct: number;
+  trust_high_pct: number;
+  test_passes_pct: number;
+}
+
+export interface BaselineComparison {
+  /** Vertical the comparison was scoped to. Null when the cohort was vertical-agnostic. */
+  vertical: string | null;
+  /** Total rows in the cohort used to compute medians + rates. */
+  baseline_n: number;
+  /**
+   * True when n >= 10. False when there isn't enough cohort data yet
+   * to produce statistically meaningful baselines; the producer should
+   * still emit the field with `dimensions: []` and `cohort_rates: null`
+   * so downstream queries can distinguish "no cohort yet" from "field
+   * absent because pre-PR-G producer".
+   */
+  baselines_available: boolean;
+  /** Per-dimension comparison entries. Empty array when baselines_available is false. */
+  dimensions: BaselineDimensionComparison[];
+  /** Cohort-wide rates. Null when baselines_available is false. */
+  cohort_rates: BaselineCohortRates | null;
+}
+
+/**
+ * Drift threshold: a demo's grade is flagged below-baseline only when
+ * it falls more than this much below the cohort median. 0.5 chosen
+ * because grade differences of less than half an integer step are
+ * within vision-call noise; differences ≥ 0.5 are a meaningful gap
+ * the rep should know about.
+ */
+export const BASELINE_DRIFT_THRESHOLD = 0.5;
 
 // ─────────────────────────────────────────────────────────────────────
 // LAYER 1 — Bugs (readability + layout + tap targets + above-fold CTA)
@@ -791,6 +864,46 @@ export const SectionGradeSchema = z.object({
   note: z.string().min(1),
 });
 
+// ── PR-G — Cohort baselines ─────────────────────────────────────────
+
+export const BaselineDimensionComparisonSchema = z.object({
+  name: z.enum(["brand_fidelity", "voice_consistency", "section_grades_mean"]),
+  this_grade: z.number().min(1).max(5).nullable(),
+  vertical_median: z.number().min(1).max(5),
+  below_baseline: z.boolean().nullable(),
+});
+
+export const BaselineCohortRatesSchema = z.object({
+  has_critical_pct: z.number().min(0).max(100),
+  would_buy_yes_pct: z.number().min(0).max(100),
+  would_act_yes_pct: z.number().min(0).max(100),
+  trust_high_pct: z.number().min(0).max(100),
+  test_passes_pct: z.number().min(0).max(100),
+});
+
+export const BaselineComparisonSchema = z
+  .object({
+    vertical: z.string().nullable(),
+    baseline_n: z.number().int().min(0),
+    baselines_available: z.boolean(),
+    dimensions: z.array(BaselineDimensionComparisonSchema),
+    cohort_rates: BaselineCohortRatesSchema.nullable(),
+  })
+  // Cross-field: when baselines_available is false, dimensions must be
+  // empty and cohort_rates must be null. The reverse is also enforced
+  // (available + populated, unavailable + empty).
+  .refine(
+    (b) =>
+      b.baselines_available
+        ? b.cohort_rates !== null
+        : b.dimensions.length === 0 && b.cohort_rates === null,
+    {
+      message:
+        "baselines_available=true requires cohort_rates !== null; baselines_available=false requires dimensions=[] and cohort_rates=null",
+      path: ["baselines_available"],
+    },
+  );
+
 // ── Canonical result ────────────────────────────────────────────────
 
 export const LayerNameSchema = z.enum(LAYER_NAMES);
@@ -818,6 +931,7 @@ export const VisualQaResultSchema = z
     customer_reaction: CustomerReactionSchema.nullable(),
     section_grades: z.array(SectionGradeSchema).nullable(),
     failed_layers: z.array(LayerNameSchema).optional(),
+    baseline_comparison: BaselineComparisonSchema.optional(),
     notes: z.string().optional(),
   })
   // Cross-field invariants. Skip the bug_count/has_critical checks
