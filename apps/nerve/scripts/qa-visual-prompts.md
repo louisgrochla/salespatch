@@ -297,6 +297,12 @@ NERVE accepts this exact shape on `/api/ingest/qa-visual-result` regardless of `
 
 > **Schema bump in PR-C:** the three new top-level fields (`voice_consistency`, `customer_reaction`, `section_grades`) are REQUIRED. Pre-PR-C `qa-visual-result.json` files (the v1 spike's output) won't validate against the new schema — re-run the visual-QA pass to refresh.
 
+> **Schema bump in PR-D:** every gradable layer field (`bugs`, `brand_fidelity`, `owner_reaction`, `voice_consistency`, `customer_reaction`, `section_grades`) is now **nullable**. `null` means the producer attempted the layer and the vision call failed permanently after retries. The optional `failed_layers[]` array lists every layer name that produced null — its contents MUST match the layer-field nullness exactly (the validator enforces). Downstream queries that aggregate grades should filter `WHERE brand_fidelity IS NOT NULL` (etc.) to exclude failed-run rows from averages.
+>
+> When the `bugs` layer fails, its derived `has_critical` and `bug_count` MUST also be null. The cross-field invariants only apply when `bugs` is non-null.
+>
+> The TS const `LAYER_NAMES` (in `qa-visual-prompts.ts`) is the source of truth for what can appear in `failed_layers[]`. Adding a new layer? Add its key to that constant + make the corresponding field nullable + add it to the drift test's required-symbols list.
+
 ## Runtime validation
 
 Both implementations must call `validateVisualQaResult(candidate)` (exported from `qa-visual-prompts.ts`) **before writing** the canonical result file. The Zod-backed validator checks:
@@ -304,10 +310,19 @@ Both implementations must call `validateVisualQaResult(candidate)` (exported fro
 - All required fields present with the right primitive types
 - Enum fields match the documented literals (`severity ∈ {critical,warning,info}`, `recognition ∈ {high,partial,low}`, `would_buy ∈ {yes,maybe,no}`, `producer ∈ {manual_skill,sdk_runner}`, `trust_at_glance ∈ {high,medium,low}`, `would_act ∈ {yes,maybe,no}`)
 - Brand-fidelity, voice-consistency, and section grades are integers 1-5; brand-fidelity `overall_grade` is a number 1-5
-- Cross-field invariants: `bug_count === bugs.length`, `has_critical` iff any bug has severity=critical
+- Cross-field invariants: `bug_count === bugs.length`, `has_critical` iff any bug has severity=critical (only when `bugs` is non-null)
+- PR-D: nullness of every gradable layer field matches `failed_layers[]` exactly. A producer that nulls a layer without listing it (silently hides failure) OR lists it without nulling (sends sentinel data labelled as good) is rejected with a clear error.
 - `ran_at` parses as ISO 8601
 
 A schema violation aborts the write with a clear error message naming the offending field. This catches the producer composing a result by hand and forgetting a derived field (the most common drift source observed in early manual runs). The SDK runner (`qa-visual.ts`) exits with code 2 on validation failure; the manual flow surfaces the validator errors in the `/build-demo` chat output and writes nothing until the producer fixes them.
+
+## Partial results + retry (PR-D)
+
+The SDK runner (`qa-visual.ts`) wraps each layer's vision call in `withRetry`: one retry-with-backoff for transient failures (network resets, 5xx, 429 rate limits); fail fast on 4xx other than 429. When a layer fails after retries, the runner sets that layer's field to `null`, appends the layer name to `failed_layers[]`, and continues to the next layer. The result file is written with documented partial coverage rather than the runner aborting and losing every other layer's output.
+
+The manual flow (in-session Claude via `/build-demo` skill) doesn't have transient API failures — Claude either produces a layer output or doesn't. The producer-side rule is still the same: a layer that you couldn't produce honestly (e.g. the brief is missing `voice_quotes[]` so Layer 4 has nothing to grade) MUST be nulled + listed in `failed_layers`. Inventing a sentinel grade to pad the field is forbidden; the validator now refuses to write such results.
+
+Owner-reaction (Layer 3) accepts richer persona context when available — Companies House `officers[]` (the spec-site-brief skill's enrichment) gives the model a specific name to be ("You are Sharon, the owner of..."), and `years_trading_int` frames the persona's tenure ("you've been doing this for 9 years — established, known in the neighbourhood"). Both fall through cleanly when absent. The persona richness affects only the role-play voice, not the output schema.
 
 ## Producer parity contract
 

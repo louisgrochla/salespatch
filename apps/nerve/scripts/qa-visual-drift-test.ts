@@ -70,6 +70,9 @@ const REQUIRED_SYMBOLS = [
   "VoiceConsistencyResult",
   "CustomerReaction",
   "SectionGrade",
+  // PR-D — partial-result + retry surface
+  "failed_layers",
+  "LAYER_NAMES",
   // Runtime validation surface
   "validateVisualQaResult",
 ];

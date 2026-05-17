@@ -163,8 +163,37 @@ export interface SectionGrade {
 }
 
 /**
+ * Names of every gradable layer in the canonical result. Used by
+ * `failed_layers[]` to signal "this layer produced null because the
+ * vision call failed permanently" without losing the rest of the
+ * QA pass.
+ *
+ * Adding a new layer? Add its key here AND make the corresponding
+ * field on `VisualQaResult` nullable. The Zod validator + drift test
+ * enforce both sides.
+ */
+export const LAYER_NAMES = [
+  "bugs",
+  "brand_fidelity",
+  "owner_reaction",
+  "voice_consistency",
+  "customer_reaction",
+  "section_grades",
+] as const;
+export type LayerName = (typeof LAYER_NAMES)[number];
+
+/**
  * The full canonical result. NERVE expects this exact shape on
  * /api/ingest/qa-visual-result regardless of which path produced it.
+ *
+ * PR-D: every gradable layer is nullable. `null` means "the producer
+ * tried this layer and the vision call failed permanently" — the
+ * layer name will appear in `failed_layers[]`. Downstream queries
+ * that aggregate grades should filter `WHERE brand_fidelity IS NOT
+ * NULL` (etc.) to exclude failed-run rows.
+ *
+ * Derived fields `has_critical` and `bug_count` are also nullable —
+ * they only make sense when `bugs` is non-null.
  */
 export interface VisualQaResult {
   qa_visual_id: string;
@@ -178,25 +207,33 @@ export interface VisualQaResult {
   /** The vision model that produced it. "claude-in-session" for manual flow; specific model id for SDK runs. */
   model: string;
 
-  // Layer 1
-  bugs: BugFinding[];
-  has_critical: boolean;
-  bug_count: number;
+  // Layer 1 — null if the bugs vision call failed permanently
+  bugs: BugFinding[] | null;
+  has_critical: boolean | null;
+  bug_count: number | null;
 
-  // Layer 2
-  brand_fidelity: BrandFidelityResult;
+  // Layer 2 — null if the brand-fidelity vision call failed permanently
+  brand_fidelity: BrandFidelityResult | null;
 
-  // Layer 3
-  owner_reaction: OwnerReaction;
+  // Layer 3 — null if the owner-reaction vision call failed permanently
+  owner_reaction: OwnerReaction | null;
 
-  // Layer 4 (PR-C)
-  voice_consistency: VoiceConsistencyResult;
+  // Layer 4 (PR-C) — null if the voice-consistency vision call failed permanently
+  voice_consistency: VoiceConsistencyResult | null;
 
-  // Layer 5 (PR-C)
-  customer_reaction: CustomerReaction;
+  // Layer 5 (PR-C) — null if the customer-reaction vision call failed permanently
+  customer_reaction: CustomerReaction | null;
 
-  // Layer 6 (PR-C) — empty array if the page has no recognisable sections
-  section_grades: SectionGrade[];
+  // Layer 6 (PR-C) — empty array if the page has no recognisable sections; null if the call failed
+  section_grades: SectionGrade[] | null;
+
+  /**
+   * PR-D: names of layers that produced `null` because the vision
+   * call failed after retries. Empty array (or absent) means every
+   * layer ran successfully. Must be in sync with the nullness of the
+   * corresponding fields; the Zod validator enforces.
+   */
+  failed_layers?: LayerName[];
 
   /** Optional 1-line global note across all layers. */
   notes?: string;
@@ -427,6 +464,17 @@ Respond ONLY with valid JSON matching this shape, no markdown fences, no preambl
 /**
  * Build the user-side message for Layer 3.
  * Injects business identity + the brief's diagnosis + test of success so the model can role-play accurately.
+ *
+ * PR-D: optional richer persona context from Companies House.
+ * - `officers` — if Companies House matched the business, this is the
+ *   list of registered officers. Names give the model someone specific
+ *   to be, which produces less generic reactions than "the owner".
+ * - `yearsTrading` — if known, frames the persona as a veteran ("you've
+ *   been doing this 14 years") vs a newcomer ("you launched 18 months
+ *   ago"). Reaction patterns differ meaningfully between the two.
+ *
+ * Both fall through cleanly when absent — the persona falls back to
+ * the simple "you are the owner of X" framing.
  */
 export function buildOwnerReactionUserMessage(opts: {
   businessName: string;
@@ -435,11 +483,32 @@ export function buildOwnerReactionUserMessage(opts: {
   ownerName?: string | null;
   diagnosis: string;
   testOfSuccess: string;
+  officers?: string[];
+  yearsTrading?: number | null;
 }): string {
-  const persona = opts.ownerName
-    ? `You are ${opts.ownerName}, the owner of ${opts.businessName}`
-    : `You are the owner of ${opts.businessName}`;
-  return `${persona}, a ${opts.businessType} in ${opts.address}.
+  // Persona: prefer explicit ownerName; fall through to first
+  // Companies House officer; finally fall through to anonymous.
+  let persona: string;
+  const firstOfficer = (opts.officers ?? [])[0];
+  if (opts.ownerName) {
+    persona = `You are ${opts.ownerName}, the owner of ${opts.businessName}`;
+  } else if (firstOfficer) {
+    persona = `You are ${firstOfficer}, the owner of ${opts.businessName}`;
+  } else {
+    persona = `You are the owner of ${opts.businessName}`;
+  }
+  // Years-trading frame, if known.
+  const yearsFrame =
+    typeof opts.yearsTrading === "number" && opts.yearsTrading > 0
+      ? opts.yearsTrading === 1
+        ? ` You've been doing this for one year — still finding your feet.`
+        : opts.yearsTrading < 5
+          ? ` You've been doing this for ${opts.yearsTrading} years — past the survival phase, building reputation.`
+          : opts.yearsTrading < 15
+            ? ` You've been doing this for ${opts.yearsTrading} years — established, known in the neighbourhood.`
+            : ` You've been doing this for ${opts.yearsTrading} years — a fixture, regulars know you by name.`
+      : "";
+  return `${persona}, a ${opts.businessType} in ${opts.address}.${yearsFrame}
 
 The brief diagnosed the conversion problem this demo must solve as:
 > ${opts.diagnosis}
@@ -724,6 +793,8 @@ export const SectionGradeSchema = z.object({
 
 // ── Canonical result ────────────────────────────────────────────────
 
+export const LayerNameSchema = z.enum(LAYER_NAMES);
+
 export const VisualQaResultSchema = z
   .object({
     qa_visual_id: z.string().min(1),
@@ -737,28 +808,65 @@ export const VisualQaResultSchema = z
     ran_at: z.string().datetime(),
     producer: z.enum(["manual_skill", "sdk_runner"]),
     model: z.string().min(1),
-    bugs: z.array(BugFindingSchema),
-    has_critical: z.boolean(),
-    bug_count: z.number().int().min(0),
-    brand_fidelity: BrandFidelityResultSchema,
-    owner_reaction: OwnerReactionSchema,
-    voice_consistency: VoiceConsistencyResultSchema,
-    customer_reaction: CustomerReactionSchema,
-    section_grades: z.array(SectionGradeSchema),
+    // PR-D: every gradable layer is nullable. null = vision call failed permanently.
+    bugs: z.array(BugFindingSchema).nullable(),
+    has_critical: z.boolean().nullable(),
+    bug_count: z.number().int().min(0).nullable(),
+    brand_fidelity: BrandFidelityResultSchema.nullable(),
+    owner_reaction: OwnerReactionSchema.nullable(),
+    voice_consistency: VoiceConsistencyResultSchema.nullable(),
+    customer_reaction: CustomerReactionSchema.nullable(),
+    section_grades: z.array(SectionGradeSchema).nullable(),
+    failed_layers: z.array(LayerNameSchema).optional(),
     notes: z.string().optional(),
   })
-  // Cross-field invariants: catches the producer claiming bug_count or
-  // has_critical that doesn't match the actual bugs array. Cheap insurance
-  // against the producer composing a result file by hand and forgetting
-  // to update one of the derived fields.
-  .refine((r) => r.bug_count === r.bugs.length, {
-    message: "bug_count must equal bugs.length",
-    path: ["bug_count"],
-  })
-  .refine((r) => r.has_critical === r.bugs.some((b) => b.severity === "critical"), {
-    message: "has_critical must be true iff any bug has severity=critical",
-    path: ["has_critical"],
-  });
+  // Cross-field invariants. Skip the bug_count/has_critical checks
+  // when bugs is null (the bugs layer failed; derived fields must also
+  // be null per the "nullness in sync with failed_layers" rule).
+  .refine(
+    (r) => r.bugs === null ? r.bug_count === null : r.bug_count === r.bugs.length,
+    {
+      message: "bug_count must equal bugs.length (or both null if bugs layer failed)",
+      path: ["bug_count"],
+    },
+  )
+  .refine(
+    (r) =>
+      r.bugs === null
+        ? r.has_critical === null
+        : r.has_critical === r.bugs.some((b) => b.severity === "critical"),
+    {
+      message: "has_critical must be true iff any bug has severity=critical (or both null if bugs layer failed)",
+      path: ["has_critical"],
+    },
+  )
+  // PR-D: nullness of layer fields must match failed_layers exactly.
+  // A producer that nulls a layer but forgets to add it to failed_layers
+  // hides the failure; one that adds a name to failed_layers without
+  // nulling the field is sending sentinel data labelled as good.
+  .refine(
+    (r) => {
+      const failed = new Set(r.failed_layers ?? []);
+      const checks: Array<[LayerName, unknown]> = [
+        ["bugs", r.bugs],
+        ["brand_fidelity", r.brand_fidelity],
+        ["owner_reaction", r.owner_reaction],
+        ["voice_consistency", r.voice_consistency],
+        ["customer_reaction", r.customer_reaction],
+        ["section_grades", r.section_grades],
+      ];
+      for (const [name, value] of checks) {
+        if (failed.has(name) && value !== null) return false;
+        if (!failed.has(name) && value === null) return false;
+      }
+      return true;
+    },
+    {
+      message:
+        "failed_layers must match exactly the set of nullable layer fields that are null",
+      path: ["failed_layers"],
+    },
+  );
 
 /**
  * Validate a candidate VisualQaResult. Returns either `{valid: true,

@@ -136,6 +136,10 @@ interface BriefSubset {
   vertical: string | null;
   /** Voice quotes the brief committed to preserving in the demo (Layer 4 input). */
   voice_quotes: string[];
+  /** PR-D: Companies House officers (if matched) — enriches Layer 3 owner persona. */
+  officers: string[];
+  /** PR-D: Years trading as int (if matched) — enriches Layer 3 owner persona. */
+  years_trading_int: number | null;
 }
 
 interface BrandAnalysisSubset {
@@ -194,6 +198,17 @@ function loadContext(htmlPath: string): {
       ? brief.voice_quotes
       : [];
 
+  // PR-D: pull enrichment context for richer Layer 3 persona.
+  // metadata.enrichment.companies_house lives on brief.json per the
+  // spec-site-brief skill. Fall through cleanly when absent.
+  const enrichment = brief.metadata?.enrichment ?? {};
+  const ch = enrichment.companies_house ?? {};
+  const officers: string[] = Array.isArray(ch.officers)
+    ? ch.officers.map((o: unknown) => (typeof o === "string" ? o : "")).filter(Boolean)
+    : [];
+  const yearsTradingInt: number | null =
+    typeof ch.years_trading === "number" ? ch.years_trading : null;
+
   return {
     brief: {
       business_name: brief.business_name,
@@ -205,6 +220,8 @@ function loadContext(htmlPath: string): {
       brief_id: brief.brief_id,
       vertical: brief.vertical ?? null,
       voice_quotes: voiceQuotes,
+      officers,
+      years_trading_int: yearsTradingInt,
     },
     brand: {
       dominant_hex: brand.dominant_hex,
@@ -237,6 +254,63 @@ function parseJsonResponse<T>(raw: string): T {
     throw new Error(
       `model returned unparseable JSON: ${(e as Error).message}\nRaw: ${cleaned.slice(0, 500)}`,
     );
+  }
+}
+
+/**
+ * Wrap a vision-call promise with single-retry-with-backoff for
+ * transient API failures (network resets, 5xx, 429 rate limits). 4xx
+ * other than 429 are non-recoverable — fail fast.
+ *
+ * Returns the result on success. Throws after `maxAttempts` failures.
+ * Caller-side: catch and append the layer name to `failed_layers`
+ * rather than aborting the whole run.
+ */
+async function withRetry<T>(
+  fn: () => Promise<T>,
+  label: string,
+  maxAttempts = 2,
+): Promise<T> {
+  let lastErr: Error | undefined;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      return await fn();
+    } catch (e) {
+      lastErr = e as Error;
+      const msg = lastErr.message;
+      // Anthropic SDK surfaces status in the message. 4xx (non-429) is
+      // a permanent error — bad request, auth, etc. Don't waste a retry.
+      const is4xxNon429 = /\b4(?:0[0-46-9]|1\d|2[0-7])\b/.test(msg) && !/\b429\b/.test(msg);
+      if (is4xxNon429) {
+        console.error(`qa-visual: ${label} attempt ${attempt} failed (no retry): ${msg.slice(0, 120)}`);
+        throw e;
+      }
+      console.error(`qa-visual: ${label} attempt ${attempt}/${maxAttempts} failed: ${msg.slice(0, 120)}`);
+      if (attempt < maxAttempts) {
+        await new Promise((r) => setTimeout(r, 1500 * attempt));
+      }
+    }
+  }
+  throw lastErr ?? new Error(`${label} failed with no error captured`);
+}
+
+/**
+ * Attempt a layer's vision call with retry; on permanent failure,
+ * return null + push the layer name to `failedLayers`. Caller decides
+ * what to do with the null (write it to qa-visual-result.json as-is,
+ * documenting the partial result).
+ */
+async function tryLayer<T>(
+  fn: () => Promise<T>,
+  layerName: string,
+  failedLayers: string[],
+): Promise<T | null> {
+  try {
+    return await withRetry(fn, layerName);
+  } catch (e) {
+    console.error(`qa-visual: ${layerName} FAILED PERMANENTLY: ${(e as Error).message.slice(0, 160)}`);
+    failedLayers.push(layerName);
+    return null;
   }
 }
 
@@ -331,99 +405,147 @@ async function main(): Promise<void> {
   const sectionSlices = loadSectionSlices(htmlPath);
   console.error(`qa-visual: sections=${sectionSlices.length}`);
 
+  // PR-D: each layer call goes through tryLayer, which retries once on
+  // transient failures and records permanent failures in failedLayers[]
+  // rather than aborting the whole run. A partial result with documented
+  // failed layers is more useful than a missing file when one API call
+  // hits a 429 we can't recover from.
+  const failedLayers: string[] = [];
+
   // ── LAYER 1: Bugs ───────────────────────────────────────────────────
   console.error(`qa-visual: layer 1 (bugs)...`);
-  const bugsRaw = await callVision(
-    client,
-    BUGS_SYSTEM_PROMPT,
-    buildBugsUserMessage({
-      businessName: brief.business_name,
-      viewportWidth: VIEWPORT.width,
-      viewportHeight: VIEWPORT.height,
-      dynamicScan,
-    }),
-    [heroB64, fullB64],
+  const bugsResult = await tryLayer(
+    async () => {
+      const raw = await callVision(
+        client,
+        BUGS_SYSTEM_PROMPT,
+        buildBugsUserMessage({
+          businessName: brief.business_name,
+          viewportWidth: VIEWPORT.width,
+          viewportHeight: VIEWPORT.height,
+          dynamicScan,
+        }),
+        [heroB64, fullB64],
+      );
+      return parseJsonResponse<{ bugs: BugFinding[]; notes?: string }>(raw);
+    },
+    "bugs",
+    failedLayers,
   );
-  const bugsResult = parseJsonResponse<{ bugs: BugFinding[]; notes?: string }>(bugsRaw);
 
   // ── LAYER 2: Brand fidelity ─────────────────────────────────────────
   console.error(`qa-visual: layer 2 (brand fidelity)...`);
-  const brandRaw = await callVision(
-    client,
-    BRAND_FIDELITY_SYSTEM_PROMPT,
-    buildBrandFidelityUserMessage({
-      businessName: brief.business_name,
-      brandAnalysis: brand,
-    }),
-    [heroB64, fullB64],
+  const brandResult = await tryLayer(
+    async () => {
+      const raw = await callVision(
+        client,
+        BRAND_FIDELITY_SYSTEM_PROMPT,
+        buildBrandFidelityUserMessage({
+          businessName: brief.business_name,
+          brandAnalysis: brand,
+        }),
+        [heroB64, fullB64],
+      );
+      return parseJsonResponse<BrandFidelityResult>(raw);
+    },
+    "brand_fidelity",
+    failedLayers,
   );
-  const brandResult = parseJsonResponse<BrandFidelityResult>(brandRaw);
 
   // ── LAYER 3: Owner reaction ─────────────────────────────────────────
   console.error(`qa-visual: layer 3 (owner reaction)...`);
-  const reactionRaw = await callVision(
-    client,
-    OWNER_REACTION_SYSTEM_PROMPT,
-    buildOwnerReactionUserMessage({
-      businessName: brief.business_name,
-      businessType: brief.business_type,
-      address: brief.address,
-      ownerName: brief.owner_name,
-      diagnosis: brief.diagnosis,
-      testOfSuccess: brief.test_of_success,
-    }),
-    [heroB64, fullB64],
+  const reactionResult = await tryLayer(
+    async () => {
+      const raw = await callVision(
+        client,
+        OWNER_REACTION_SYSTEM_PROMPT,
+        buildOwnerReactionUserMessage({
+          businessName: brief.business_name,
+          businessType: brief.business_type,
+          address: brief.address,
+          ownerName: brief.owner_name,
+          diagnosis: brief.diagnosis,
+          testOfSuccess: brief.test_of_success,
+          // PR-D: richer persona — enrichment.companies_house.officers (if matched) and years_trading
+          officers: brief.officers,
+          yearsTrading: brief.years_trading_int,
+        }),
+        [heroB64, fullB64],
+      );
+      return parseJsonResponse<OwnerReaction>(raw);
+    },
+    "owner_reaction",
+    failedLayers,
   );
-  const reactionResult = parseJsonResponse<OwnerReaction>(reactionRaw);
 
   // ── LAYER 4: Voice consistency (PR-C) ───────────────────────────────
   console.error(`qa-visual: layer 4 (voice consistency, ${brief.voice_quotes.length} quotes)...`);
-  const voiceRaw = await callVision(
-    client,
-    VOICE_CONSISTENCY_SYSTEM_PROMPT,
-    buildVoiceConsistencyUserMessage({
-      businessName: brief.business_name,
-      voiceQuotes: brief.voice_quotes,
-    }),
-    [heroB64, fullB64],
+  const voiceResult = await tryLayer(
+    async () => {
+      const raw = await callVision(
+        client,
+        VOICE_CONSISTENCY_SYSTEM_PROMPT,
+        buildVoiceConsistencyUserMessage({
+          businessName: brief.business_name,
+          voiceQuotes: brief.voice_quotes,
+        }),
+        [heroB64, fullB64],
+      );
+      return parseJsonResponse<VoiceConsistencyResult>(raw);
+    },
+    "voice_consistency",
+    failedLayers,
   );
-  const voiceResult = parseJsonResponse<VoiceConsistencyResult>(voiceRaw);
 
   // ── LAYER 5: Customer reaction (PR-C) ───────────────────────────────
   console.error(`qa-visual: layer 5 (customer reaction)...`);
-  const customerRaw = await callVision(
-    client,
-    CUSTOMER_REACTION_SYSTEM_PROMPT,
-    buildCustomerReactionUserMessage({
-      businessName: brief.business_name,
-      businessType: brief.business_type,
-      address: brief.address,
-      vertical: brief.vertical,
-    }),
-    [heroB64, fullB64],
+  const customerResult = await tryLayer(
+    async () => {
+      const raw = await callVision(
+        client,
+        CUSTOMER_REACTION_SYSTEM_PROMPT,
+        buildCustomerReactionUserMessage({
+          businessName: brief.business_name,
+          businessType: brief.business_type,
+          address: brief.address,
+          vertical: brief.vertical,
+        }),
+        [heroB64, fullB64],
+      );
+      return parseJsonResponse<CustomerReaction>(raw);
+    },
+    "customer_reaction",
+    failedLayers,
   );
-  const customerResult = parseJsonResponse<CustomerReaction>(customerRaw);
 
   // ── LAYER 6: Section grading (PR-C) ─────────────────────────────────
-  let sectionGrades: SectionGrade[] = [];
+  let sectionGrades: SectionGrade[] | null = [];
   if (sectionSlices.length > 0) {
     console.error(`qa-visual: layer 6 (section grading, ${sectionSlices.length} slices)...`);
     const sectionImagesB64 = sectionSlices.map((s) =>
       readFileSync(s.path).toString("base64"),
     );
-    const sectionRaw = await callVision(
-      client,
-      SECTION_GRADING_SYSTEM_PROMPT,
-      buildSectionGradingUserMessage({
-        businessName: brief.business_name,
-        sectionLabels: sectionSlices.map((s) => s.label),
-      }),
-      sectionImagesB64,
+    const sectionParsed = await tryLayer(
+      async () => {
+        const raw = await callVision(
+          client,
+          SECTION_GRADING_SYSTEM_PROMPT,
+          buildSectionGradingUserMessage({
+            businessName: brief.business_name,
+            sectionLabels: sectionSlices.map((s) => s.label),
+          }),
+          sectionImagesB64,
+        );
+        return parseJsonResponse<{ section_grades: SectionGrade[] }>(raw);
+      },
+      "section_grades",
+      failedLayers,
     );
-    const sectionParsed = parseJsonResponse<{ section_grades: SectionGrade[] }>(sectionRaw);
-    sectionGrades = sectionParsed.section_grades;
+    sectionGrades = sectionParsed?.section_grades ?? null;
   } else {
     console.error(`qa-visual: layer 6 (section grading) — skipped, no slices`);
+    // No sections in the page is structurally different from "layer
+    // failed". Stay as [] (valid empty case), don't add to failedLayers.
   }
 
   // ── Compose canonical result ────────────────────────────────────────
@@ -438,15 +560,16 @@ async function main(): Promise<void> {
     ran_at: ranAt,
     producer: "sdk_runner",
     model: MODEL,
-    bugs: bugsResult.bugs,
-    has_critical: bugsResult.bugs.some((b) => b.severity === "critical"),
-    bug_count: bugsResult.bugs.length,
+    bugs: bugsResult?.bugs ?? null,
+    has_critical: bugsResult ? bugsResult.bugs.some((b) => b.severity === "critical") : null,
+    bug_count: bugsResult?.bugs.length ?? null,
     brand_fidelity: brandResult,
     owner_reaction: reactionResult,
     voice_consistency: voiceResult,
     customer_reaction: customerResult,
     section_grades: sectionGrades,
-    notes: bugsResult.notes,
+    ...(failedLayers.length > 0 ? { failed_layers: failedLayers as VisualQaResult["failed_layers"] } : {}),
+    notes: bugsResult?.notes,
   };
 
   // Guard: validate the canonical shape BEFORE writing. A schema drift
@@ -463,27 +586,42 @@ async function main(): Promise<void> {
   writeFileSync(outPath, JSON.stringify(result, null, 2));
 
   // ── Stderr summary mirrors the /build-demo skill's surface ──────────
-  const critCount = result.bugs.filter((b) => b.severity === "critical").length;
-  const warnCount = result.bugs.filter((b) => b.severity === "warning").length;
-  const infoCount = result.bugs.filter((b) => b.severity === "info").length;
-  const sectionMean =
-    result.section_grades.length > 0
-      ? (
-          result.section_grades.reduce((acc, s) => acc + s.grade, 0) /
-          result.section_grades.length
-        ).toFixed(1)
-      : "n/a";
+  // PR-D: any nullable layer field renders as "(failed)" in the summary
+  // line so the caller can spot a partial run at a glance.
+  const bugsStr = result.bugs === null
+    ? `bugs=(failed)`
+    : (() => {
+        const critCount = result.bugs.filter((b) => b.severity === "critical").length;
+        const warnCount = result.bugs.filter((b) => b.severity === "warning").length;
+        const infoCount = result.bugs.filter((b) => b.severity === "info").length;
+        return `bugs=${result.bug_count} (${critCount}c/${warnCount}w/${infoCount}i)${result.has_critical ? " HAS_CRITICAL" : ""}`;
+      })();
+  const brandStr = result.brand_fidelity === null
+    ? `brand=(failed)`
+    : `brand=${result.brand_fidelity.overall_grade.toFixed(1)}/5`;
+  const voiceStr = result.voice_consistency === null
+    ? `voice=(failed)`
+    : `voice=${result.voice_consistency.overall_grade}/5`;
+  const ownerStr = result.owner_reaction === null
+    ? `owner=(failed)`
+    : `owner=${result.owner_reaction.would_buy.toUpperCase()}`;
+  const customerStr = result.customer_reaction === null
+    ? `customer=(failed) trust=(failed)`
+    : `customer=${result.customer_reaction.would_act.toUpperCase()} trust=${result.customer_reaction.trust_at_glance}`;
+  const sectionsStr = result.section_grades === null
+    ? `sections=(failed)`
+    : result.section_grades.length === 0
+      ? `sections=n/a (n=0)`
+      : `sections=${(result.section_grades.reduce((a, s) => a + s.grade, 0) / result.section_grades.length).toFixed(1)}/5 (n=${result.section_grades.length})`;
+  const testPassStr = result.owner_reaction === null
+    ? `test_pass=(failed)`
+    : `test_pass=${result.owner_reaction.test_of_success_passes}`;
+  const failedStr =
+    result.failed_layers && result.failed_layers.length > 0
+      ? ` failed_layers=[${result.failed_layers.join(",")}]`
+      : "";
   console.error(
-    `qa-visual: bugs=${result.bug_count} ` +
-      `(${critCount}c/${warnCount}w/${infoCount}i)` +
-      (result.has_critical ? " HAS_CRITICAL" : "") +
-      ` brand=${result.brand_fidelity.overall_grade.toFixed(1)}/5` +
-      ` voice=${result.voice_consistency.overall_grade}/5` +
-      ` owner=${result.owner_reaction.would_buy.toUpperCase()}` +
-      ` customer=${result.customer_reaction.would_act.toUpperCase()}` +
-      ` trust=${result.customer_reaction.trust_at_glance}` +
-      ` sections=${sectionMean}/5 (n=${result.section_grades.length})` +
-      ` test_pass=${result.owner_reaction.test_of_success_passes}`,
+    `qa-visual: ${bugsStr} ${brandStr} ${voiceStr} ${ownerStr} ${customerStr} ${sectionsStr} ${testPassStr}${failedStr}`,
   );
   console.error(`qa-visual: result → ${outPath}`);
 
