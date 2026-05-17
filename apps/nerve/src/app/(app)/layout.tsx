@@ -30,7 +30,10 @@ async function loadCounts(): Promise<SidebarCounts> {
       prisma.operationsLog.count(),
       prisma.revenueEntry.count(),
       prisma.promptLibraryEntry.count(),
-      prisma.demoRecord.count(),
+      // R7: sidebar count reflects the actively-populated DemoArtefact
+      // table (every /build-demo skill run) rather than the legacy
+      // DemoRecord manual-entry table.
+      prisma.demoArtefact.count(),
       prisma.leadRecord.count(),
       // Pending-builds count comes from Supabase, not Prisma — wrap so a
       // missing service-role key never breaks the layout shell.

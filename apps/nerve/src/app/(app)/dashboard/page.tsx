@@ -29,7 +29,12 @@ async function loadDashboard() {
       prisma.pitchLog.groupBy({ by: ["outcome"], _count: { _all: true } }),
       prisma.revenueEntry.aggregate({ _sum: { amount: true } }),
       prisma.costEntry.aggregate({ _sum: { amount: true } }),
-      prisma.demoRecord.count({ where: { conversionOutcome: { not: "closed" } } }),
+      // R7: switched from legacy `demoRecord` (manual-entry, mostly empty)
+      // to `demoArtefact` (where every /build-demo skill run lands). The
+      // old `conversionOutcome: { not: "closed" }` filter needed a join
+      // through LeadAssignmentEvent; for the dashboard headline tile a
+      // simple lifetime count is honest and unambiguous.
+      prisma.demoArtefact.count(),
       currentPhaseLabel(),
       prisma.dissertationMeta.findUnique({ where: { id: "main" } }),
       prisma.dissertationSection.findMany({
@@ -108,9 +113,14 @@ async function loadRecentActivity(): Promise<ActivityItem[]> {
       orderBy: { createdAt: "desc" }, take: 5,
       select: { id: true, dealReference: true, amount: true, createdAt: true, phaseLabel: true },
     }),
-    prisma.demoRecord.findMany({
-      orderBy: { createdAt: "desc" }, take: 5,
-      select: { id: true, businessName: true, createdAt: true, phaseLabel: true },
+    // R7: activity feed reads demoArtefact (skill output) not demoRecord
+    // (legacy manual entry). DemoArtefact orders on generatedAt and the
+    // table doesn't carry a phaseLabel column, so we derive that from
+    // the linked Note / SiteBrief at display time — null is acceptable
+    // for the activity row.
+    prisma.demoArtefact.findMany({
+      orderBy: { generatedAt: "desc" }, take: 5,
+      select: { id: true, businessName: true, generatedAt: true },
     }),
     prisma.literatureEntry.findMany({
       orderBy: { createdAt: "desc" }, take: 5,
@@ -135,7 +145,7 @@ async function loadRecentActivity(): Promise<ActivityItem[]> {
     })),
     ...demos.map((d) => ({
       id: d.id, source: "demo", title: d.businessName,
-      createdAt: d.createdAt, phaseLabel: d.phaseLabel,
+      createdAt: d.generatedAt, phaseLabel: "Phase 1",
     })),
     ...literature.map((l) => ({
       id: l.id, source: "literature", title: l.title,
@@ -204,7 +214,7 @@ export default async function DashboardPage() {
           <StatTile label="close rate" value={`${(data.closeRate * 100).toFixed(1)}%`} hint={`${data.closedCount} of ${data.pitchedCount} pitched`} />
           <StatTile label="revenue to date" value={`£${data.revenue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} />
           <StatTile label="cac" value={data.cac > 0 ? `£${data.cac.toFixed(2)}` : "—"} hint="cost per close" />
-          <StatTile label="active demos" value={data.activeDemos.toLocaleString()} hint="not yet closed" />
+          <StatTile label="demos built" value={data.activeDemos.toLocaleString()} hint="lifetime via /build-demo skill" />
         </div>
       </Section>
 
