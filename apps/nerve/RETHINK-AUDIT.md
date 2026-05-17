@@ -196,7 +196,7 @@ Mark a round complete by filling in the PR column and ticking the box below.
 
 - [ ] R1 — Visual rethink _(in review on `feat/nerve-rethink-r1-visual`)_
 - [ ] R2 — Lead 360° polish _(in review on `feat/nerve-rethink-r2-leads`)_
-- [ ] R3 — Ask-the-business chat
+- [ ] R3 — Ask-the-business chat _(in review on `feat/nerve-rethink-r3-ask-business`)_
 - [ ] R4 — BusinessFact model + UI
 - [ ] R5 — External RAG API
 - [ ] R6 — Visual-QA surface + finish stubs
@@ -273,3 +273,19 @@ _Append per round: branch name, PR number, what changed, what's deferred._
   - Updated `hasSlMasData` check to include the new sources so SL-MAS-only leads with only notes (or only QA-visual data) still render rather than 404.
 - **Deferred:** Splitting the existing creative/QA/commerce/spend panels into their own files (only primitives + the 4 new panels extracted). Unified chronological timeline merging pitches + assignments + Stripe + composer + QA into one stream (decision: per-event tables are fine for today's volume; revisit when a lead has > 20 events).
 - **Verification:** `npx tsc --noEmit` clean. Local visual verification blocked by empty local `DATABASE_URL` — Vercel preview deploy is the verification path.
+
+### R3 — Ask-the-business chat
+
+- **Branch:** `feat/nerve-rethink-r3-ask-business`
+- **CHANGELOG:** `CHANGELOG/2026-05/2026-05-17_016_nerve_rethink_r3_ask_business.md`
+- **Schema migration:** `24_chat_session_scope` — adds nullable `scopeLeadSlug` column + index to `ChatSession`.
+- **Shipped:**
+  - `ChatSession.scopeLeadSlug` — when set, `sendMessage` narrows `semanticSearch` to embeddings tied to that lead.
+  - `SearchFilter.sourceId` — explicit allow-list of source record IDs. Empty array short-circuits to `[]` rather than running an unfiltered query.
+  - `getLeadSourceIds(leadIdOrSlug)` helper in `src/lib/sl-mas/leadEmbeddings.ts` — single source of truth for "what embeddings belong to this lead". `/leads/[id]/page.tsx` and `ask/actions.ts` now both call it.
+  - `newLeadChat(leadSlug)` server action — creates a session pre-scoped to the lead.
+  - `sendMessage` checks `session.scopeLeadSlug` and applies the source-id filter on every turn. Empty-scope sessions fall through to a "no chunks tied to this lead yet" context block instead of degrading to vault-wide.
+  - `LeadChatPanel` on `/leads/[id]` — lists scoped chats + start-new button. Shows ANTHROPIC-disabled and no-embeddings hints.
+  - `/ask` list page + `/ask/[sessionId]` page — show a "scoped · slug" badge for any session with `scopeLeadSlug` set, with a deep-link back to the lead from the session view.
+- **Deferred:** Inline composer + last-N-messages preview on the lead page itself (decision: link out to `/ask/[sessionId]` for the full chat experience; keeps the lead page from becoming a chat client). External RAG API exposure (R5). Embedding metadata filter (`metadata.relatedSlug`) — sourceId allow-list is enough for today's data shapes and avoids JSONB index requirements.
+- **Verification:** `npx tsc --noEmit` clean. Local DB unavailable — Vercel preview deploy runs the migration on the Neon prod branch via `prisma migrate deploy` in the build script. Visual + behavioural verification happens on the preview.

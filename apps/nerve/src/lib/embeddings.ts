@@ -129,6 +129,11 @@ export interface SearchHit {
 
 export interface SearchFilter {
   sourceType?: string | string[];
+  // R3: explicit allow-list of source record IDs. When passed as an
+  // array, an empty array means "no scope hits" — semanticSearch
+  // short-circuits to [] rather than running an `IN ()` Postgres
+  // syntax error or, worse, falling back to an unfiltered query.
+  sourceId?: string | string[];
   phaseLabel?: string | string[];
   createdAfter?: Date;
   createdBefore?: Date;
@@ -139,6 +144,17 @@ export async function semanticSearch(
   opts: { topK?: number; filter?: SearchFilter } = {},
 ): Promise<SearchHit[]> {
   const topK = opts.topK ?? 10;
+
+  // R3: short-circuit when a scoped search has no candidate source IDs.
+  // Avoids embedding the query (saves an OpenAI call) and avoids the
+  // `IN ()` syntax error.
+  if (opts.filter?.sourceId !== undefined) {
+    const ids = Array.isArray(opts.filter.sourceId)
+      ? opts.filter.sourceId
+      : [opts.filter.sourceId];
+    if (ids.length === 0) return [];
+  }
+
   const [vec] = await embedBatch([query]);
   const where: string[] = [];
   const params: unknown[] = [toVectorLiteral(vec)];
@@ -150,6 +166,13 @@ export async function semanticSearch(
       : [opts.filter.sourceType];
     where.push(`"sourceType" = ANY($${p++}::text[])`);
     params.push(types);
+  }
+  if (opts.filter?.sourceId) {
+    const ids = Array.isArray(opts.filter.sourceId)
+      ? opts.filter.sourceId
+      : [opts.filter.sourceId];
+    where.push(`"sourceId" = ANY($${p++}::text[])`);
+    params.push(ids);
   }
   if (opts.filter?.phaseLabel) {
     const phases = Array.isArray(opts.filter.phaseLabel)

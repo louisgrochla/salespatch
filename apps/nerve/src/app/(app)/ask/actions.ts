@@ -3,10 +3,11 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
-import { semanticSearch } from "@/lib/embeddings";
+import { semanticSearch, type SearchFilter } from "@/lib/embeddings";
 import { askClaude, buildContextBlock, isAskAvailable } from "@/lib/anthropic";
 import { phaseLabelFor } from "@/lib/phase";
 import { requireSession } from "@/lib/auth-guard";
+import { getLeadSourceIds } from "@/lib/sl-mas/leadEmbeddings";
 
 const TOP_K = 12;
 
@@ -17,6 +18,20 @@ export async function newChatSession() {
     data: { phaseLabel },
   });
   revalidatePath("/ask");
+  redirect(`/ask/${session.id}`);
+}
+
+// R3: start a new chat session scoped to one lead. The session's
+// scopeLeadSlug field steers semanticSearch to embeddings tied to this
+// lead only on every subsequent sendMessage call.
+export async function newLeadChat(leadSlug: string) {
+  await requireSession();
+  const phaseLabel = await phaseLabelFor(new Date());
+  const session = await prisma.chatSession.create({
+    data: { phaseLabel, scopeLeadSlug: leadSlug },
+  });
+  revalidatePath("/ask");
+  revalidatePath(`/leads/${leadSlug}`);
   redirect(`/ask/${session.id}`);
 }
 
@@ -42,12 +57,28 @@ export async function sendMessage(sessionId: string, formData: FormData) {
     data: { sessionId, role: "user", content: query },
   });
 
+  // R3: if this session is scoped to a lead, narrow retrieval to that
+  // lead's source IDs only. Empty array → semanticSearch short-circuits
+  // and we'll fall through to the "no vault context available" path
+  // rather than running an unfiltered query that'd defeat the scope.
+  const scopeSession = await prisma.chatSession.findUnique({
+    where: { id: sessionId },
+    select: { scopeLeadSlug: true },
+  });
+  let scopeFilter: SearchFilter | undefined;
+  if (scopeSession?.scopeLeadSlug) {
+    const sourceIds = await getLeadSourceIds(scopeSession.scopeLeadSlug);
+    scopeFilter = { sourceId: sourceIds };
+  }
+
   // 2. RAG retrieve.
   let hits: Awaited<ReturnType<typeof semanticSearch>> = [];
   let resolved: Awaited<ReturnType<typeof buildContextBlock>>["resolved"] = [];
-  let contextBlock = "(no vault context available)";
+  let contextBlock = scopeSession?.scopeLeadSlug
+    ? `(no chunks tied to this lead yet — RAG can't help here. Answering from general context.)`
+    : "(no vault context available)";
   try {
-    hits = await semanticSearch(query, { topK: TOP_K });
+    hits = await semanticSearch(query, { topK: TOP_K, filter: scopeFilter });
     if (hits.length > 0) {
       const built = await buildContextBlock(hits);
       contextBlock = built.block;

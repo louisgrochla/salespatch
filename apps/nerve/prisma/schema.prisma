@@ -679,6 +679,10 @@ model IpDocument {
 model ChatSession {
   id         String   @id @default(cuid())
   title      String?
+  // R3: when set, sendMessage narrows semanticSearch to embeddings tied
+  // to this lead only (LeadRecord.id + Notes whose relatedSlug matches).
+  // Null = unscoped, vault-wide chat.
+  scopeLeadSlug String?
   phaseLabel String
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
@@ -686,6 +690,7 @@ model ChatSession {
   messages ChatMessage[]
 
   @@index([createdAt])
+  @@index([scopeLeadSlug])
 }
 
 model ChatMessage {
