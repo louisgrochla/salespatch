@@ -61,6 +61,39 @@ Same domain as sales-dashboard but different framework. iOS app hits this.
 - `GET /api/team` — list salespeople with computed stats
 - `PATCH /api/team/:id` — update salesperson settings
 
+## NERVE (Next.js App Router, deployed to Vercel as nerve.salespatch.co.uk)
+
+Read endpoints (all GET, HMAC-signed via `OUTCOME_INGEST_SECRET` in
+`x-read-signature`):
+
+- `GET /api/read/lead-bundle?slug=` — full lead aggregate
+- `GET /api/read/pending-assignments` — lightweight queue
+- `GET /api/read/notes?scope=&relatedSlug=&tag=&q=`
+- `GET /api/read/strategies?vertical=&region=&status=`
+- `GET /api/read/business-identity/lookup?name=&postcode=`
+- `GET /api/read/lead-profiles/winning-features?vertical=`
+- `GET /api/read/qa-results/by-outcome?vertical=`
+- `GET /api/read/qa-visual/by-lead?lead_id=&limit=`
+- `GET /api/read/qa-visual/baselines?vertical=`
+- `GET /api/read/demo-artefacts/brief-drift?vertical=`
+- `GET /api/read/decisions/learning-context?agent_id=&limit=`
+
+RAG (POST, HMAC-signed via `OUTCOME_INGEST_SECRET` in `x-read-signature`):
+
+- `POST /api/search` — ranked chunks for a query + optional filter
+- `POST /api/ask` — RAG → Claude answer with sources, optional `leadSlug` scope
+
+See `./rag-api.md` for the full request/response schemas of the RAG endpoints.
+
+Ingest endpoints (POST, HMAC-signed; ingest secret depends on producer):
+
+- `POST /api/ingest/pitch`, `lead-profile`, `lead-assignment`, `site-brief`, `brand-analysis`, `demo-artefact`, `pitch-brief`, `qa-result`, `qa-visual-result`, `composer-iteration`, `stripe-event`, `salesperson-event`, `onboarding-response`, `decision`, `outcome`, `changelog`, `notes`, `business-fact`, `spend`
+
+Public:
+
+- `GET /api/public/demo/[slug]` — serves a demo artefact's HTML (no auth)
+- `GET /api/public/metrics` — aggregate KPIs (no auth)
+
 ## How iOS Communicates
 
 iOS app → mobile-api (Express). Uses Bearer token auth. Base URL configured in `APIClient.swift`. Does NOT talk to sales-dashboard or admin-panel directly.
