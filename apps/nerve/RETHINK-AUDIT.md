@@ -331,6 +331,20 @@ _Append per round: branch name, PR number, what changed, what's deferred._
 
 ---
 
+### R8 — Leads operations view (post-audit follow-up, in review)
+
+- **Branch:** `feat/nerve-r8-leads-ops-view`
+- **CHANGELOG:** `CHANGELOG/2026-05/2026-05-17_021_nerve_r8_leads_ops_view.md`
+- **Plan:** `apps/nerve/LEADS-OPS-PLAN.md` (R8 section live; R9 follow-up still pending)
+- **Why it landed:** Founder asked "where do all of the assigned leads go? we should be able to see them all in one view." The pre-R8 `/leads` was two inventory lists with no cross-lead assignment / stage / feedback signal. R8 replaces the page with a dense ops table — one row per canonical business with the 11 columns assignment, stage, demo+QA, pitches, build, revenue, last-activity, visit-time, feedback, flags.
+- **Shipped:**
+  - `apps/nerve/src/lib/sl-mas/leadOpsQuery.ts` — `loadLeadsOps(searchParams)` fans out ~10 parallel Prisma + Supabase queries, zips per canonical business (dedup via `normaliseName`), applies URL-driven filters server-side. Exports `LeadOpsRow`, `LeadOpsFilterOptions`, `LeadOpsSummary`, `STAGE_ORDER`.
+  - `apps/nerve/src/app/(app)/leads/_components/LeadsOpsFilters.tsx` + `LeadsOpsTable.tsx` — both server components, no client JS. Filters submit as GET; the URL is the only state.
+  - `apps/nerve/src/app/(app)/leads/page.tsx` — old 372-line implementation reduced to a thin orchestrator (PageHeader + state-of-play `StatTile` grid + Section wrapping filters + table).
+  - `apps/nerve/src/lib/supabase-builds.ts` extended with `fetchSalesUsers()` and `fetchVisits(assignmentIds)` for the live-pull SP / visit columns. Both degrade to empty when service-role is missing.
+- **Deferred:** R9 — `VisitEvent` ingest moves visit data + structured per-visit feedback off live Supabase reads and into NERVE Postgres. Schema + endpoint sketched in `apps/nerve/LEADS-OPS-PLAN.md` § R9; its own PR.
+- **Verification:** `npx tsc --noEmit` clean. Local DB unavailable — Vercel preview is the visual verification path (filter URLs spec'd in the changelog).
+
 ### R7 — Demo-library plumbing fix (post-audit follow-up)
 
 - **Branch:** `feat/nerve-r7-demos-fix`
@@ -352,4 +366,4 @@ _Append per round: branch name, PR number, what changed, what's deferred._
 
 ## Wrap
 
-The six rounds from the original audit are done. R7 above is a post-audit fix; future bugs of the same shape (table-rename drift, dead-pipeline readers) belong in `NERVE-ROADMAP.md` as their own tasks rather than reopening this doc.
+The six rounds from the original audit are done. R7 + R8 above are post-audit follow-ups — R7 fixed table-rename drift in the demo library, R8 introduces the cross-lead ops surface the audit never planned for. Future surface work of that shape (own plan doc, own PR, own changelog) is encouraged; future bugs of R7's shape belong in `NERVE-ROADMAP.md` as their own tasks rather than reopening this doc.
