@@ -1504,6 +1504,52 @@ model LeadAssignmentEvent {
   @@map("lead_assignment_events")
 }
 
+// ─── visit events (R9 — SP visit timeline + structured feedback) ─────────
+//
+// R9 of the leads-ops rethink. Moves SP visit data + per-visit feedback
+// off live Supabase reads (where mobile-api / Pi runtime authoritatively
+// own it) and into NERVE Postgres so:
+//   - `/leads` ops view doesn't depend on Supabase being reachable from Vercel.
+//   - The data is queryable by `/ask`, `/search`, and the R3 scoped chat
+//     (feedback text auto-embeds at ingest time).
+//   - SP time-on-business + outcome correlation can be cohort-sliced
+//     without round-tripping to Supabase.
+//
+// Producer: mobile-api `POST /visits` and `PATCH /visits/:id` handlers
+// fire-and-forget a NERVE ingest after the local write succeeds. Same
+// `OUTCOME_INGEST_SECRET` HMAC pattern as the other Phase B ingests.
+//
+// Idempotency key: caller-supplied `eventId` = `<assignmentId>:<type>:
+// <iso_no_colons>`. Retries collapse onto the same row.
+//
+// Type set: "arrived" | "departed" | "pitched" | "feedback". The R9 ops
+// view sums `durationMinutes` across all "departed" events for a given
+// assignment to compute "time at the business". Feedback rows are also
+// embedded into the RAG vault so `/ask` retrieves them per-lead.
+
+model VisitEvent {
+  id              String   @id @default(cuid())
+  eventId         String   @unique @map("event_id")
+  assignmentId    String   @map("assignment_id")        // Supabase lead_assignments.id
+  leadId          String   @map("lead_id")              // slug
+  userId          String   @map("user_id")              // sales_users.id
+  type            String                                // "arrived" | "departed" | "pitched" | "feedback"
+  durationMinutes Int?     @map("duration_minutes")     // populated on "departed"
+  latitude        Float?
+  longitude       Float?
+  feedback        String?                               // free-form per-visit note
+  rating          Int?                                  // 1-5 SP impression of the lead
+  metadata        Json     @default("{}")
+  occurredAt      DateTime @map("occurred_at")
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  @@index([leadId, occurredAt(sort: Desc)])
+  @@index([assignmentId, occurredAt(sort: Desc)])
+  @@index([userId, occurredAt(sort: Desc)])
+  @@index([type, occurredAt(sort: Desc)])
+  @@map("visit_events")
+}
+
 // ─── stripe events (Tier 2 payment timeline) ─────────────────────────────
 //
 // B2 of Phase B. Append-only mirror of every signature-verified Stripe
