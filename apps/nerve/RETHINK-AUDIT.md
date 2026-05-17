@@ -198,7 +198,7 @@ Mark a round complete by filling in the PR column and ticking the box below.
 - [ ] R2 — Lead 360° polish _(in review on `feat/nerve-rethink-r2-leads`)_
 - [ ] R3 — Ask-the-business chat _(in review on `feat/nerve-rethink-r3-ask-business`)_
 - [ ] R4 — BusinessFact model + UI _(in review on `feat/nerve-rethink-r4-business-facts`)_
-- [ ] R5 — External RAG API
+- [ ] R5 — External RAG API _(in review on `feat/nerve-rethink-r5-rag-api`)_
 - [ ] R6 — Visual-QA surface + finish stubs
 
 ---
@@ -304,3 +304,16 @@ _Append per round: branch name, PR number, what changed, what's deferred._
   - `getLeadSourceIds` extended to include `BusinessFact.id`s so the per-lead scoped chat retrieves fact chunks too.
 - **Deferred:** Bulk import / CSV upload of facts. Producer-side wire-ups (the `/spec-site-brief`, `/build-demo`, `/lead-json` skills could start writing facts they discover — that's a skill-side change, not a NERVE change). Schema-suggestion UI (key autocomplete from existing keys in the vault). Per-fact edit (today the flow is delete-then-re-add).
 - **Verification:** `npx prisma generate && npx tsc --noEmit` clean. Vercel applies migration 25 via the build script's `prisma migrate deploy`. Local DB unavailable — visual verification on the preview.
+
+### R5 — External RAG API
+
+- **Branch:** `feat/nerve-rethink-r5-rag-api`
+- **CHANGELOG:** `CHANGELOG/2026-05/2026-05-17_018_nerve_rethink_r5_rag_api.md`
+- **Shipped:**
+  - `POST /api/search` — HMAC-signed (`OUTCOME_INGEST_SECRET` via `x-read-signature`), accepts `query` + optional `topK` + optional `filter` (sourceType / sourceId / phaseLabel / createdAfter / createdBefore). Returns ranked chunks.
+  - `POST /api/ask` — HMAC-signed, one-shot RAG → Claude answer. Optional `leadSlug` narrows retrieval to the same source-id allow-list `LeadChatPanel` uses (R3); optional `priorTurns` lets the caller pass its own short conversation history. Response includes `answer`, `sources`, `scope`, `model`, token usage. No server-side session persistence.
+  - Both routes reuse the existing `verifySignature` helper (same hex-encoded HMAC-SHA256 of the raw body, `sha256=` prefix tolerated). Dev bypass via `OUTCOME_INGEST_ALLOW_UNSIGNED=true` for non-prod ergonomics.
+  - `knowledge/contracts/rag-api.md` — contract doc covering auth, request/response shapes, status codes, operational notes (cost, latency, scope semantics).
+  - `knowledge/contracts/api-surface.md` — NERVE section added covering read + RAG + ingest + public endpoints, plus a pointer to the rag-api contract.
+- **Deferred:** Streaming responses (SSE) for `/api/ask`. Tool use. Server-side session persistence via `/api/ask` (today only the web UI creates `ChatSession` rows; the API is one-shot). Consumer-side wire-ups in iOS / Pi runtime / sales-dashboard — those happen app-side, not NERVE-side.
+- **Verification:** `npx tsc --noEmit` clean. Test via signed curl once on Vercel preview. Cost & latency notes in the contract doc so any future consumer scopes its call rate appropriately.
