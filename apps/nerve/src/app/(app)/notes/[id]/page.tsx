@@ -87,9 +87,7 @@ export default async function NoteDetailPage({
           </Row>
           <div className="px-4 py-3">
             <div className="h-section mb-2">body</div>
-            <div className="prose prose-invert max-w-none">
-              <Markdown source={row.body} />
-            </div>
+            <Markdown source={row.body} />
           </div>
         </div>
       )}
