@@ -961,7 +961,6 @@ model ModelRegistration {
   @@map("model_registrations")
 }
 
-
 // ─── business identity (Phase F1) ────────────────────────────────────────
 //
 // One canonical row per physical business, lookupable by normalised name +
@@ -1020,49 +1019,49 @@ model BusinessIdentity {
 // agents can re-derive structured fields without re-scraping.
 
 model LeadProfile {
-  id                   String   @id @default(cuid())
-  leadId               String   @unique @map("lead_id") // natural key (slug)
-  businessName         String   @map("business_name")
-  businessType         String?  @map("business_type")
-  vertical             String?
-  category             String? // e.g. "barber" specifically vs "health" generically
-  address              String?
-  postcode             String?
-  phone                String?
-  email                String?
-  websiteUrl           String?  @map("website_url")
-  websiteQualityScore  Int?     @map("website_quality_score") // 0-100
-  googleRating         Float?   @map("google_rating")
-  googleReviewCount    Int?     @map("google_review_count") // lifetime count
-  googleLastReviewAt   DateTime? @map("google_last_review_at") // most recent review timestamp (lifetime)
-  googleReviewsLast30d Int?     @map("google_reviews_last_30d") // reviews in trailing 30 days
-  googleReviewsLast90d Int?     @map("google_reviews_last_90d") // reviews in trailing 90 days
-  bestReviews          Json?    @map("best_reviews") // [{ author, rating, text, date }]
-  instagramHandle      String?  @map("instagram_handle")
-  instagramFollowers   Int?     @map("instagram_followers")
-  instagramPostCount   Int?     @map("instagram_post_count") // lifetime count
-  igLastPostAt         DateTime? @map("ig_last_post_at") // most recent post timestamp
-  igPostsLast90d       Int?     @map("ig_posts_last_90d") // posts in last 90 days
-  igPostsPerMonthMedian Float?  @map("ig_posts_per_month_median") // median posts/month across scraped window
-  instagramBio         String?  @map("instagram_bio")
-  bioCtaType           String?  @map("bio_cta_type") // enum-by-convention: call|dm|link_in_bio|fresha|booksy|treatwell|website|none
-  photoCount           Int      @default(0) @map("photo_count")
-  hasLogo              Boolean  @default(false) @map("has_logo")
-  hasHeroImage         Boolean  @default(false) @map("has_hero_image")
-  openingHours         String[] @default([]) @map("opening_hours")
-  services             Json? // [{ name, description, isScraped }]
-  priceRange           String?  @map("price_range")
-  qualificationScore   Float?   @map("qualification_score") // 0-1
-  qualificationReasons String[] @default([]) @map("qualification_reasons")
-  qualifierVerdict     String?  @map("qualifier_verdict") // "qualified" | "rejected" | "uncertain"
-  latitude             Float?
-  longitude            Float?
-  rawScoutData         Json?    @map("raw_scout_data") // original Google Places response
-  rawProfilerData      Json?    @map("raw_profiler_data") // original profiler output
-  metadata             Json     @default("{}")
-  profiledAt           DateTime @default(now()) @map("profiled_at")
-  createdAt            DateTime @default(now()) @map("created_at")
-  updatedAt            DateTime @default(now()) @updatedAt @map("updated_at")
+  id                    String    @id @default(cuid())
+  leadId                String    @unique @map("lead_id") // natural key (slug)
+  businessName          String    @map("business_name")
+  businessType          String?   @map("business_type")
+  vertical              String?
+  category              String? // e.g. "barber" specifically vs "health" generically
+  address               String?
+  postcode              String?
+  phone                 String?
+  email                 String?
+  websiteUrl            String?   @map("website_url")
+  websiteQualityScore   Int?      @map("website_quality_score") // 0-100
+  googleRating          Float?    @map("google_rating")
+  googleReviewCount     Int?      @map("google_review_count") // lifetime count
+  googleLastReviewAt    DateTime? @map("google_last_review_at") // most recent review timestamp (lifetime)
+  googleReviewsLast30d  Int?      @map("google_reviews_last_30d") // reviews in trailing 30 days
+  googleReviewsLast90d  Int?      @map("google_reviews_last_90d") // reviews in trailing 90 days
+  bestReviews           Json?     @map("best_reviews") // [{ author, rating, text, date }]
+  instagramHandle       String?   @map("instagram_handle")
+  instagramFollowers    Int?      @map("instagram_followers")
+  instagramPostCount    Int?      @map("instagram_post_count") // lifetime count
+  igLastPostAt          DateTime? @map("ig_last_post_at") // most recent post timestamp
+  igPostsLast90d        Int?      @map("ig_posts_last_90d") // posts in last 90 days
+  igPostsPerMonthMedian Float?    @map("ig_posts_per_month_median") // median posts/month across scraped window
+  instagramBio          String?   @map("instagram_bio")
+  bioCtaType            String?   @map("bio_cta_type") // enum-by-convention: call|dm|link_in_bio|fresha|booksy|treatwell|website|none
+  photoCount            Int       @default(0) @map("photo_count")
+  hasLogo               Boolean   @default(false) @map("has_logo")
+  hasHeroImage          Boolean   @default(false) @map("has_hero_image")
+  openingHours          String[]  @default([]) @map("opening_hours")
+  services              Json? // [{ name, description, isScraped }]
+  priceRange            String?   @map("price_range")
+  qualificationScore    Float?    @map("qualification_score") // 0-1
+  qualificationReasons  String[]  @default([]) @map("qualification_reasons")
+  qualifierVerdict      String?   @map("qualifier_verdict") // "qualified" | "rejected" | "uncertain"
+  latitude              Float?
+  longitude             Float?
+  rawScoutData          Json?     @map("raw_scout_data") // original Google Places response
+  rawProfilerData       Json?     @map("raw_profiler_data") // original profiler output
+  metadata              Json      @default("{}")
+  profiledAt            DateTime  @default(now()) @map("profiled_at")
+  createdAt             DateTime  @default(now()) @map("created_at")
+  updatedAt             DateTime  @default(now()) @updatedAt @map("updated_at")
 
   @@index([vertical, profiledAt(sort: Desc)])
   @@index([qualifierVerdict, profiledAt(sort: Desc)])
@@ -1073,7 +1072,6 @@ model LeadProfile {
   @@map("lead_profiles")
 }
 
- 
 // ─── composer workbench iterations ───────────────────────────────────────
 //
 // Founder's manual demo-iteration trail from `tools/workbench/`. Every save
@@ -1088,20 +1086,20 @@ model LeadProfile {
 // insert when the network round-trip fails.
 
 model ComposerIteration {
-  id                 String   @id @default(cuid())
-  iterationId        String   @unique @map("iteration_id") // <lead_slug>-<iso_no_colons>
-  leadId             String?  @map("lead_id")
-  businessName       String?  @map("business_name")
-  vertical           String?
-  htmlOutput         String   @map("html_output") // full HTML, inline
-  cssOutput          String?  @map("css_output")
-  prompt             String? // system + user prompt that produced this if AI-generated
-  response           String? // raw AI response if applicable
-  editKind           String   @map("edit_kind") // "ai_generate" | "manual_edit" | "save" | "delete" | "rename"
-  editorNotes        String?  @map("editor_notes")
-  parentIterationId  String?  @map("parent_iteration_id")
-  metadata           Json     @default("{}")
-  createdAt          DateTime @default(now()) @map("created_at")
+  id                String   @id @default(cuid())
+  iterationId       String   @unique @map("iteration_id") // <lead_slug>-<iso_no_colons>
+  leadId            String?  @map("lead_id")
+  businessName      String?  @map("business_name")
+  vertical          String?
+  htmlOutput        String   @map("html_output") // full HTML, inline
+  cssOutput         String?  @map("css_output")
+  prompt            String? // system + user prompt that produced this if AI-generated
+  response          String? // raw AI response if applicable
+  editKind          String   @map("edit_kind") // "ai_generate" | "manual_edit" | "save" | "delete" | "rename"
+  editorNotes       String?  @map("editor_notes")
+  parentIterationId String?  @map("parent_iteration_id")
+  metadata          Json     @default("{}")
+  createdAt         DateTime @default(now()) @map("created_at")
 
   @@index([leadId, createdAt(sort: Desc)])
   @@index([editKind, createdAt(sort: Desc)])
@@ -1117,24 +1115,24 @@ model ComposerIteration {
 // Written by the Pi runtime via fire-and-forget POST to
 // /api/ingest/spend (see src/lib/spendReporter.ts on the runtime side).
 model SpendLedger {
-  id            String   @id @default(cuid())
-  provider      String // "openrouter" | "apify" | "google_places" | other
-  model         String? // e.g. "anthropic/claude-sonnet-4-20250514"
-  agentId       String?  @map("agent_id") // e.g. "site-composer-agent"
-  runId         String?  @map("run_id") // pipeline run ID when known
-  nodeId        String?  @map("node_id") // pipeline node ID when known
-  leadId        String?  @map("lead_id") // lead slug when known
-  vertical      String? // "barber" | "cafe" | etc.
-  costUsd       Float    @map("cost_usd") // non-zero, in USD
-  inputTokens   Int?     @map("input_tokens") // LLM input tokens
-  outputTokens  Int?     @map("output_tokens") // LLM output tokens
-  totalTokens   Int?     @map("total_tokens")
-  requestKind   String?  @map("request_kind") // "completion" | "embedding" | "scrape" | "places_search" | etc.
-  success       Boolean  @default(true)
-  errorMessage  String?  @map("error_message") // populated on failure
-  metadata      Json     @default("{}") // provider-specific (response_id, finish_reason, ...)
-  occurredAt    DateTime @map("occurred_at") // when the API call happened
-  createdAt     DateTime @default(now()) @map("created_at")
+  id           String   @id @default(cuid())
+  provider     String // "openrouter" | "apify" | "google_places" | other
+  model        String? // e.g. "anthropic/claude-sonnet-4-20250514"
+  agentId      String?  @map("agent_id") // e.g. "site-composer-agent"
+  runId        String?  @map("run_id") // pipeline run ID when known
+  nodeId       String?  @map("node_id") // pipeline node ID when known
+  leadId       String?  @map("lead_id") // lead slug when known
+  vertical     String? // "barber" | "cafe" | etc.
+  costUsd      Float    @map("cost_usd") // non-zero, in USD
+  inputTokens  Int?     @map("input_tokens") // LLM input tokens
+  outputTokens Int?     @map("output_tokens") // LLM output tokens
+  totalTokens  Int?     @map("total_tokens")
+  requestKind  String?  @map("request_kind") // "completion" | "embedding" | "scrape" | "places_search" | etc.
+  success      Boolean  @default(true)
+  errorMessage String?  @map("error_message") // populated on failure
+  metadata     Json     @default("{}") // provider-specific (response_id, finish_reason, ...)
+  occurredAt   DateTime @map("occurred_at") // when the API call happened
+  createdAt    DateTime @default(now()) @map("created_at")
 
   @@index([provider, occurredAt(sort: Desc)])
   @@index([agentId, occurredAt(sort: Desc)])
@@ -1142,7 +1140,6 @@ model SpendLedger {
   @@index([runId])
   @@map("spend_ledger")
 }
-
 
 // ─── site briefs ─────────────────────────────────────────────────────────
 //
@@ -1188,7 +1185,6 @@ model SiteBrief {
   @@map("site_briefs")
 }
 
-
 // ─── brand analyses ──────────────────────────────────────────────────────
 //
 // Phase 2 of the spec-site-brief skill, lifted out of the markdown into
@@ -1198,43 +1194,42 @@ model SiteBrief {
 // valid (autumn Pi could emit pure brand analysis from photos alone).
 
 model BrandAnalysis {
-  id                    String   @id @default(cuid())
-  analysisId            String   @unique @map("analysis_id")
-  leadId                String   @map("lead_id")
-  briefId               String?  @map("brief_id") // soft FK to site_briefs.briefId
-  dominantHex           String?  @map("dominant_hex")
-  dominantPct           Int?     @map("dominant_pct") // 0-100
-  neutralHex            String?  @map("neutral_hex")
-  neutralPct            Int?     @map("neutral_pct")
-  accentHex             String?  @map("accent_hex")
-  accentPct             Int?     @map("accent_pct")
-  displayFont           String?  @map("display_font")
-  displayFallback       String?  @map("display_fallback")
-  bodyFont              String?  @map("body_font")
-  bodyFallback          String?  @map("body_fallback")
-  monoFont              String?  @map("mono_font")
-  monoFallback          String?  @map("mono_fallback")
-  logoDescription       String?  @map("logo_description")
-  logoKind              String?  @map("logo_kind") // "clean_vector" | "hand_imperfect" | "asset_only"
-  voiceAdjectives       String[] @default([]) @map("voice_adjectives")
-  voiceQuotes           String[] @default([]) @map("voice_quotes") // verbatim lines
-  positioningReference  String?  @map("positioning_reference")
-  positioningRationale  String?  @map("positioning_rationale")
-  assetNotes            String[] @default([]) @map("asset_notes")
-  photoRoles            Json     @default("{}") @map("photo_roles") // { filename: role } map from Phase 2 — build-demo default placement
-  analysisMarkdown      String?  @map("analysis_markdown") // Phase 2 verbatim
-  source                String   @default("manual_skill")
-  metadata              Json     @default("{}")
-  analyzedAt            DateTime @default(now()) @map("analyzed_at")
-  createdAt             DateTime @default(now()) @map("created_at")
-  updatedAt             DateTime @default(now()) @updatedAt @map("updated_at")
+  id                   String   @id @default(cuid())
+  analysisId           String   @unique @map("analysis_id")
+  leadId               String   @map("lead_id")
+  briefId              String?  @map("brief_id") // soft FK to site_briefs.briefId
+  dominantHex          String?  @map("dominant_hex")
+  dominantPct          Int?     @map("dominant_pct") // 0-100
+  neutralHex           String?  @map("neutral_hex")
+  neutralPct           Int?     @map("neutral_pct")
+  accentHex            String?  @map("accent_hex")
+  accentPct            Int?     @map("accent_pct")
+  displayFont          String?  @map("display_font")
+  displayFallback      String?  @map("display_fallback")
+  bodyFont             String?  @map("body_font")
+  bodyFallback         String?  @map("body_fallback")
+  monoFont             String?  @map("mono_font")
+  monoFallback         String?  @map("mono_fallback")
+  logoDescription      String?  @map("logo_description")
+  logoKind             String?  @map("logo_kind") // "clean_vector" | "hand_imperfect" | "asset_only"
+  voiceAdjectives      String[] @default([]) @map("voice_adjectives")
+  voiceQuotes          String[] @default([]) @map("voice_quotes") // verbatim lines
+  positioningReference String?  @map("positioning_reference")
+  positioningRationale String?  @map("positioning_rationale")
+  assetNotes           String[] @default([]) @map("asset_notes")
+  photoRoles           Json     @default("{}") @map("photo_roles") // { filename: role } map from Phase 2 — build-demo default placement
+  analysisMarkdown     String?  @map("analysis_markdown") // Phase 2 verbatim
+  source               String   @default("manual_skill")
+  metadata             Json     @default("{}")
+  analyzedAt           DateTime @default(now()) @map("analyzed_at")
+  createdAt            DateTime @default(now()) @map("created_at")
+  updatedAt            DateTime @default(now()) @updatedAt @map("updated_at")
 
   @@index([leadId, analyzedAt(sort: Desc)])
   @@index([briefId])
   @@index([positioningReference])
   @@map("brand_analyses")
 }
-
 
 // ─── demo HTML artefacts ─────────────────────────────────────────────────
 //
@@ -1250,23 +1245,23 @@ model BrandAnalysis {
 // preserved by appending new rows on each rebuild.
 
 model DemoArtefact {
-  id                    String   @id @default(cuid())
-  artefactId            String   @unique @map("artefact_id") // caller-supplied natural key
-  leadId                String   @map("lead_id")
-  briefId               String?  @map("brief_id") // soft FK to site_briefs.briefId
-  composerIterationId   String?  @map("composer_iteration_id") // soft FK to composer_iterations.iterationId
-  businessName          String   @map("business_name")
-  vertical              String?
-  htmlInline            String   @map("html_inline") // full demo.html, base64 photos already embedded upstream
-  htmlSizeBytes         Int      @map("html_size_bytes") // denormalised size for queries / billing
-  photoCount            Int      @default(0) @map("photo_count") // count of <img data:...> embeds
-  aestheticPositioning  String?  @map("aesthetic_positioning") // mirrored from brand_analyses for join-free queries
-  dominantHex           String?  @map("dominant_hex")
-  source                String   @default("manual_skill") // "manual_skill" | "pi_composer"
-  metadata              Json     @default("{}")
-  generatedAt           DateTime @default(now()) @map("generated_at")
-  createdAt             DateTime @default(now()) @map("created_at")
-  updatedAt             DateTime @default(now()) @updatedAt @map("updated_at")
+  id                   String   @id @default(cuid())
+  artefactId           String   @unique @map("artefact_id") // caller-supplied natural key
+  leadId               String   @map("lead_id")
+  briefId              String?  @map("brief_id") // soft FK to site_briefs.briefId
+  composerIterationId  String?  @map("composer_iteration_id") // soft FK to composer_iterations.iterationId
+  businessName         String   @map("business_name")
+  vertical             String?
+  htmlInline           String   @map("html_inline") // full demo.html, base64 photos already embedded upstream
+  htmlSizeBytes        Int      @map("html_size_bytes") // denormalised size for queries / billing
+  photoCount           Int      @default(0) @map("photo_count") // count of <img data:...> embeds
+  aestheticPositioning String?  @map("aesthetic_positioning") // mirrored from brand_analyses for join-free queries
+  dominantHex          String?  @map("dominant_hex")
+  source               String   @default("manual_skill") // "manual_skill" | "pi_composer"
+  metadata             Json     @default("{}")
+  generatedAt          DateTime @default(now()) @map("generated_at")
+  createdAt            DateTime @default(now()) @map("created_at")
+  updatedAt            DateTime @default(now()) @updatedAt @map("updated_at")
 
   @@index([leadId, generatedAt(sort: Desc)])
   @@index([briefId])
@@ -1274,7 +1269,6 @@ model DemoArtefact {
   @@index([aestheticPositioning])
   @@map("demo_artefacts")
 }
-
 
 // ─── pitch briefs (capture enrichment, 2026-05-11) ───────────────────────
 //
@@ -1293,48 +1287,47 @@ model DemoArtefact {
 // (lead_id, generated_at DESC) index.
 
 model PitchBrief {
-  id                  String   @id @default(cuid())
-  pitchBriefId        String   @unique @map("pitch_brief_id") // <slug>-pitch-<iso_no_colons>
-  leadId              String   @map("lead_id")
-  briefId             String?  @map("brief_id") // soft FK to site_briefs.brief_id
-  businessName        String   @map("business_name")
-  vertical            String?
+  id                 String   @id @default(cuid())
+  pitchBriefId       String   @unique @map("pitch_brief_id") // <slug>-pitch-<iso_no_colons>
+  leadId             String   @map("lead_id")
+  briefId            String?  @map("brief_id") // soft FK to site_briefs.brief_id
+  businessName       String   @map("business_name")
+  vertical           String?
   // Lead-card denormalised surface (what the admin form receives).
-  businessType        String?  @map("business_type")
-  postcode            String?
-  address             String?
-  description         String?
-  heroHeadline        String?  @map("hero_headline")
-  ctaText             String?  @map("cta_text")
-  services            String[] @default([])
-  painPoints          String[] @default([]) @map("pain_points")
-  openingHours        String[] @default([]) @map("opening_hours")
-  trustBadges         String[] @default([]) @map("trust_badges")
-  avoidTopics         String[] @default([]) @map("avoid_topics")
-  contactName         String?  @map("contact_name")
-  contactRole         String?  @map("contact_role")
-  brandPrimaryHex     String?  @map("brand_primary_hex")
-  brandAccentHex      String?  @map("brand_accent_hex")
-  demoSiteDomain      String?  @map("demo_site_domain")
+  businessType       String?  @map("business_type")
+  postcode           String?
+  address            String?
+  description        String?
+  heroHeadline       String?  @map("hero_headline")
+  ctaText            String?  @map("cta_text")
+  services           String[] @default([])
+  painPoints         String[] @default([]) @map("pain_points")
+  openingHours       String[] @default([]) @map("opening_hours")
+  trustBadges        String[] @default([]) @map("trust_badges")
+  avoidTopics        String[] @default([]) @map("avoid_topics")
+  contactName        String?  @map("contact_name")
+  contactRole        String?  @map("contact_role")
+  brandPrimaryHex    String?  @map("brand_primary_hex")
+  brandAccentHex     String?  @map("brand_accent_hex")
+  demoSiteDomain     String?  @map("demo_site_domain")
   // Sales playbook — closing power.
-  hook                String?
-  opener              String?
-  demoMoments         String[] @default([]) @map("demo_moments")
-  closeScript         String?  @map("close_script")
-  nextVisitReason     String?  @map("next_visit_reason")
-  specificObjections  Json     @default("[]") @map("specific_objections") // [{ objection, response }]
-  source              String   @default("manual_skill") // "manual_skill" | "pi_pitch_generator" | "agent_sdk"
-  metadata            Json     @default("{}")
-  generatedAt         DateTime @default(now()) @map("generated_at")
-  createdAt           DateTime @default(now()) @map("created_at")
-  updatedAt           DateTime @default(now()) @updatedAt @map("updated_at")
+  hook               String?
+  opener             String?
+  demoMoments        String[] @default([]) @map("demo_moments")
+  closeScript        String?  @map("close_script")
+  nextVisitReason    String?  @map("next_visit_reason")
+  specificObjections Json     @default("[]") @map("specific_objections") // [{ objection, response }]
+  source             String   @default("manual_skill") // "manual_skill" | "pi_pitch_generator" | "agent_sdk"
+  metadata           Json     @default("{}")
+  generatedAt        DateTime @default(now()) @map("generated_at")
+  createdAt          DateTime @default(now()) @map("created_at")
+  updatedAt          DateTime @default(now()) @updatedAt @map("updated_at")
 
   @@index([leadId, generatedAt(sort: Desc)])
   @@index([vertical, generatedAt(sort: Desc)])
   @@index([briefId])
   @@map("pitch_briefs")
 }
-
 
 // ─── site QA results ─────────────────────────────────────────────────────
 //
@@ -1348,32 +1341,115 @@ model PitchBrief {
 // makes "latest QA for this artefact" a one-row lookup.
 
 model QaResult {
-  id                  String   @id @default(cuid())
-  qaId                String   @unique @map("qa_id") // caller-supplied natural key
-  artefactId          String   @map("artefact_id") // soft FK to demo_artefacts.artefactId
-  leadId              String   @map("lead_id") // denormalised for join-free analytics
-  score               Int // 0-100 overall
-  passed              Boolean // typically score >= 70 but the agent owns the rule
-  htmlValid           Boolean? @map("html_valid")
-  htmlWarnings        Int      @default(0) @map("html_warnings")
-  htmlErrors          Int      @default(0) @map("html_errors")
-  accessibilityScore  Int?     @map("accessibility_score") // 0-100
-  contrastScore       Int?     @map("contrast_score") // 0-100, WCAG
-  performanceScore    Int?     @map("performance_score") // 0-100, weight + render
-  issues              Json     @default("[]") // [{ severity, area, message, line }]
-  notes               String? // free-form qualitative summary
-  agentId             String?  @map("agent_id")
-  agentVersion        String?  @map("agent_version") // prompt version, model id, ruleset hash
-  source              String   @default("manual_skill") // "manual_skill" | "pi_qa_agent"
-  metadata            Json     @default("{}")
-  ranAt               DateTime @default(now()) @map("ran_at")
-  createdAt           DateTime @default(now()) @map("created_at")
-  updatedAt           DateTime @default(now()) @updatedAt @map("updated_at")
+  id                 String   @id @default(cuid())
+  qaId               String   @unique @map("qa_id") // caller-supplied natural key
+  artefactId         String   @map("artefact_id") // soft FK to demo_artefacts.artefactId
+  leadId             String   @map("lead_id") // denormalised for join-free analytics
+  score              Int // 0-100 overall
+  passed             Boolean // typically score >= 70 but the agent owns the rule
+  htmlValid          Boolean? @map("html_valid")
+  htmlWarnings       Int      @default(0) @map("html_warnings")
+  htmlErrors         Int      @default(0) @map("html_errors")
+  accessibilityScore Int?     @map("accessibility_score") // 0-100
+  contrastScore      Int?     @map("contrast_score") // 0-100, WCAG
+  performanceScore   Int?     @map("performance_score") // 0-100, weight + render
+  issues             Json     @default("[]") // [{ severity, area, message, line }]
+  notes              String? // free-form qualitative summary
+  agentId            String?  @map("agent_id")
+  agentVersion       String?  @map("agent_version") // prompt version, model id, ruleset hash
+  source             String   @default("manual_skill") // "manual_skill" | "pi_qa_agent"
+  metadata           Json     @default("{}")
+  ranAt              DateTime @default(now()) @map("ran_at")
+  createdAt          DateTime @default(now()) @map("created_at")
+  updatedAt          DateTime @default(now()) @updatedAt @map("updated_at")
 
   @@index([artefactId, ranAt(sort: Desc)])
   @@index([leadId, ranAt(sort: Desc)])
   @@index([passed, score(sort: Desc)])
   @@map("qa_results")
+}
+
+// ─── qa_visual_results (PR-E — six-layer vision review per artefact) ────
+//
+// Producer-parity ingest for the visual-QA pipeline that lives at
+// `apps/nerve/scripts/qa-visual.ts` (SDK runner, dormant on env-var
+// presence) and at `~/.claude/commands/build-demo.md` (manual flow,
+// active today). Both paths produce the same `VisualQaResult` shape
+// per `qa-visual-prompts.ts` — see that file + `qa-visual-prompts.md`
+// for the full contract.
+//
+// Distinct from `qa_results` (above): `qa_results` is the static
+// heuristic QA (regex over HTML — landmarks, alt text, em-dashes,
+// banned vocab). `qa_visual_results` is the six-layer vision pass
+// over rendered screenshots (bugs / brand-fidelity / owner-reaction
+// / voice-consistency / customer-reaction / section-grading). The
+// two scores answer different questions and are stored separately
+// so the warehouse can join either or both.
+//
+// Idempotency: caller-supplied `qa_visual_id` matches the natural-
+// key convention `<lead_id>-qa-visual-<iso_no_colons>`. Replays
+// return 200 with inserted=false. Re-running visual QA on the same
+// artefact (eg after a fix) creates a new row with a fresh
+// qa_visual_id; latest-for-artefact lookups use the
+// (artefact_id, ran_at DESC) index.
+//
+// PR-D nullable layer fields: each gradable layer's JSONB column is
+// nullable. When the producer's vision call failed permanently after
+// retries, the column is `null` AND the layer name appears in the
+// `failed_layers` Json array. The Zod validator at the producer side
+// enforces the exact-match invariant; the schema mirrors the nullness
+// here so downstream queries can `WHERE brand_fidelity IS NOT NULL`
+// to exclude failed-run rows from grade averages.
+
+model QaVisualResult {
+  id             String   @id @default(cuid())
+  qaVisualId     String   @unique @map("qa_visual_id") // caller-supplied natural key
+  artefactId     String?  @map("artefact_id") // soft FK to demo_artefacts.artefactId; nullable for early dev runs
+  leadId         String   @map("lead_id") // denormalised for join-free analytics
+  demoPath       String?  @map("demo_path") // producer-side absolute path; null when ingested externally
+  viewportWidth  Int      @map("viewport_width")
+  viewportHeight Int      @map("viewport_height")
+  ranAt          DateTime @map("ran_at")
+  producer       String // "manual_skill" | "sdk_runner" — both treated equivalently by analytics
+  model          String // "claude-in-session" | "claude-haiku-4-5-20251001" | ...
+
+  // Layer 1 (Bugs) — derived fields nullable when bugs is null per PR-D
+  bugs        Json? // BugFinding[] | null
+  hasCritical Boolean? @map("has_critical")
+  bugCount    Int?     @map("bug_count")
+
+  // Layer 2 (Brand fidelity) — null when the vision call failed
+  brandFidelity Json? @map("brand_fidelity") // BrandFidelityResult | null
+
+  // Layer 3 (Owner reaction) — null when the vision call failed
+  ownerReaction Json? @map("owner_reaction") // OwnerReaction | null
+
+  // Layer 4 (Voice consistency) — null when failed; empty quotes_preserved if brief had no voice_quotes
+  voiceConsistency Json? @map("voice_consistency") // VoiceConsistencyResult | null
+
+  // Layer 5 (Customer reaction) — null when the vision call failed
+  customerReaction Json? @map("customer_reaction") // CustomerReaction | null
+
+  // Layer 6 (Section grading) — null when failed; empty array if no recognisable sections
+  sectionGrades Json? @map("section_grades") // SectionGrade[] | null
+
+  // PR-D: layer names that produced null due to permanent vision-call
+  // failure. Must match the nullness of the corresponding fields exactly
+  // (producer-side validator enforces; downstream queries trust it).
+  failedLayers Json @default("[]") @map("failed_layers") // LayerName[]
+
+  notes    String?
+  source   String  @default("manual_skill")
+  metadata Json    @default("{}")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
+
+  @@index([leadId, ranAt(sort: Desc)])
+  @@index([artefactId, ranAt(sort: Desc)])
+  @@index([hasCritical])
+  @@index([producer])
+  @@map("qa_visual_results")
 }
 
 // ─── lead assignment events (Tier 2 funnel timeline) ─────────────────────
@@ -1458,19 +1534,19 @@ model StripeEvent {
   // Denormalised business keys — extracted by the producer from event
   // metadata or the event object so analytics joins don't have to parse
   // bodyJson. All optional; not every event has all of them.
-  assignmentId    String?  @map("assignment_id")
-  salespersonId   String?  @map("salesperson_id")
-  customerId      String?  @map("customer_id") // Stripe cus_...
-  sessionId       String?  @map("session_id") // Stripe cs_...
-  subscriptionId  String?  @map("subscription_id") // Stripe sub_...
-  paymentIntentId String?  @map("payment_intent_id") // Stripe pi_...
-  invoiceId       String?  @map("invoice_id") // Stripe in_...
-  amountTotalPence Int?    @map("amount_total_pence")
-  currency        String? // lowercase ISO 4217, e.g. "gbp"
-  paymentStatus   String?  @map("payment_status") // "paid" | "unpaid" | "no_payment_required"
-  bodyJson        Json     @map("body_json") // full event payload verbatim
-  occurredAt      DateTime @map("occurred_at") // from event.created
-  createdAt       DateTime @default(now()) @map("created_at")
+  assignmentId     String?  @map("assignment_id")
+  salespersonId    String?  @map("salesperson_id")
+  customerId       String?  @map("customer_id") // Stripe cus_...
+  sessionId        String?  @map("session_id") // Stripe cs_...
+  subscriptionId   String?  @map("subscription_id") // Stripe sub_...
+  paymentIntentId  String?  @map("payment_intent_id") // Stripe pi_...
+  invoiceId        String?  @map("invoice_id") // Stripe in_...
+  amountTotalPence Int?     @map("amount_total_pence")
+  currency         String? // lowercase ISO 4217, e.g. "gbp"
+  paymentStatus    String?  @map("payment_status") // "paid" | "unpaid" | "no_payment_required"
+  bodyJson         Json     @map("body_json") // full event payload verbatim
+  occurredAt       DateTime @map("occurred_at") // from event.created
+  createdAt        DateTime @default(now()) @map("created_at")
 
   @@index([type, occurredAt(sort: Desc)])
   @@index([assignmentId, occurredAt(sort: Desc)])
@@ -1541,30 +1617,30 @@ model SalespersonEvent {
 // made 12 saves but never hit complete").
 
 model OnboardingResponse {
-  id                  String   @id @default(cuid())
-  leadAssignmentId    String   @unique @map("lead_assignment_id")
+  id                String    @id @default(cuid())
+  leadAssignmentId  String    @unique @map("lead_assignment_id")
   // Mirror of the customer-supplied fields on `lead_onboarding_responses`.
-  contactPhone        String?  @map("contact_phone")
-  contactEmail        String?  @map("contact_email")
-  topChanges          String?  @map("top_changes")
-  anythingElse        String?  @map("anything_else")
-  hasExistingDomain   Boolean? @map("has_existing_domain")
-  existingDomain      String?  @map("existing_domain")
-  domainPreferences   Json?    @map("domain_preferences") // string[]
-  photos              Json?    @default("[]") // [{ url, filename, content_type, uploaded_at }]
-  completedAt         DateTime? @map("completed_at") // populated when mark_completed:true was last sent
-  welcomeSentAt       DateTime? @map("welcome_sent_at") // mirrors Supabase column
+  contactPhone      String?   @map("contact_phone")
+  contactEmail      String?   @map("contact_email")
+  topChanges        String?   @map("top_changes")
+  anythingElse      String?   @map("anything_else")
+  hasExistingDomain Boolean?  @map("has_existing_domain")
+  existingDomain    String?   @map("existing_domain")
+  domainPreferences Json?     @map("domain_preferences") // string[]
+  photos            Json?     @default("[]") // [{ url, filename, content_type, uploaded_at }]
+  completedAt       DateTime? @map("completed_at") // populated when mark_completed:true was last sent
+  welcomeSentAt     DateTime? @map("welcome_sent_at") // mirrors Supabase column
   // Server-side bookkeeping for drop-off analytics.
-  saveCount           Int      @default(0) @map("save_count")
-  firstSavedAt        DateTime @default(now()) @map("first_saved_at")
-  lastSavedAt         DateTime @default(now()) @map("last_saved_at")
+  saveCount         Int       @default(0) @map("save_count")
+  firstSavedAt      DateTime  @default(now()) @map("first_saved_at")
+  lastSavedAt       DateTime  @default(now()) @map("last_saved_at")
   // Full Supabase row verbatim so future analytics can re-derive without
   // hitting Supabase — including any columns we haven't promoted to
   // first-class fields yet.
-  rawPayload          Json?    @map("raw_payload")
-  metadata            Json     @default("{}")
-  createdAt           DateTime @default(now()) @map("created_at")
-  updatedAt           DateTime @default(now()) @updatedAt @map("updated_at")
+  rawPayload        Json?     @map("raw_payload")
+  metadata          Json      @default("{}")
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @default(now()) @updatedAt @map("updated_at")
 
   @@index([completedAt(sort: Desc)])
   @@index([welcomeSentAt(sort: Desc)])
