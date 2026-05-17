@@ -2,6 +2,8 @@ import { prisma } from "@/lib/db";
 import { currentPhaseLabel } from "@/lib/phase";
 import { StatTile } from "@/components/StatTile";
 import { PhasePill, StatusPill } from "@/components/PhasePill";
+import { PageHeader } from "@/components/PageHeader";
+import { Section } from "@/components/Section";
 import { format, formatDistanceToNow } from "date-fns";
 
 // Methodology threshold per phase, per spec ("data sufficiency indicator
@@ -62,6 +64,8 @@ async function loadDashboard() {
     return {
       ok: true as const,
       pitchCount,
+      pitchedCount,
+      closedCount,
       pitchOutcomes,
       closeRate,
       revenue,
@@ -184,29 +188,101 @@ export default async function DashboardPage() {
 
   return (
     <div className="p-6 space-y-6">
-      <header className="flex items-baseline justify-between border-b border-border pb-3">
-        <div>
-          <h1 className="font-sans text-xl font-medium text-fg">Dashboard</h1>
-          <div className="font-mono text-2xs text-fg-dim mt-0.5">
-            {format(now, "EEE dd LLL yyyy · HH:mm")}
-          </div>
-        </div>
-        <PhasePill phase={data.phase} />
-      </header>
+      <PageHeader
+        title="Dashboard"
+        subtitle={`${format(now, "EEE dd LLL yyyy · HH:mm")} · operator overview · everything else is one click away`}
+        actions={<PhasePill phase={data.phase} />}
+      />
 
-      <section>
-        <div className="h-section mb-2">operational</div>
+      <Section
+        title="state of play"
+        framer="Headline numbers across the sales pipeline. Click a tile for the full table."
+        cta={{ href: "/sales", label: "all pitches" }}
+      >
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-px bg-border border border-border">
           <StatTile label="total pitches" value={data.pitchCount.toLocaleString()} />
-          <StatTile label="close rate" value={`${(data.closeRate * 100).toFixed(1)}%`} />
+          <StatTile label="close rate" value={`${(data.closeRate * 100).toFixed(1)}%`} hint={`${data.closedCount} of ${data.pitchedCount} pitched`} />
           <StatTile label="revenue to date" value={`£${data.revenue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} />
-          <StatTile label="cac" value={data.cac > 0 ? `£${data.cac.toFixed(2)}` : "—"} />
-          <StatTile label="active demos" value={data.activeDemos.toLocaleString()} />
+          <StatTile label="cac" value={data.cac > 0 ? `£${data.cac.toFixed(2)}` : "—"} hint="cost per close" />
+          <StatTile label="active demos" value={data.activeDemos.toLocaleString()} hint="not yet closed" />
         </div>
-      </section>
+      </Section>
 
-      <section>
-        <div className="h-section mb-2">dissertation</div>
+      <Section
+        title="recent activity"
+        framer="Every event hitting the warehouse, newest first — pitches, ops notes, demos, revenue, literature."
+      >
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          <div className="lg:col-span-2 border border-border bg-bg-panel">
+            <div className="px-4 py-2 border-b border-border flex items-center justify-between">
+              <span className="h-section">timeline</span>
+              <span className="font-mono text-2xs text-fg-dim">last 20</span>
+            </div>
+            {data.recent.length === 0 ? (
+              <div className="px-4 py-8 text-center font-mono text-xs text-fg-dim">
+                No activity yet.
+              </div>
+            ) : (
+              <ul className="divide-y divide-border">
+                {data.recent.map((item) => (
+                  <li
+                    key={`${item.source}-${item.id}`}
+                    className="px-4 py-2 flex items-center gap-3 hover:bg-bg-hover"
+                  >
+                    <span className="font-mono text-2xs text-fg-dim w-24 shrink-0 uppercase">
+                      {item.source}
+                    </span>
+                    <span className="font-mono text-xs text-fg flex-1 truncate">
+                      {item.title}
+                    </span>
+                    <PhasePill phase={item.phaseLabel} className="shrink-0" />
+                    <span className="font-mono text-2xs text-fg-dim w-24 shrink-0 text-right">
+                      {formatDistanceToNow(item.createdAt, { addSuffix: true })}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+
+          <div className="border border-border bg-bg-panel">
+            <div className="px-4 py-2 border-b border-border">
+              <span className="h-section">quick capture</span>
+              <div className="font-sans text-2xs text-fg-dim mt-0.5">
+                Drop something into the vault without leaving the dashboard.
+              </div>
+            </div>
+            <ul className="divide-y divide-border">
+              <QuickAction href="/notes/new" label="Add note" />
+              <QuickAction href="/sales/new" label="Log pitch" />
+              <QuickAction href="/operations/new?type=decision" label="Log decision" />
+              <QuickAction href="/leads/new" label="Add lead" />
+              <QuickAction href="/search" label="Search the vault" />
+            </ul>
+
+            <div className="px-4 py-2 border-t border-border">
+              <span className="h-section">pitch outcomes</span>
+              <div className="font-sans text-2xs text-fg-dim mt-0.5">
+                Breakdown by outcome status, all time.
+              </div>
+            </div>
+            <ul className="divide-y divide-border">
+              {pitchOutcomesFromGroup(data.pitchOutcomes).map(([outcome, count]) => (
+                <li key={outcome} className="px-4 py-2 flex items-center gap-3">
+                  <StatusPill status={outcome} />
+                  <span className="font-mono text-xs text-fg ml-auto">{count}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      </Section>
+
+      <Section
+        title="dissertation"
+        framer="Thesis word-count progress, deadlines, methodology data sufficiency. Tracked separately from sales ops."
+        cta={{ href: "/dissertation", label: "open thesis tracker" }}
+      >
         <div className="grid grid-cols-2 md:grid-cols-4 gap-px bg-border border border-border">
           <StatTile
             label="days to submission"
@@ -241,66 +317,7 @@ export default async function DashboardPage() {
             />
           ))}
         </div>
-      </section>
-
-      <section className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <div className="lg:col-span-2 border border-border bg-bg-panel">
-          <div className="px-4 py-2 border-b border-border flex items-center justify-between">
-            <span className="h-section">live activity</span>
-            <span className="font-mono text-2xs text-fg-dim">last 20</span>
-          </div>
-          {data.recent.length === 0 ? (
-            <div className="px-4 py-8 text-center font-mono text-xs text-fg-dim">
-              No activity yet.
-            </div>
-          ) : (
-            <ul className="divide-y divide-border">
-              {data.recent.map((item) => (
-                <li
-                  key={`${item.source}-${item.id}`}
-                  className="px-4 py-2 flex items-center gap-3 hover:bg-bg-hover"
-                >
-                  <span className="font-mono text-2xs text-fg-dim w-24 shrink-0 uppercase">
-                    {item.source}
-                  </span>
-                  <span className="font-mono text-xs text-fg flex-1 truncate">
-                    {item.title}
-                  </span>
-                  <PhasePill phase={item.phaseLabel} className="shrink-0" />
-                  <span className="font-mono text-2xs text-fg-dim w-24 shrink-0 text-right">
-                    {formatDistanceToNow(item.createdAt, { addSuffix: true })}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-
-        <div className="border border-border bg-bg-panel">
-          <div className="px-4 py-2 border-b border-border h-section">
-            quick entry
-          </div>
-          <ul className="divide-y divide-border">
-            <QuickAction href="/sales/new" label="Log pitch manually" />
-            <QuickAction href="/operations/new" label="Add operations note" />
-            <QuickAction href="/operations/new?type=decision" label="Log decision" />
-            <QuickAction href="/dissertation/literature/new" label="Save literature source" />
-            <QuickAction href="/financial/new" label="Add financial entry" />
-          </ul>
-
-          <div className="px-4 py-2 border-t border-border h-section">
-            outcomes
-          </div>
-          <ul className="divide-y divide-border">
-            {pitchOutcomesFromGroup(data.pitchOutcomes).map(([outcome, count]) => (
-              <li key={outcome} className="px-4 py-2 flex items-center gap-3">
-                <StatusPill status={outcome} />
-                <span className="font-mono text-xs text-fg ml-auto">{count}</span>
-              </li>
-            ))}
-          </ul>
-        </div>
-      </section>
+      </Section>
     </div>
   );
 }

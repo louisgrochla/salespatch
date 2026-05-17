@@ -1,0 +1,260 @@
+# NERVE Rethink — Audit & Execution Plan
+
+> **Audit date:** 2026-05-17
+> **Scope:** Visual rethink of `apps/nerve/` + RAG/business-data expansion.
+> **Status:** Audit phase complete. Each round below ships as its own PR for manual review.
+
+---
+
+## Context
+
+NERVE today is a Next.js 14 + Prisma + Neon Postgres + pgvector intranet that aggregates session changelogs, decisions, leads, notes, briefs, demos, brand analyses, pitches, payments, and onboarding into one warehouse. It's the third leg of the AI Salesperson Platform alongside the orchestration runtime and the sales-dashboard.
+
+It works. The data layer is dense and mostly complete through Phase F2 (identity unification + admin queue + public demo serving). The problem is the surface on top of it: a sidebar of 6 nav groups, 12+ pages of stat tiles and lists, no per-section framing, and the founder describes it as "a dashboard with messy data points… no context on what it's actually used for."
+
+This audit covers two parallel rethinks:
+
+1. **Visual rethink** — same colours/style/links, but production-software feel with framing and useful insights per section.
+2. **RAG / business-data expansion** — turn NERVE into a real intranet that "knows everything about every data point a business has to offer, plus new ones when needed." Four sub-goals confirmed in scope: lead 360° aggregation, custom facts per business, ask-the-business RAG, external RAG API.
+
+**Audience:** founder + future operators (a new hire should land cold and understand what each page is for).
+**Dissertation surface:** keep and improve, not strip.
+**Sequencing:** each round below is a self-contained PR. User reviews manually before next round.
+
+---
+
+## 1. What exists today
+
+### Visual surface (12 pages, 6 sidebar groups)
+
+Sidebar groups: **Overview** (Dashboard, Search, Ask) · **Operations** (Sales, Operations Log, Financial, Product & System, Demo Library, Lead Intelligence, Customer Builds) · **Pipeline** (Pivot, Episodes, Strategies) · **Build** (Changelog, Notes) · **Research** (Dissertation, Literature, Methodology) · **Reference** (Knowledge, Legal, System Status).
+
+Top-level pages worth naming:
+
+- `/dashboard` — 5 operational stat tiles + 4+4 dissertation stat tiles + 20-row live activity list + quick-entry sidebar. No per-section copy.
+- `/ask` — RAG chat, multi-turn, backed by `ChatSession`/`ChatMessage` and Anthropic `claude-sonnet-4-20250514`.
+- `/search` — semantic search form across 16 source types; renders ranked chunks with source links.
+- `/sales` — pitch intelligence, filters, outcome distribution.
+- `/leads` (81 lines) — lead list with status/source filters. Dedups manual records against SL-MAS profiles.
+- `/leads/[id]` (917 lines) — polymorphic lead viewer; pulls brief + brand + demo iframe + QA + lead profile + assignment timeline + onboarding + pitches + composer iterations + spend + pitch brief.
+- `/financial` — revenue/cost ledger, sustainability verdict, sparkline, phase table.
+- `/dissertation` — research question, sections table, deadlines, supervisor actions.
+- `/pipeline` — pivot table over close rate × design combos.
+- `/notes` — scope-filtered notes list (shipped 2026-05-17).
+- `/changelog` — filtered session changelog timeline.
+
+### Data layer
+
+63 Prisma models. 18 ingest endpoints. 11 read endpoints. All ingest is HMAC-signed (`OUTCOME_INGEST_SECRET` or `NERVE_CHANGELOG_SECRET`).
+
+Core entity stack: `BusinessIdentity` → `LeadProfile` / `LeadRecord` → `SiteBrief` → `BrandAnalysis` → `DemoArtefact` → `PitchBrief` → `QaResult` / `QaVisualResult` → `LeadAssignmentEvent` → `PitchLog` → `StripeEvent` → `OnboardingResponse`.
+
+Producers wired: tools/workbench, outreach pipeline (spendReporter), spec-site-brief skill, build-demo skill, lead-json skill, sales-dashboard (status, payments, signup, admin, onboarding), Supabase webhooks, Stripe webhooks, `/nerve-log`, `/nerve-note`, `/nerve-quick`, `/nerve-decision`.
+
+### RAG layer
+
+- `Embedding` table — single polymorphic row (sourceType + sourceId + chunkText + chunkIndex + metadata JSONB + vector(1536)). ivfflat cosine index in `prisma/sql/embeddings_index.sql`.
+- `src/lib/embeddings.ts` exposes `embedRecord()`, `embedText()`, `semanticSearch(query, {topK, filter})`. Filters today: sourceType, phaseLabel, date range.
+- Every site-brief / brand-analysis / demo-artefact / qa-result / qa-visual-result / composer-iteration / changelog / note write auto-embeds in the same request.
+- `/ask` and `/search` are web UI only — **no external HTTP API**.
+
+### Shared design system
+
+- Tokens (`tailwind.config.ts:26–57`): `bg.*`, `border.*`, `fg.*`, `accent.*`, `status.*`, `phase.*`; Inter + JetBrains Mono; custom `2xs` size.
+- Utilities (`globals.css`): `.h-section`, `.pill`, `.nv-table`.
+- Components (`src/components/`): `DataTable`, `Form`, `Markdown`, `PageHeader`, `PhasePill`, `PipelinePivot`, `SessionProvider`, `Sidebar`, `StatTile`.
+
+---
+
+## 2. What's incomplete / stubby
+
+| Surface | State | Notes |
+|---|---|---|
+| `/product` Stage 6 | Stub | 5 static `<div>` items (Architecture, System changelog, Infrastructure, Pipelines, Models). No data wiring, no routes, no links. |
+| `/knowledge` | Thin (28 lines) | 4 count tiles. Sub-pages (Brand, Processes, Glossary, Resources) are bare CRUD shells with no narrative or operator help. |
+| `/legal` | Thin (30 lines) | 5 count tiles. No narrative. |
+| `/pipeline/strategies` | Referenced but absent | Sidebar/PageHeader link to it; page file empty/missing for audit scope. |
+| `/leads/[resource]/new` pages | Minimal | 14-line form wrappers, no inline help, no context. |
+| F1 backfill in prod | Not yet run | Pre-F1 producer rows (notably JP Nail `lead_profile`) lack canonical identity rows. Script ready at `apps/nerve/scripts/backfill-business-identities.ts`. |
+| Embedding backfill | Referenced, unverified | Schema note says "run `npm run db:backfill-embeddings`"; script existence not confirmed in repo. |
+| Tartan-pig demo | A2 hardcoded-live phrases remain | Flagged in last handoff (2026-05-17). Not visually re-tested. |
+| Visual-QA operator surface | Missing | The 10-PR A–J visual-QA stack exists only as CLI scripts and a markdown report (`apps/nerve/scripts/qa-visual-VERIFICATION.md`). No `/qa` page. |
+
+---
+
+## 3. Visual rethink — direction (no code yet)
+
+The current style (mono labels, bordered cards, dark, terminal-feel) is fine and worth keeping. The problem is information design, not aesthetics. Concrete changes:
+
+1. **Per-page intro component.** Every page above `/dashboard` deserves a one-line "what this is for, what action it supports" subtitle. `PageHeader.tsx` already accepts a subtitle prop — most pages just don't fill it.
+2. **Dashboard restructure.** Drop the dual stat-tile rows. Replace with role-shaped sections, each with a one-line framer and a deep-link CTA:
+   - *Today's ops* — pitches today, conversions today, pending visits.
+   - *Latest leads in pipeline* — top 5 with brief→pitch→outcome status.
+   - *Recent agent activity* — what skills/sessions ran, what they wrote.
+   - *Quick capture* — note / decision / lead / search shortcuts (replace generic 5-link list).
+   - *Dissertation pulse* — collapsed-by-default panel (preserved per user direction, demoted visually).
+3. **Sidebar trim.** 6 groups feels research-y. Suggested 4 task-shaped groups:
+   - **Pipeline** (Dashboard, Leads, Sales, Pipeline, Demo Library)
+   - **Capture** (Notes, Changelog, Operations Log, Quick capture)
+   - **Knowledge** (Ask, Search, Knowledge base, Legal, Reference)
+   - **Personal** (Dissertation, Literature, Methodology, Research)
+4. **Section framing inside cards.** Standardise: card has a header bar with `.h-section` label + one-line description right (small, dim). Today this varies between pages.
+5. **Stub-or-real rule.** A page with 4 count tiles and no narrative reads as unfinished. Either give it real content, or mark it "Planned — Q3 2026" so it doesn't look broken.
+6. **Visual consistency fixes** (small, batchable):
+   - StatTile grid gap: standardise on `gap-px` border-style throughout (some pages use `gap-3`).
+   - Table styling: every table uses `.nv-table` (today inconsistent).
+   - Card header pattern: pick one (`<div class="h-section">` outside vs `<header class="px-4 py-2 border-b">` inside) and unify.
+7. **Insight tiles, not stat tiles.** Replace some counts with directional signals: "close rate this week vs last week", "leads stuck at visited > 7 days", "demos failing QA on contrast". Today everything is a raw number.
+
+---
+
+## 4. Missing for the "business-data RAG" vision
+
+All four sub-goals in scope. Mapping each to the existing stack:
+
+### 4a. Lead 360° aggregation
+
+**Status:** ~80% built. `/leads/[id]/page.tsx` is 917 lines and pulls almost everything. Gaps to audit (not redesign):
+
+- Does it surface **notes** scoped to this lead? (`Note.relatedSlug` exists; needs a panel on the page.)
+- Does it surface **embeddings count + last embedded** per lead, so you know what the RAG knows?
+- Does it surface **SalespersonEvent** and **PitchLog** rows for this lead in a unified timeline?
+- Does it surface **StripeEvent** rows linked to the lead's assignment?
+- Does it surface **spend** (SpendLedger) attributable to this lead?
+
+Action: read the existing `/leads/[id]/page.tsx` carefully; produce a gap list against the full 63-model schema; add missing panels.
+
+### 4b. Custom facts per business — NEW
+
+Need a `BusinessFact` model that allows arbitrary structured facts beyond the rigid schema. Suggested shape:
+
+```
+BusinessFact {
+  id              cuid
+  businessIdentityId  String  (FK)
+  leadSlug        String?  (denormalised for fast filter)
+  key             String   ("owner_name", "best_contact_time", "had_fire_2023")
+  value           String   (free text)
+  source          String   ("manual", "scraped", "conversation", "agent")
+  confidence      Float?   (0..1, optional)
+  createdBy       String?
+  createdAt       DateTime
+}
+@@index([businessIdentityId, key])
+```
+
+Plus:
+
+- `POST /api/ingest/business-fact` (HMAC, idempotent on `(businessIdentityId, key, createdAt)`).
+- Auto-embed on write (so `/ask` and `/search` cover them).
+- Inline "Add fact" UI on `/leads/[id]`.
+
+### 4c. Ask-the-business RAG
+
+`semanticSearch()` today filters by sourceType / phaseLabel / date range. Add **metadata JSONB filtering** — specifically `metadata.lead_id` or `metadata.business_identity_id` — so a chat scoped to a single business returns only that business's chunks.
+
+Then drop a per-lead chat panel on `/leads/[id]` that reuses `/ask` machinery with the filter pre-bound. Same `ChatSession`/`ChatMessage` schema, just a `scopeLeadSlug` column on `ChatSession`.
+
+### 4d. External RAG API
+
+`/api/ask/route.ts` + `/api/search/route.ts` — formalise the existing `/ask` and `/search` pages as HMAC-signed JSON endpoints under the same `OUTCOME_INGEST_SECRET` pattern used by other reads. Document in `knowledge/contracts/`. Unblocks iOS / Pi agents / sales-dashboard consumers.
+
+---
+
+## 5. Things noticed while digging (observations)
+
+- **Three parallel lead models** — `LeadRecord` (founder CRUD) + `LeadProfile` (scraped/enriched) + `BusinessIdentity` (canonical F1 dedup). The model is sound but creates UI confusion. The `/leads` list dedups silently. Worth labelling source explicitly in the UI ("from skill", "manual entry", "canonical identity").
+- **Visual-QA is a hidden second app inside NERVE.** 10 PRs of layered vision-QA shipped in May, all of it CLI scripts + a markdown report. No `/qa` page surfaces pass/fail per lead. High-value promotion candidate.
+- **`/ask` and `/search` are 90% the same machinery.** Different top-K, different UI (chat vs list). Could be one page with a toggle, freeing nav space.
+- **Quick-entry sidebar on `/dashboard` is generic.** 5 hardcoded action links that don't reflect the actual daily flow. Replace with real action shortcuts: `/nerve-note`, `/nerve-decision`, "new lead from skill", "search vault."
+- **No embedding orphan tracking.** Delete a `DemoArtefact` and its embeddings persist. Low priority but a sweep script would close the loop.
+- **Embedding ingest happens inline** (~500ms-2s per save, within Vercel's 60s budget today). At higher volume this becomes a Vercel timeout risk. Watch for the breakpoint.
+- **No external API for `/ask` / `/search`.** Already in scope (4d) but worth restating: the RAG vault is invisible to every consumer except the founder web UI.
+- **Dissertation surface preserved (per user direction).** Visually demote rather than strip: move "Research" nav group to bottom of sidebar, collapse `/dashboard` dissertation tiles into one panel.
+- **Notes feature just shipped.** Currently no link from `/leads/[id]` to notes scoped to that lead, even though `Note.relatedSlug` is indexed for exactly this. Quick win.
+- **No `BusinessFact`-like extensibility today.** If you want to record "owner's name is Mark" you have to put it in a note. Works, but unstructured.
+- **`/leads/[id]` is 917 lines** — already approaching the size where it needs breaking into sub-components. If 4a's missing panels + 4b's facts + 4c's chat are added, that page becomes 1500+ lines. Plan for componentisation before adding to it.
+
+---
+
+## 6. Execution rounds (each = one PR)
+
+Each round below is a self-contained PR. User reviews manually before next round starts.
+
+| Round | Scope | Risk | Day-1 leverage | PR |
+|---|---|---|---|---|
+| **R1** | Visual rethink — per-section framing, dashboard restructure, sidebar trim, stub-or-real rule, consistency fixes. Cosmetic. No schema. | Low | High | _pending_ |
+| **R2** | Lead 360° polish — add missing panels (notes-for-this-lead, unified timeline, spend, Stripe events). Split `/leads/[id]/page.tsx` into sub-components. No schema. | Low | High | _pending_ |
+| **R3** | Ask-the-business chat — extend `semanticSearch` with metadata filter; per-lead chat panel on `/leads/[id]`. Tiny schema (add `scopeLeadSlug` to `ChatSession`). | Medium | High | _pending_ |
+| **R4** | `BusinessFact` model + ingest + add-fact UI + auto-embed. Schema migration. | Medium | Medium | _pending_ |
+| **R5** | External RAG API (`/api/ask`, `/api/search`, HMAC). | Low | Medium | _pending_ |
+| **R6** | Visual-QA operator surface (`/qa` page) + finish stub pages (`/product`, `/knowledge`, `/legal`). | Low | Medium | _pending_ |
+
+**Suggested order:** R1 → R2 → R3 → R4 → R5 → R6. R1 is foundational because everything later sits on the design system it tightens.
+
+Mark a round complete by filling in the PR column and ticking the box below.
+
+- [ ] R1 — Visual rethink _(in review on `feat/nerve-rethink-r1-visual`)_
+- [ ] R2 — Lead 360° polish
+- [ ] R3 — Ask-the-business chat
+- [ ] R4 — BusinessFact model + UI
+- [ ] R5 — External RAG API
+- [ ] R6 — Visual-QA surface + finish stubs
+
+---
+
+## 7. Critical files per round
+
+**R1 — Visual rethink:**
+- `apps/nerve/src/app/(app)/page.tsx` — dashboard
+- `apps/nerve/src/app/globals.css` — utilities
+- `apps/nerve/src/components/PageHeader.tsx` — page intro
+- `apps/nerve/src/components/Sidebar.tsx` — nav restructure
+- `apps/nerve/src/components/StatTile.tsx` — possible variant for "insight tile"
+- `apps/nerve/tailwind.config.ts` — tokens (reference only)
+
+**R2 — Lead 360°:**
+- `apps/nerve/src/app/(app)/leads/[id]/page.tsx` (917 lines — split before extending)
+- `apps/nerve/src/lib/sl-mas/*` — store helpers for missing panels
+
+**R3 — Ask-the-business:**
+- `apps/nerve/src/lib/embeddings.ts` — extend `semanticSearch` filter shape
+- `apps/nerve/src/app/(app)/ask/` — reuse for scoped chat
+- `apps/nerve/src/app/(app)/leads/[id]/page.tsx` — drop in scoped panel
+- `apps/nerve/prisma/schema.prisma` — add `scopeLeadSlug` to `ChatSession`
+
+**R4 — BusinessFact:**
+- `apps/nerve/prisma/schema.prisma` — new model + migration
+- `apps/nerve/src/app/api/ingest/business-fact/route.ts` — new ingest
+- `apps/nerve/src/app/(app)/leads/[id]/page.tsx` — add-fact UI
+- `apps/nerve/src/lib/embeddings.ts` — register source type
+
+**R5 — External RAG API:**
+- `apps/nerve/src/app/api/ask/route.ts` — new
+- `apps/nerve/src/app/api/search/route.ts` — new
+- `apps/nerve/src/lib/auth/hmac.ts` (or equivalent existing HMAC helper) — reuse
+- `knowledge/contracts/` — new contract doc
+
+**R6 — Visual-QA surface + stubs:**
+- `apps/nerve/scripts/qa-visual-*.ts` — connect to a new `/qa` page
+- `apps/nerve/src/app/(app)/qa/page.tsx` — new
+- `apps/nerve/src/app/(app)/product/page.tsx`, `/knowledge/page.tsx`, `/legal/page.tsx` — finish or label
+
+---
+
+## 8. Working notes (update as rounds ship)
+
+_Append per round: branch name, PR number, what changed, what's deferred._
+
+### R1 — Visual rethink
+
+- **Branch:** `feat/nerve-rethink-r1-visual`
+- **CHANGELOG:** `CHANGELOG/2026-05/2026-05-17_014_nerve_rethink_r1_visual.md`
+- **Shipped:**
+  - New `Section` component (title + framer + optional CTA) — reusable.
+  - Sidebar: 6 groups → 4 task-shaped groups (pipeline / capture / knowledge / research).
+  - `/dashboard` switched to `PageHeader`, wrapped in `Section` blocks with framer copy, quick-capture shortcuts replaced with daily-flow set.
+  - `/product` Stage 6 — `planned` pills + "not built yet" framer.
+  - `/knowledge` + `/legal` — intro paragraph above count tiles.
+- **Deferred:** Insight-tile delta variant (needs comparison queries → revisit in R2). Stub-page CRUD shells under `/knowledge/*` and `/legal/*` (not flagged urgent in audit). `/pipeline/strategies` empty-file check still open.
+- **Verification:** `npx tsc --noEmit` clean. Local visual verification blocked by empty local `DATABASE_URL` — Vercel preview deploy is the verification path.
