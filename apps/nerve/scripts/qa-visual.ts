@@ -38,12 +38,14 @@ import {
   VOICE_CONSISTENCY_SYSTEM_PROMPT,
   CUSTOMER_REACTION_SYSTEM_PROMPT,
   SECTION_GRADING_SYSTEM_PROMPT,
+  PHOTO_QUALITY_SYSTEM_PROMPT,
   buildBugsUserMessage,
   buildBrandFidelityUserMessage,
   buildOwnerReactionUserMessage,
   buildVoiceConsistencyUserMessage,
   buildCustomerReactionUserMessage,
   buildSectionGradingUserMessage,
+  buildPhotoQualityUserMessage,
   validateVisualQaResult,
   BASELINE_DRIFT_THRESHOLD,
   type VisualQaResult,
@@ -56,6 +58,8 @@ import {
   type DynamicScanSummary,
   type BaselineComparison,
   type BaselineDimensionComparison,
+  type PhotoQualityResult,
+  type PhotoQualityGrade,
 } from "./qa-visual-prompts";
 
 const VIEWPORT = { width: 375, height: 812 };
@@ -506,10 +510,62 @@ function loadSectionSlices(htmlPath: string): SectionSlice[] {
   }
 }
 
+/**
+ * PR-H: Extract every `<img src="data:image/...">` from the demo HTML.
+ *
+ * Returns the base64-encoded image bytes (ready for the Anthropic
+ * vision API's `image` content block, which wants the bare base64
+ * string without the `data:image/jpeg;base64,` prefix) plus the alt
+ * text and a media_type for the API. Caller positions photos by
+ * index in the message; the model uses positional alignment to
+ * grade each.
+ *
+ * Cap defaults to MAX_PHOTOS_TO_GRADE (15) to keep cost predictable.
+ * 15 images @ ~£0.005 each = ~£0.075 per QA pass with photo grading
+ * enabled. Demos with more photos get a truncated grading; the
+ * `notes` field on the result mentions this.
+ */
+function extractPhotosFromHtml(
+  html: string,
+  maxPhotos: number = MAX_PHOTOS_TO_GRADE,
+): Array<{ index: number; alt: string | null; mediaType: "image/jpeg" | "image/png" | "image/gif" | "image/webp"; base64: string }> {
+  // The regex captures the media-type, base64 payload, and (optionally) the
+  // alt attribute. <img> tags vary in attribute order so we permit
+  // src-before-alt and alt-before-src.
+  const re = /<img\b([^>]*\bsrc=["']data:image\/(jpeg|jpg|png|gif|webp);base64,([A-Za-z0-9+/=]+)["'][^>]*)>/gi;
+  const out: Array<{ index: number; alt: string | null; mediaType: "image/jpeg" | "image/png" | "image/gif" | "image/webp"; base64: string }> = [];
+  let match: RegExpExecArray | null;
+  while ((match = re.exec(html)) !== null) {
+    if (out.length >= maxPhotos) break;
+    const attrs = match[1];
+    const rawType = (match[2] || "").toLowerCase();
+    const base64 = match[3];
+    const mediaType =
+      rawType === "jpg" ? "image/jpeg" : (`image/${rawType}` as
+        | "image/jpeg"
+        | "image/png"
+        | "image/gif"
+        | "image/webp");
+    // Pull alt from anywhere in the same <img> opening tag.
+    const altMatch = /\balt=["']([^"']*)["']/.exec(attrs);
+    const alt = altMatch ? altMatch[1] : null;
+    out.push({ index: out.length, alt, mediaType, base64 });
+  }
+  return out;
+}
+
+const MAX_PHOTOS_TO_GRADE = 15;
+
 async function main(): Promise<void> {
-  const [, , htmlPathArg] = process.argv;
+  // PR-H: opt-in photo grading via --with-photo-grades flag. Default off
+  // because per-photo grading at 15 images costs ~£0.075 per run vs the
+  // ~£0.02 baseline. Producers must explicitly request.
+  const args = process.argv.slice(2);
+  const withPhotoGrades = args.includes("--with-photo-grades");
+  const positional = args.filter((a) => !a.startsWith("--"));
+  const htmlPathArg = positional[0];
   if (!htmlPathArg) {
-    console.error("usage: qa-visual.ts <demo.html>");
+    console.error("usage: qa-visual.ts <demo.html> [--with-photo-grades]");
     process.exit(1);
   }
 
@@ -699,6 +755,75 @@ async function main(): Promise<void> {
     // failed". Stay as [] (valid empty case), don't add to failedLayers.
   }
 
+  // ── PR-H — Photo quality (opt-in via --with-photo-grades) ───────────
+  //
+  // Absent from result when the flag wasn't set (producer didn't try).
+  // Null when the flag was set and the vision call failed.
+  // Populated when the flag was set and the call succeeded.
+  //
+  // Not part of LAYER_NAMES / failed_layers: it's gated by request, not
+  // by failure-recovery — the producer-side schema treats absent and
+  // null as distinct states.
+  let photoQuality: PhotoQualityResult | null | undefined = undefined;
+  if (withPhotoGrades) {
+    const htmlContent = readFileSync(htmlPath, "utf8");
+    const photos = extractPhotosFromHtml(htmlContent);
+    if (photos.length === 0) {
+      console.error(`qa-visual: layer 7 (photo quality) — no embedded photos found, skipping`);
+      photoQuality = {
+        photos: [],
+        mean_overall: 0,
+        weakest_photo_index: null,
+        notes: "no embedded photos to grade",
+      };
+    } else {
+      console.error(
+        `qa-visual: layer 7 (photo quality, ${photos.length} photo${photos.length === 1 ? "" : "s"})...`,
+      );
+      try {
+        const userMsg = buildPhotoQualityUserMessage({
+          businessName: brief.business_name,
+          photos: photos.map((p) => ({
+            index: p.index,
+            alt: p.alt,
+            role: null,
+          })),
+        });
+        const msg = await client.messages.create({
+          model: MODEL,
+          max_tokens: 3500,
+          system: PHOTO_QUALITY_SYSTEM_PROMPT,
+          messages: [
+            {
+              role: "user",
+              content: [
+                { type: "text", text: userMsg },
+                ...photos.map((p) => ({
+                  type: "image" as const,
+                  source: {
+                    type: "base64" as const,
+                    media_type: p.mediaType,
+                    data: p.base64,
+                  },
+                })),
+              ],
+            },
+          ],
+        });
+        const textBlock = msg.content.find((b) => b.type === "text");
+        if (!textBlock || textBlock.type !== "text") {
+          throw new Error("photo-quality vision call returned no text block");
+        }
+        photoQuality = parseJsonResponse<PhotoQualityResult>(textBlock.text);
+      } catch (e) {
+        console.error(
+          `qa-visual: layer 7 (photo quality) FAILED: ${(e as Error).message.slice(0, 160)}`,
+        );
+        photoQuality = null;
+      }
+    }
+  }
+
   // ── Compose canonical result ────────────────────────────────────────
   const ranAt = new Date().toISOString();
   const ranAtNoColons = ranAt.replace(/[:.]/g, "");
@@ -731,6 +856,9 @@ async function main(): Promise<void> {
       thisVoiceConsistency: voiceResult,
       thisSectionGrades: sectionGrades,
     }),
+    // PR-H: photo_quality is absent when --with-photo-grades wasn't set,
+    // null when set + vision failed, populated when set + succeeded.
+    ...(photoQuality !== undefined ? { photo_quality: photoQuality } : {}),
     notes: bugsResult?.notes,
   };
 
@@ -792,8 +920,16 @@ async function main(): Promise<void> {
       return ` baselines=on_par(n=${bc.baseline_n})`;
     return ` baselines=below(n=${bc.baseline_n})[${below.map((d) => d.name).join(",")}]`;
   })();
+  // PR-H: surface photo-quality mean (or failure) in the chat-output summary.
+  const photoStr = (() => {
+    if (!("photo_quality" in result)) return "";
+    if (result.photo_quality === null) return " photos=(failed)";
+    const pq = result.photo_quality!;
+    if (pq.photos.length === 0) return " photos=n/a";
+    return ` photos=${pq.mean_overall.toFixed(1)}/5(n=${pq.photos.length},weakest=${pq.weakest_photo_index})`;
+  })();
   console.error(
-    `qa-visual: ${bugsStr} ${brandStr} ${voiceStr} ${ownerStr} ${customerStr} ${sectionsStr} ${testPassStr}${failedStr}${baselineStr}`,
+    `qa-visual: ${bugsStr} ${brandStr} ${voiceStr} ${ownerStr} ${customerStr} ${sectionsStr} ${testPassStr}${failedStr}${baselineStr}${photoStr}`,
   );
   console.error(`qa-visual: result → ${outPath}`);
 

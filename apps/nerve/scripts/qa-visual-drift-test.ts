@@ -79,6 +79,12 @@ const REQUIRED_SYMBOLS = [
   "BaselineDimensionComparison",
   "BaselineCohortRates",
   "BASELINE_DRIFT_THRESHOLD",
+  // PR-H — opt-in photo grading
+  "photo_quality",
+  "PhotoQualityResult",
+  "PhotoQualityGrade",
+  "PHOTO_QUALITY_SYSTEM_PROMPT",
+  "buildPhotoQualityUserMessage",
   // Runtime validation surface
   "validateVisualQaResult",
 ];

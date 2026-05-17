@@ -246,6 +246,16 @@ export interface VisualQaResult {
    */
   baseline_comparison?: BaselineComparison;
 
+  /**
+   * PR-H: per-photo quality grading. Opt-in (gated on the SDK
+   * runner's `--with-photo-grades` flag or the manual flow's
+   * equivalent step). Field is absent on runs where the producer
+   * didn't request it; present + populated on runs where the
+   * producer ran it successfully; present + null on runs where
+   * the producer requested it AND the vision call failed.
+   */
+  photo_quality?: PhotoQualityResult | null;
+
   /** Optional 1-line global note across all layers. */
   notes?: string;
 }
@@ -313,8 +323,50 @@ export interface BaselineComparison {
 export const BASELINE_DRIFT_THRESHOLD = 0.5;
 
 // ─────────────────────────────────────────────────────────────────────
-// LAYER 1 — Bugs (readability + layout + tap targets + above-fold CTA)
+// PR-H — Photo quality (opt-in, separate from LAYER_NAMES)
 // ─────────────────────────────────────────────────────────────────────
+//
+// Per-photo grading on focus / composition / lighting / role_fit. Opt-in
+// because it's the most expensive layer to run (one image per photo, ~£0.005
+// each at Haiku 4.5 vision pricing — a 15-photo demo is ~£0.075). Default
+// off; producers must explicitly request via the SDK runner's
+// `--with-photo-grades` flag or the manual flow's equivalent opt-in step.
+//
+// Not part of LAYER_NAMES because that const is the set of layers that
+// ALWAYS run and can fail. Photo quality is gated by request; absent
+// in failed_layers when skipped (the producer never tried). When the
+// producer DID request it and the vision call failed, the field is
+// nullable for the failure case — but `photo_quality` doesn't appear
+// in `failed_layers` (it's not a Layer in the same sense).
+
+export interface PhotoQualityGrade {
+  /** Zero-indexed position in the demo HTML's <img> tags. */
+  index: number;
+  /** alt attribute from the <img>, or null if absent. */
+  alt: string | null;
+  /** 1-5: is the image in focus, no motion blur, no compression artefacts? */
+  focus_grade: 1 | 2 | 3 | 4 | 5;
+  /** 1-5: framing, subject placement, headroom — does it feel composed? */
+  composition_grade: 1 | 2 | 3 | 4 | 5;
+  /** 1-5: lighting evenness, exposure, shadow detail. */
+  lighting_grade: 1 | 2 | 3 | 4 | 5;
+  /** 1-5: does this image suit its role on the page (hero, gallery tile, logo, etc.)? */
+  role_fit_grade: 1 | 2 | 3 | 4 | 5;
+  /** Arithmetic mean of the four grades, rounded to 1 d.p. */
+  overall: number;
+  /** One line on this photo's specific strength or weakness. */
+  note: string;
+}
+
+export interface PhotoQualityResult {
+  photos: PhotoQualityGrade[];
+  /** Mean of `overall` across all photos in this result. */
+  mean_overall: number;
+  /** Index of the lowest-`overall` photo. Null when photos.length === 0. */
+  weakest_photo_index: number | null;
+  /** One-line overall verdict on the demo's photo set as a whole. */
+  notes: string;
+}
 
 export const BUGS_SYSTEM_PROMPT = `You are a visual-QA reviewer for spec websites that a UK door-to-door sales rep will show to small-business owners on a phone screen. The owner is 35-65, time-poor, skeptical of web agencies, proud of their business. They have 5 minutes with the rep's phone in their hand.
 
@@ -767,6 +819,100 @@ The slices follow this message, one image per section in the order above. Grade 
 }
 
 // ─────────────────────────────────────────────────────────────────────
+// PR-H — Photo quality (opt-in, separate from LAYER_NAMES)
+// ─────────────────────────────────────────────────────────────────────
+
+export const PHOTO_QUALITY_SYSTEM_PROMPT = `You are a stock-photography editor reviewing every photo embedded in a demo site for a small UK local business. Your job: rate each photo on FOUR independent dimensions (focus, composition, lighting, role fit) plus a one-line note.
+
+This grading exists because the build's photo-role assignment picks WHAT each photo is for — hero, logo, gallery tile, product close-up — but doesn't grade whether the chosen image is technically good for the role. A blurry phone snap of a wedding bouquet can land in the hero slot if no better candidate exists; this layer catches that.
+
+The four dimensions:
+
+1. **focus (1-5)** — is the subject sharp? Are there motion blur, compression artefacts, focus-misses, or pixel-level softness?
+   - 5: tack-sharp at the resolution shown, no blur, clean edges
+   - 4: minor softness on detail but the main subject is sharp
+   - 3: noticeable softness or compression but the subject is still readable
+   - 2: blurry enough that the subject is hard to identify
+   - 1: motion blur / out-of-focus / heavy compression — looks unusable
+
+2. **composition (1-5)** — framing, subject placement, headroom, balance. Does it feel composed or accidental?
+   - 5: clear focal point, intentional framing, well-balanced rule-of-thirds-or-equivalent
+   - 4: solid composition, minor cropping issues
+   - 3: subject centred and visible but framing is generic
+   - 2: subject too close to an edge, awkward crop, dead space
+   - 1: subject clipped, off-axis, or unrecognisable from the framing
+
+3. **lighting (1-5)** — exposure, shadow detail, evenness. Does the lighting flatter the subject?
+   - 5: even and intentional, shadows shaped and not muddy
+   - 4: well-lit, minor highlights or shadows
+   - 3: usable but flat/harsh — could be a phone in mixed light
+   - 2: blown highlights, crushed shadows, or strong colour cast
+   - 1: too dark to read OR too bright to read
+
+4. **role_fit (1-5)** — does this photo SUIT its position on the page? (Hero, lookbook tile, product close-up, logo, etc.)
+   - 5: ideal for the role — a hero photo that's hero-quality
+   - 4: works for the role with no obvious issues
+   - 3: acceptable but a stronger candidate would beat it
+   - 2: marginal — wrong shape, wrong subject, or wrong scale for the role
+   - 1: wrong photo for this role entirely (e.g. a customer's hand in the hero slot)
+
+Each photo's \`overall\` is the arithmetic mean of the four sub-grades to 1 d.p. (The Zod validator enforces this — the producer can't ship a result where overall doesn't match the sub-grades.)
+
+After grading every photo, identify the \`weakest_photo_index\` (lowest overall) and \`mean_overall\` (mean across all photos). Write one \`notes\` line on the photo set as a whole — e.g. "Mixed bag: hero is editorial-grade but the lookbook tiles are uneven phone snaps; weakest is index 6 (the under-lit interior)".
+
+Be honest, not generous. A weak photo flagged by this layer can be auto-swapped by a future builder; a weak photo passed through silently lands in front of a customer.
+
+Respond ONLY with valid JSON matching this shape, no markdown fences, no preamble:
+
+{
+  "photos": [
+    {
+      "index": <0..N-1>,
+      "alt": "<image alt text or null>",
+      "focus_grade": <1-5>,
+      "composition_grade": <1-5>,
+      "lighting_grade": <1-5>,
+      "role_fit_grade": <1-5>,
+      "overall": <mean to 1 d.p.>,
+      "note": "<one line>"
+    }
+  ],
+  "mean_overall": <mean of overall across all photos>,
+  "weakest_photo_index": <int or null>,
+  "notes": "<one-line set-wide verdict>"
+}`;
+
+/**
+ * Build the user-side message for Layer-7 (Photo quality).
+ * Lists each photo's index + alt + (optional) role assignment so the
+ * model knows what it's about to grade and what role to grade against.
+ *
+ * The vision call sends the photos themselves as additional images in
+ * the same message. Photo array order MUST match the order in this
+ * label list — the model uses positional alignment to know which
+ * grade applies to which image.
+ */
+export function buildPhotoQualityUserMessage(opts: {
+  businessName: string;
+  photos: Array<{ index: number; alt: string | null; role: string | null }>;
+}): string {
+  if (opts.photos.length === 0) {
+    return `The ${opts.businessName} demo has no embedded photos. Return {"photos": [], "mean_overall": 0, "weakest_photo_index": null, "notes": "no photos to grade"}.`;
+  }
+  const list = opts.photos
+    .map(
+      (p) =>
+        `  ${String(p.index).padStart(2, "0")} — role=${p.role ?? "unknown"} — alt=${p.alt ? `"${p.alt.slice(0, 60)}"` : "null"}`,
+    )
+    .join("\n");
+  return `Below this message are ${opts.photos.length} photos from the ${opts.businessName} demo, in the order they appear in the HTML:
+
+${list}
+
+The images follow, one per index. Grade each on the four-dimension rubric. Make sure your output \`photos\` array entries have indices matching this list.`;
+}
+
+// ─────────────────────────────────────────────────────────────────────
 // Runtime validation (Zod) — guards every write to qa-visual-result.json
 // ─────────────────────────────────────────────────────────────────────
 
@@ -904,6 +1050,60 @@ export const BaselineComparisonSchema = z
     },
   );
 
+// ── PR-H — Photo quality (opt-in) ───────────────────────────────────
+
+export const PhotoQualityGradeSchema = z
+  .object({
+    index: z.number().int().min(0),
+    alt: z.string().nullable(),
+    focus_grade: BrandGradeValue,
+    composition_grade: BrandGradeValue,
+    lighting_grade: BrandGradeValue,
+    role_fit_grade: BrandGradeValue,
+    overall: z.number().min(1).max(5),
+    note: z.string().min(1),
+  })
+  // Cross-field: `overall` must be the arithmetic mean of the four
+  // sub-grades to 1 d.p. Cheap to enforce; catches the producer
+  // composing a grade block by hand and forgetting to recompute the
+  // mean after editing a sub-grade.
+  .refine(
+    (g) => {
+      const computed =
+        Math.round(
+          ((g.focus_grade + g.composition_grade + g.lighting_grade + g.role_fit_grade) / 4) * 10,
+        ) / 10;
+      return Math.abs(g.overall - computed) < 0.05;
+    },
+    {
+      message: "overall must equal mean of the four sub-grades (to 1 d.p.)",
+      path: ["overall"],
+    },
+  );
+
+export const PhotoQualityResultSchema = z
+  .object({
+    photos: z.array(PhotoQualityGradeSchema),
+    mean_overall: z.number().min(0).max(5),
+    weakest_photo_index: z.number().int().min(0).nullable(),
+    notes: z.string().min(1),
+  })
+  // Cross-field: weakest_photo_index must point at an existing photo
+  // (or be null when photos is empty).
+  .refine(
+    (r) =>
+      r.photos.length === 0
+        ? r.weakest_photo_index === null
+        : r.weakest_photo_index !== null &&
+          r.weakest_photo_index >= 0 &&
+          r.weakest_photo_index < r.photos.length,
+    {
+      message:
+        "weakest_photo_index must point at an existing photo (or null when photos is empty)",
+      path: ["weakest_photo_index"],
+    },
+  );
+
 // ── Canonical result ────────────────────────────────────────────────
 
 export const LayerNameSchema = z.enum(LAYER_NAMES);
@@ -932,6 +1132,9 @@ export const VisualQaResultSchema = z
     section_grades: z.array(SectionGradeSchema).nullable(),
     failed_layers: z.array(LayerNameSchema).optional(),
     baseline_comparison: BaselineComparisonSchema.optional(),
+    // PR-H: optional + nullable. Optional when the producer didn't
+    // request photo grading; null when they did + the vision call failed.
+    photo_quality: PhotoQualityResultSchema.nullable().optional(),
     notes: z.string().optional(),
   })
   // Cross-field invariants. Skip the bug_count/has_critical checks
