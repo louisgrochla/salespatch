@@ -24,6 +24,7 @@ async function loadCounts(): Promise<SidebarCounts> {
       legal,
       changelog,
       notes,
+      qaVisual,
     ] = await Promise.all([
       prisma.pitchLog.count(),
       prisma.operationsLog.count(),
@@ -40,10 +41,11 @@ async function loadCounts(): Promise<SidebarCounts> {
       prisma.legalDocument.count(),
       prisma.changelogEntry.count(),
       prisma.note.count(),
+      prisma.qaVisualResult.count(),
     ]);
     return {
       pitches, operations, revenue, prompts, demos, leads, builds,
-      literature, sections, brand, legal, changelog, notes,
+      literature, sections, brand, legal, changelog, notes, qaVisual,
     };
   } catch {
     // DB not provisioned yet — render with empty counts so the shell still loads.
