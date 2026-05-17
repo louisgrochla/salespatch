@@ -331,6 +331,25 @@ _Append per round: branch name, PR number, what changed, what's deferred._
 
 ---
 
+### R7 — Demo-library plumbing fix (post-audit follow-up)
+
+- **Branch:** `feat/nerve-r7-demos-fix`
+- **CHANGELOG:** `CHANGELOG/2026-05/2026-05-17_020_nerve_r7_demos_fix.md`
+- **Why it landed:** During post-merge verification the user reported "skill demos don't show in NERVE" and "a lot of sections have old tests / no info". Root cause: `/demos` (list + detail + dashboard tile + sidebar count) read the legacy `DemoRecord` table while `/build-demo` skill writes to `DemoArtefact` via `/api/ingest/demo-artefact`. The two tables had no link; skill output surfaced on `/leads/[id]` (R2) but never in the Demo Library.
+- **Shipped:**
+  - `/demos/page.tsx` rewritten — reads `prisma.demoArtefact.findMany`, columns: generated_at · business · lead (deep-link) · vertical · aesthetic positioning · photo count · html size · palette swatch · source.
+  - "by vertical" rollup section: artefact count + avg photos + avg html size per vertical.
+  - `/demos/[id]/page.tsx` reduced to a redirect — looks up by `id` or `artefact_id`, sends to `/leads/<leadId>` where the iframe preview + brief + brand + QA already live (R2). Unknown ids redirect to `/demos`.
+  - `/demos/new/page.tsx` retired — manual entry was for the pre-skill era. Now shows a one-paragraph framer pointing at `/build-demo`.
+  - Deleted dead code: `/demos/actions.ts` (createDemo/updateDemo/deleteDemo) and `/demos/_form.tsx`.
+  - `/dashboard` "active demos" tile renamed to "demos built" and reads `prisma.demoArtefact.count()`. Recent activity feed swapped `demoRecord` source for `demoArtefact` (ordered on `generatedAt`).
+  - `(app)/layout.tsx` sidebar count swapped to `prisma.demoArtefact.count()`.
+  - Legacy `DemoRecord` table untouched in schema — preserves any old rows for future inspection; `src/lib/evidence.ts` still resolves the legacy sourceType for any old embeddings.
+- **Deferred:** Outcome column on the Demo Library row (would need a join through `LeadAssignmentEvent` — defer until volume justifies). Removing `DemoRecord` model entirely (data preservation; revisit after a few weeks of confirmed disuse).
+- **Verification:** `npx tsc --noEmit` clean. Vercel preview is the visual path.
+
+---
+
 ## Wrap
 
-With R6 in review, every round in this audit is either shipped or in review. The audit is the live source of truth across sessions; when each PR merges, flip the checkbox at the top and move on. Future visual / RAG / data-layer work on NERVE should land in its own roadmap entry (or extend `NERVE-ROADMAP.md` directly) rather than reopening this doc.
+The six rounds from the original audit are done. R7 above is a post-audit fix; future bugs of the same shape (table-rename drift, dead-pipeline readers) belong in `NERVE-ROADMAP.md` as their own tasks rather than reopening this doc.
