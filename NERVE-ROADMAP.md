@@ -51,7 +51,7 @@ The **"self"** in self-learning is unlocked when (3) is complete: agents read NE
 
 ## Status Snapshot
 
-_Last updated: 2026-05-11 evening (F2 complete — full operator pipeline from /build-demo to SP-assigned in one click)_
+_Last updated: 2026-05-17 evening (visual-QA verification shipped + NERVE notes feature shipped — agent write path closed)_
 
 - Live: https://nerve.salespatch.co.uk/pipeline ✓ · /leads ✓ · /leads/[id] ✓
 - Postgres SL-MAS schema: 19 tables migrated (above 17 + business_identities F1 + pitch_briefs capture enrichment)
@@ -69,6 +69,8 @@ _Last updated: 2026-05-11 evening (F2 complete — full operator pipeline from /
 - Producers awaiting wiring: Pi siteQaAgent (A5 — agent doesn't exist yet, manual posts work); autumn pipeline (D2 contextSource swap)
 - Pi runtime: dropped from data path, parked for autumn agents
 - **F2 live (2026-05-11 evening)** — full operator pipeline closed. `/build-demo` in Claude Code → admin `/leads/queue` shows the lead → pick SP from dropdown → click Assign → `lead_assignments` row written with NERVE-served `demo_site_domain`. Two-round-trip read path: (a) lean listing for the queue + (c) full bundle on import. Public NERVE route `/api/public/demo/<slug>` serves the demo HTML to the SP, no Supabase upload required. The slug is the lead_id across NERVE + admin SQLite so the existing B1 producer's status events trace back automatically.
+- **Visual-QA shipped (2026-05-16/17, PRs #93–#105)** — 10 PRs A–J + Vercel hotfix + verification report. New system catches A2 (hardcoded live content), A3 (status-as-CTA confusion), A4 (CTA hierarchy collapse) that the pre-PR spike silently missed; pre-PR Bouquet Bar A1 catch preserved; cafe-100 control returns zero false positives. Cohort sweep surfaced **the-tartan-pig** as a bonus A2 case the audit had not visited. Verification report at `apps/nerve/scripts/qa-visual-VERIFICATION.md`.
+- **NERVE notes feature shipped (2026-05-17, PRs #106 + #107)** — `/notes` CRUD page + `GET /api/read/notes` + `POST /api/ingest/notes` + `/nerve-note` slash command. Mutable scratch + per-lead context for both the founder and agents. Fills the gap between DECISIONS.md (committed, terse), CHANGELOG/ (per-change), and the personal journal (uncommitted long-form). Closes the read/write asymmetry agents previously hit. Migration `23_notes` on Neon.
 - Open phases: C (Tier 3 archival, autumn-parked), D (D3 parked far-future), E (E2/E3/E4/E5 — Phase E remaining), **F (F3 next — mid-engagement notes · F4 far horizon)**
 - Tasks open: 7
 - Tasks complete: 42 (see Done log)
