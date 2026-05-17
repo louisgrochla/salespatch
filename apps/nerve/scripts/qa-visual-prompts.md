@@ -290,6 +290,7 @@ The full per-demo result, written to `outputs/qa-visual-result.json`:
   "section_grades": [...],        // PR-C — Layer 6 (empty array if no sections)
 
   "baseline_comparison": {...},   // PR-G — cohort-relative grading (optional)
+  "photo_quality": {...} | null,  // PR-H — opt-in per-photo grading (optional + nullable)
 
   "notes": "optional one-line global summary"
 }
@@ -306,6 +307,8 @@ NERVE accepts this exact shape on `/api/ingest/qa-visual-result` regardless of `
 > The TS const `LAYER_NAMES` (in `qa-visual-prompts.ts`) is the source of truth for what can appear in `failed_layers[]`. Adding a new layer? Add its key to that constant + make the corresponding field nullable + add it to the drift test's required-symbols list.
 
 > **Schema bump in PR-G:** new optional top-level `baseline_comparison` field. Producers fetch the vertical's cohort baseline via `GET /api/read/qa-visual/baselines?vertical=X` at the start of each run, then attach a `BaselineComparison` to the canonical result. The field is OPTIONAL (absent on pre-PR-G producers) but, when present, must conform to `BaselineComparisonSchema`. See "Cohort baselines (PR-G)" below.
+
+> **Schema bump in PR-H:** new opt-in top-level `photo_quality` field. Per-photo grading on focus/composition/lighting/role_fit. Gated default-off (cost: ~£0.075/demo at 15 photos). Field has three states: absent (producer didn't request), null (requested + vision failed), populated (requested + succeeded). NOT part of `failed_layers[]` — gated by request, not by failure-recovery. See "Photo quality (PR-H — opt-in)" below.
 
 ## Runtime validation
 
@@ -359,6 +362,65 @@ Below-cohort sample size (n < 10): producer still attaches `baseline_comparison`
 Network failure on the baselines pre-fetch: producer treats null response as "no cohort yet" — `baseline_comparison` is still attached, just with `baselines_available: false` and `baseline_n: 0`. Visual-QA run continues uninterrupted; cohort comparison is a nice-to-have, not a blocker.
 
 Owner-reaction (Layer 3) accepts richer persona context when available — Companies House `officers[]` (the spec-site-brief skill's enrichment) gives the model a specific name to be ("You are Sharon, the owner of..."), and `years_trading_int` frames the persona's tenure ("you've been doing this for 9 years — established, known in the neighbourhood"). Both fall through cleanly when absent. The persona richness affects only the role-play voice, not the output schema.
+
+## Photo quality (PR-H — opt-in)
+
+**System prompt:** `PHOTO_QUALITY_SYSTEM_PROMPT` in `qa-visual-prompts.ts`.
+
+**User message:** `buildPhotoQualityUserMessage({ businessName, photos })` — lists each photo's index + alt + optional role assignment so the model knows what it's about to grade.
+
+`photo_quality` grades every `<img data:image>` embedded in the demo on four dimensions: focus / composition / lighting / role_fit (1-5 each), plus an `overall` arithmetic mean and a one-line `note` per photo. Result also surfaces `mean_overall` across the photo set and `weakest_photo_index` so the rep / builder can see at a glance which photo drags the set down.
+
+**Gated default-off.** Per-photo grading is the most expensive layer to run — at ~£0.005 per image with Haiku 4.5 vision, a 15-photo demo runs ~£0.075 vs the ~£0.02 baseline for the other six layers. Producers opt in explicitly:
+- **SDK runner:** pass `--with-photo-grades` to `qa-visual.ts`
+- **Manual flow:** invoke the photo-quality step from `/build-demo` (see skill text)
+
+**Not part of `LAYER_NAMES`.** Photo quality is gated by request, not by failure-recovery. The `photo_quality` field has three states:
+- **absent** — producer didn't request it (never tried). Most common today.
+- **null** — producer requested it AND the vision call failed permanently.
+- **populated** — producer requested it AND the call succeeded.
+
+`failed_layers[]` does NOT include `photo_quality` even when null. The producer-side schema distinguishes absent/null/populated via Zod's `optional + nullable`.
+
+**Photo extraction.** The SDK runner pulls embedded photos from the demo HTML via regex over `<img src="data:image/...;base64,...">` tags. Default cap is `MAX_PHOTOS_TO_GRADE = 15` (cost predictability). Captures `alt` attribute when present; grades each photo in DOM order. Larger demos get truncated with a note in `result.photo_quality.notes`.
+
+**Output shape (`PhotoQualityResult` + `PhotoQualityGrade`):**
+
+```json
+{
+  "photo_quality": {
+    "photos": [
+      {
+        "index": 0,
+        "alt": "A hand-tied bouquet of sunflower, hot pink roses, peonies...",
+        "focus_grade": 5,
+        "composition_grade": 4,
+        "lighting_grade": 5,
+        "role_fit_grade": 5,
+        "overall": 4.8,
+        "note": "Strong hero — sharp focus, intentional framing, the pink wrap reads instantly"
+      },
+      {
+        "index": 1,
+        "alt": null,
+        "focus_grade": 3,
+        "composition_grade": 3,
+        "lighting_grade": 2,
+        "role_fit_grade": 3,
+        "overall": 2.8,
+        "note": "Underlit interior shot; subject hard to read on a phone screen"
+      }
+    ],
+    "mean_overall": 3.8,
+    "weakest_photo_index": 1,
+    "notes": "Hero is editorial-grade; second photo drags the set down"
+  }
+}
+```
+
+**Cross-field invariants** enforced by Zod:
+- `overall` MUST equal the arithmetic mean of the four sub-grades to 1 d.p. (catches the producer composing a grade block by hand and forgetting to recompute the mean after editing a sub-grade).
+- `weakest_photo_index` MUST point at an existing photo OR be `null` when `photos: []`.
 
 ## Producer parity contract
 
