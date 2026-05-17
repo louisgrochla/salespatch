@@ -1665,6 +1665,37 @@ model Note {
   @@index([createdAt(sort: Desc)])
 }
 
+// R4: structured key/value facts about a business that don't fit the
+// rigid LeadProfile / SiteBrief / Note shapes. Examples: owner_name =
+// "Mark", best_contact_time = "Tue mornings", had_fire_2023 = "true · …".
+// Append-only by default — multiple rows with the same key are allowed
+// so history is preserved when a fact changes. Producers de-dup exact
+// re-asserts via the ingest endpoint; the table does not enforce
+// uniqueness on (leadSlug, key, value).
+model BusinessFact {
+  id          String   @id @default(cuid())
+  // Lead's canonical slug — same conventions as Note.relatedSlug
+  // (e.g. "the-tartan-pig" or a LeadRecord.id cuid).
+  leadSlug    String
+  // Snake-case identifier for the fact type — "owner_name", etc.
+  key         String
+  // The fact itself, free-form text.
+  value       String
+  // Where the fact came from. "manual" | "scraped" | "agent" | "conversation".
+  source      String
+  // Optional 0..1 — lets downstream weight competing facts.
+  confidence  Float?
+  // Optional author identifier (founder / agent id / session id).
+  createdBy   String?
+  phaseLabel  String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([leadSlug])
+  @@index([leadSlug, key])
+  @@index([key])
+}
+
 model OnboardingResponse {
   id                String    @id @default(cuid())
   leadAssignmentId  String    @unique @map("lead_assignment_id")

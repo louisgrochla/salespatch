@@ -197,7 +197,7 @@ Mark a round complete by filling in the PR column and ticking the box below.
 - [ ] R1 — Visual rethink _(in review on `feat/nerve-rethink-r1-visual`)_
 - [ ] R2 — Lead 360° polish _(in review on `feat/nerve-rethink-r2-leads`)_
 - [ ] R3 — Ask-the-business chat _(in review on `feat/nerve-rethink-r3-ask-business`)_
-- [ ] R4 — BusinessFact model + UI
+- [ ] R4 — BusinessFact model + UI _(in review on `feat/nerve-rethink-r4-business-facts`)_
 - [ ] R5 — External RAG API
 - [ ] R6 — Visual-QA surface + finish stubs
 
@@ -289,3 +289,18 @@ _Append per round: branch name, PR number, what changed, what's deferred._
   - `/ask` list page + `/ask/[sessionId]` page — show a "scoped · slug" badge for any session with `scopeLeadSlug` set, with a deep-link back to the lead from the session view.
 - **Deferred:** Inline composer + last-N-messages preview on the lead page itself (decision: link out to `/ask/[sessionId]` for the full chat experience; keeps the lead page from becoming a chat client). External RAG API exposure (R5). Embedding metadata filter (`metadata.relatedSlug`) — sourceId allow-list is enough for today's data shapes and avoids JSONB index requirements.
 - **Verification:** `npx tsc --noEmit` clean. Local DB unavailable — Vercel preview deploy runs the migration on the Neon prod branch via `prisma migrate deploy` in the build script. Visual + behavioural verification happens on the preview.
+
+### R4 — BusinessFact model + UI
+
+- **Branch:** `feat/nerve-rethink-r4-business-facts`
+- **CHANGELOG:** `CHANGELOG/2026-05/2026-05-17_017_nerve_rethink_r4_business_facts.md`
+- **Schema migration:** `25_business_facts` — new `BusinessFact` table (leadSlug, key, value, source, confidence?, createdBy?, phaseLabel, timestamps). Indexed on `leadSlug`, `(leadSlug, key)`, `key`. Append-only by design — multiple rows with the same `(leadSlug, key)` are allowed so history is preserved.
+- **Shipped:**
+  - `BusinessFact` model with the structured key/value shape the audit spec called out (4b).
+  - `businessFactStore` in `src/lib/sl-mas/` with `ingest` (upsert on exact-match tuple), `listForLead`, `deleteById`.
+  - `POST /api/ingest/business-fact` — HMAC via `NERVE_CHANGELOG_SECRET` (same header as `/api/ingest/notes`). Auto-embeds on write so chunks reach `/ask`, `/search`, and the R3 scoped chat.
+  - `addFact` / `deleteFact` server actions colocated at `/leads/[id]/factActions.ts` for the inline operator UI.
+  - `BusinessFactsPanel` — inline form (key/value/source/confidence) + facts-grouped-by-key list + per-row delete.
+  - `getLeadSourceIds` extended to include `BusinessFact.id`s so the per-lead scoped chat retrieves fact chunks too.
+- **Deferred:** Bulk import / CSV upload of facts. Producer-side wire-ups (the `/spec-site-brief`, `/build-demo`, `/lead-json` skills could start writing facts they discover — that's a skill-side change, not a NERVE change). Schema-suggestion UI (key autocomplete from existing keys in the vault). Per-fact edit (today the flow is delete-then-re-add).
+- **Verification:** `npx prisma generate && npx tsc --noEmit` clean. Vercel applies migration 25 via the build script's `prisma migrate deploy`. Local DB unavailable — visual verification on the preview.
