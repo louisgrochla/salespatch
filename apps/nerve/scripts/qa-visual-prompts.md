@@ -289,6 +289,8 @@ The full per-demo result, written to `outputs/qa-visual-result.json`:
   "customer_reaction": {...},     // PR-C — Layer 5
   "section_grades": [...],        // PR-C — Layer 6 (empty array if no sections)
 
+  "baseline_comparison": {...},   // PR-G — cohort-relative grading (optional)
+
   "notes": "optional one-line global summary"
 }
 ```
@@ -302,6 +304,8 @@ NERVE accepts this exact shape on `/api/ingest/qa-visual-result` regardless of `
 > When the `bugs` layer fails, its derived `has_critical` and `bug_count` MUST also be null. The cross-field invariants only apply when `bugs` is non-null.
 >
 > The TS const `LAYER_NAMES` (in `qa-visual-prompts.ts`) is the source of truth for what can appear in `failed_layers[]`. Adding a new layer? Add its key to that constant + make the corresponding field nullable + add it to the drift test's required-symbols list.
+
+> **Schema bump in PR-G:** new optional top-level `baseline_comparison` field. Producers fetch the vertical's cohort baseline via `GET /api/read/qa-visual/baselines?vertical=X` at the start of each run, then attach a `BaselineComparison` to the canonical result. The field is OPTIONAL (absent on pre-PR-G producers) but, when present, must conform to `BaselineComparisonSchema`. See "Cohort baselines (PR-G)" below.
 
 ## Runtime validation
 
@@ -321,6 +325,38 @@ A schema violation aborts the write with a clear error message naming the offend
 The SDK runner (`qa-visual.ts`) wraps each layer's vision call in `withRetry`: one retry-with-backoff for transient failures (network resets, 5xx, 429 rate limits); fail fast on 4xx other than 429. When a layer fails after retries, the runner sets that layer's field to `null`, appends the layer name to `failed_layers[]`, and continues to the next layer. The result file is written with documented partial coverage rather than the runner aborting and losing every other layer's output.
 
 The manual flow (in-session Claude via `/build-demo` skill) doesn't have transient API failures — Claude either produces a layer output or doesn't. The producer-side rule is still the same: a layer that you couldn't produce honestly (e.g. the brief is missing `voice_quotes[]` so Layer 4 has nothing to grade) MUST be nulled + listed in `failed_layers`. Inventing a sentinel grade to pad the field is forbidden; the validator now refuses to write such results.
+
+## Cohort baselines (PR-G)
+
+`baseline_comparison` turns each demo's grades into a cohort-relative reading. Producer fetches `GET /api/read/qa-visual/baselines?vertical=<X>` at the start of a run (read-only, no HMAC). Composes the result via `composeBaselineComparison()` after the layer calls land.
+
+The `BaselineComparison` shape (TS interfaces: `BaselineComparison`, `BaselineDimensionComparison`, `BaselineCohortRates`):
+
+```json
+{
+  "vertical": "retail",
+  "baseline_n": 15,
+  "baselines_available": true,
+  "dimensions": [
+    { "name": "brand_fidelity",      "this_grade": 4.0, "vertical_median": 4.3, "below_baseline": false },
+    { "name": "voice_consistency",   "this_grade": 4,   "vertical_median": 4.0, "below_baseline": false },
+    { "name": "section_grades_mean", "this_grade": 4.5, "vertical_median": 4.0, "below_baseline": false }
+  ],
+  "cohort_rates": {
+    "has_critical_pct":   12.5,
+    "would_buy_yes_pct":  45.0,
+    "would_act_yes_pct":  60.0,
+    "trust_high_pct":     55.0,
+    "test_passes_pct":    70.0
+  }
+}
+```
+
+Drift threshold: `BASELINE_DRIFT_THRESHOLD` (currently 0.5). A dimension's `below_baseline` fires only when `this_grade < vertical_median - 0.5` — single-grade integer gaps are meaningful; floating noise within ±0.5 isn't. When the corresponding layer failed in this demo (Layer 2/4/6 produced null), `this_grade` is null AND `below_baseline` is null — vision-call failure means we don't know, not below baseline.
+
+Below-cohort sample size (n < 10): producer still attaches `baseline_comparison` with `baselines_available: false`, empty `dimensions`, null `cohort_rates`. This lets downstream queries distinguish "no cohort yet for this vertical" from "pre-PR-G producer" (where the field is absent entirely). The Zod validator enforces: `baselines_available: true` REQUIRES `cohort_rates !== null`; `false` REQUIRES empty `dimensions` AND null `cohort_rates`.
+
+Network failure on the baselines pre-fetch: producer treats null response as "no cohort yet" — `baseline_comparison` is still attached, just with `baselines_available: false` and `baseline_n: 0`. Visual-QA run continues uninterrupted; cohort comparison is a nice-to-have, not a blocker.
 
 Owner-reaction (Layer 3) accepts richer persona context when available — Companies House `officers[]` (the spec-site-brief skill's enrichment) gives the model a specific name to be ("You are Sharon, the owner of..."), and `years_trading_int` frames the persona's tenure ("you've been doing this for 9 years — established, known in the neighbourhood"). Both fall through cleanly when absent. The persona richness affects only the role-play voice, not the output schema.
 

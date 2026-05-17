@@ -73,6 +73,12 @@ const REQUIRED_SYMBOLS = [
   // PR-D — partial-result + retry surface
   "failed_layers",
   "LAYER_NAMES",
+  // PR-G — cohort baselines
+  "baseline_comparison",
+  "BaselineComparison",
+  "BaselineDimensionComparison",
+  "BaselineCohortRates",
+  "BASELINE_DRIFT_THRESHOLD",
   // Runtime validation surface
   "validateVisualQaResult",
 ];
