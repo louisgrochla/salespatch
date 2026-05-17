@@ -22,6 +22,9 @@ export default async function AskListPage() {
     orderBy: { updatedAt: "desc" }, take: 50,
     include: { _count: { select: { messages: true } } },
   });
+  // R3: any session with scopeLeadSlug renders a small "scoped" badge so
+  // the operator can tell vault-wide chats apart from per-business chats
+  // at a glance.
   const askOk = isAskAvailable();
   const embeddingDisabled =
     !process.env.OPENAI_API_KEY ||
@@ -89,6 +92,14 @@ export default async function AskListPage() {
                   <span className="font-mono text-xs text-fg flex-1 truncate">
                     {s.title ?? "(untitled session)"}
                   </span>
+                  {s.scopeLeadSlug && (
+                    <span
+                      className="font-mono text-2xs uppercase tracking-wider border border-accent/40 text-accent px-1.5 py-0.5"
+                      title={`scoped to ${s.scopeLeadSlug}`}
+                    >
+                      scoped · {s.scopeLeadSlug}
+                    </span>
+                  )}
                   <span className="font-mono text-2xs text-fg-dim">
                     {s._count.messages} message{s._count.messages === 1 ? "" : "s"}
                   </span>

@@ -25,6 +25,9 @@ import { NotesPanel } from "./_components/NotesPanel";
 import { EmbeddingsPanel } from "./_components/EmbeddingsPanel";
 import { QaVisualPanel } from "./_components/QaVisualPanel";
 import { StripeEventsPanel } from "./_components/StripeEventsPanel";
+import { LeadChatPanel } from "./_components/LeadChatPanel";
+import { getLeadSourceIds } from "@/lib/sl-mas/leadEmbeddings";
+import { isAskAvailable } from "@/lib/anthropic";
 
 export const dynamic = "force-dynamic";
 
@@ -150,14 +153,9 @@ export default async function LeadDetailPage({
 
   // R2: RAG coverage for this lead — what does the vault actually know?
   // Aggregate embeddings whose sourceId matches any of the records we've
-  // fetched for this lead. Today only LeadRecord and Note get auto-embedded
-  // per NERVE's existing pipeline, but the query is forward-compatible: if
-  // sl-mas stores start writing embeddings, those rows will appear here
-  // without further code changes.
-  const knownSourceIds = [
-    ...(lead ? [lead.id] : []),
-    ...notes.map((n) => n.id),
-  ];
+  // fetched for this lead. R3: source-id collection moved to the shared
+  // `getLeadSourceIds` helper so /ask scoped chat uses the exact same list.
+  const knownSourceIds = await getLeadSourceIds(id);
   const embeddingGroups = knownSourceIds.length > 0
     ? await prisma.embedding.groupBy({
         by: ["sourceType"],
@@ -170,6 +168,21 @@ export default async function LeadDetailPage({
     (s, g) => s + g._count._all,
     0,
   );
+
+  // R3: chats already scoped to this lead. Cheap lookup; we only need the
+  // most recent 5 for the inline panel.
+  const scopedChatSessions = await prisma.chatSession.findMany({
+    where: { scopeLeadSlug: id },
+    orderBy: { updatedAt: "desc" },
+    take: 5,
+    select: {
+      id: true,
+      title: true,
+      updatedAt: true,
+      _count: { select: { messages: true } },
+    },
+  });
+  const askAvailable = isAskAvailable();
 
   const subtitleBits: string[] = [];
   if (lead?.contactedStatus) subtitleBits.push(lead.contactedStatus.replace("_", " "));
@@ -292,6 +305,19 @@ export default async function LeadDetailPage({
           )}
         </section>
       )}
+
+      <LeadChatPanel
+        leadSlug={id}
+        displayName={displayName}
+        askAvailable={askAvailable}
+        embeddingsExist={totalEmbeddingChunks > 0}
+        sessions={scopedChatSessions.map((s) => ({
+          id: s.id,
+          title: s.title,
+          updatedAt: s.updatedAt,
+          messageCount: s._count.messages,
+        }))}
+      />
 
       <NotesPanel notes={notes} />
 

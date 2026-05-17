@@ -36,6 +36,19 @@ export default async function ChatSessionPage({
             {session.messages.length} message{session.messages.length === 1 ? "" : "s"} ·
             started {formatDistanceToNow(session.createdAt, { addSuffix: true })}
             <span className="ml-2"><PhasePill phase={session.phaseLabel} /></span>
+            {session.scopeLeadSlug && (
+              <>
+                <span className="ml-2 font-mono text-2xs uppercase tracking-wider border border-accent/40 text-accent px-1.5 py-0.5">
+                  scoped to {session.scopeLeadSlug}
+                </span>
+                <Link
+                  href={`/leads/${session.scopeLeadSlug}`}
+                  className="ml-2 font-mono text-2xs uppercase tracking-wider text-fg-muted hover:text-fg"
+                >
+                  open lead →
+                </Link>
+              </>
+            )}
           </span>
         }
         actions={
