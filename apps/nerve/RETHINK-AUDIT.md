@@ -195,7 +195,7 @@ Each round below is a self-contained PR. User reviews manually before next round
 Mark a round complete by filling in the PR column and ticking the box below.
 
 - [ ] R1 — Visual rethink _(in review on `feat/nerve-rethink-r1-visual`)_
-- [ ] R2 — Lead 360° polish
+- [ ] R2 — Lead 360° polish _(in review on `feat/nerve-rethink-r2-leads`)_
 - [ ] R3 — Ask-the-business chat
 - [ ] R4 — BusinessFact model + UI
 - [ ] R5 — External RAG API
@@ -257,4 +257,19 @@ _Append per round: branch name, PR number, what changed, what's deferred._
   - `/product` Stage 6 — `planned` pills + "not built yet" framer.
   - `/knowledge` + `/legal` — intro paragraph above count tiles.
 - **Deferred:** Insight-tile delta variant (needs comparison queries → revisit in R2). Stub-page CRUD shells under `/knowledge/*` and `/legal/*` (not flagged urgent in audit). `/pipeline/strategies` empty-file check still open.
+- **Verification:** `npx tsc --noEmit` clean. Local visual verification blocked by empty local `DATABASE_URL` — Vercel preview deploy is the verification path.
+
+### R2 — Lead 360° polish
+
+- **Branch:** `feat/nerve-rethink-r2-leads`
+- **CHANGELOG:** `CHANGELOG/2026-05/2026-05-17_015_nerve_rethink_r2_leads.md`
+- **Shipped:**
+  - Extracted shared primitives (`Section`, `Panel`, `Row`, `Swatch`, `formatIso`, `safeHost`, `outcomeColor`) out of `page.tsx` into `_components/primitives.tsx` so new panels can import them without duplicating.
+  - Added `NotesPanel` — surfaces notes scoped to this lead via `Note.relatedSlug = id`. Renders title (links to `/notes/[id]`), scope chip, tags, markdown body excerpt.
+  - Added `EmbeddingsPanel` — RAG coverage per lead. Aggregates embeddings whose `sourceId` matches the `LeadRecord.id` or any `Note.id` for this lead. Shows total chunks + by-sourceType breakdown + last-embedded timestamp. Forward-compatible: future sl-mas embedding writes will appear here automatically.
+  - Added `QaVisualPanel` — six-layer vision QA review rows for this lead via `qaVisualResultStore.listForLead(id)`. Shows bug count, critical flag, brand/voice/section-mean grades, failed layers.
+  - Added `StripeEventsPanel` — payment events across every assignment ever tied to this lead. Uses new `stripeEventStore.listForAssignments(ids)` helper. Shows type, status colour-coded, amount, session/sub ids.
+  - Extended `stripeEventStore` with `listForAssignments(assignmentIds, limit)` — batched lookup across multiple assignment ids with empty-array short-circuit so Prisma doesn't generate `IN ()`.
+  - Updated `hasSlMasData` check to include the new sources so SL-MAS-only leads with only notes (or only QA-visual data) still render rather than 404.
+- **Deferred:** Splitting the existing creative/QA/commerce/spend panels into their own files (only primitives + the 4 new panels extracted). Unified chronological timeline merging pitches + assignments + Stripe + composer + QA into one stream (decision: per-event tables are fine for today's volume; revisit when a lead has > 20 events).
 - **Verification:** `npx tsc --noEmit` clean. Local visual verification blocked by empty local `DATABASE_URL` — Vercel preview deploy is the verification path.
