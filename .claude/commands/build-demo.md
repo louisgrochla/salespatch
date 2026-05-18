@@ -197,44 +197,49 @@ All on 0-5 scale. Baseline-aware: when `baseline_comparison` is present and `bas
 
 ## Section construction rules
 
-The brief gave you a section blueprint. Build only those sections. Do not add a "Welcome" section. Do not add a "Why choose us" section. Do not add a generic "Services" grid unless the diagnosis specifically demands it. Every section earns its keep.
+**Strict-blueprint rule.** The brief committed to a specific list in `outputs/brief.json.blueprint_sections`. That list IS the structure of the demo. The build's job is to execute exactly those sections, in that order, with the intent each one specified — not to supplement with template defaults like "Welcome" / "Why choose us" / "Our story" / "Testimonials" / "FAQ" / "Newsletter signup" / generic services grids.
 
-For each section, before writing markup, answer internally:
+Concretely:
 
-- What does the diagnosis need this section to do?
-- What's the one specific detail from the brief that makes it obviously THIS business and not a template?
-- What is the tap target — what action does the owner imagine a customer taking here?
+- **Build N sections, where N = `length(blueprint_sections)`.** No more, no fewer.
+- **Section order matches the brief's order.** The brief decided this; the build doesn't re-rank.
+- **Section names match the brief's `name` field** (use as the section's heading or aria-label so the warehouse can reconcile what was promised vs what shipped).
+- **Section purpose is the brief's `intent` field** — the section must materially serve that intent. If the build can't honour the intent with the materials available (photos, voice quotes, integrations), surface the gap back to the operator in the chat output rather than substituting filler.
 
-Then build it.
+If the build feels the urge to add a section the brief didn't list — STOP. The brief is the source of truth. Either:
+- The blueprint was insufficient (a brief failure, not a build failure — flag back to /spec-site-brief), or
+- The extra section is the build's own templatey instinct trying to assert itself. Resist it.
 
-### The standard pattern (adapt, don't follow blindly)
+The only universal sections the build adds without a brief entry are the **nav** and the **footer** — they're chrome, not content. Everything between nav and footer is exclusively the brief's blueprint.
 
-**HERO**
-Brand-dominant background. Display headline using the brief's voice verbatim where possible. Sub-line in mono with concrete facts: location, year founded, awards. Live status (today's date, open hours, items remaining, queue length, next-class spaces). Primary CTA tied to the diagnosis. The hero passes the test of success or the rest of the site doesn't matter.
+### Why this rule replaces the old "standard pattern"
 
-**SOCIAL PROOF MARQUEE / STRIP**
-Only if the brief surfaced a real award, rating, or press hit. Skip if it's weak. A bad strip is worse than no strip.
+The previous version of this skill listed a "standard pattern" of nine sections (HERO / SOCIAL PROOF / DIAGNOSIS-DRIVEN / PRODUCT / STORY / PRESS / WHOLESALE / VISIT / FOOTER) with examples and instructions for each. Even with "adapt, don't follow blindly" framing, the catalogue trained the build toward shipping that pattern by default. Every demo trended toward the same nine sections regardless of the brief's actual blueprint. The result was templatey demos that swapped names + photos + colours but kept the same skeleton.
 
-**THE DIAGNOSIS-DRIVEN KILLER SECTION**
-The one section that solves the conversion problem. If diagnosis is "demand exceeds capture" → today's menu with reserve buttons. If "owned-audience gap" → drop notification email capture. If "booking friction" → live calendar widget. If "wholesale invisibility" → split B2C/B2B paths. This section is the demo's centre of gravity. Build it first, build it best.
+Removing the catalogue forces the build to construct each section from scratch using the brief's `intent` text, not a template. The diversity of demos increases; the time-to-template-detection by operators decreases.
 
-**PRODUCT / SERVICE HERO**
-Single product or service spotlight. The thing they're known for. Split layout, photo placeholder one side, copy the other. Scarcity proof in mono if relevant ("last week sold out by 11:42am"). One CTA, no choices.
+### Per-section construction
 
-**STORY**
-Owner-led if the brief named the owner. Editorial layout, asymmetric. Pull-quote in display font using verbatim language from the brief. Two short paragraphs maximum. Skip if the brief couldn't surface a real story. Generic founder copy is worse than no story.
+For each blueprint entry, before writing markup:
 
-**PRESS / SOCIAL PROOF TILES**
-3 tiles, equal width on desktop, stacked on mobile. Centre tile in accent colour for emphasis. Quote real reviews verbatim, preserve language including profanity if the source used it.
+- Read the brief's `intent` literally. What is the section supposed to *do* for the diagnosis?
+- What's the one specific fact from the brief that makes this section obviously THIS business and not a generic same-vertical version?
+- What is the tap target — what action does the visitor imagine taking?
+- What materials does the brief give you (photos, voice quotes, integrations)? If the materials don't cover the intent, the section gets a smaller scope, not invented filler.
 
-**WHOLESALE / SECONDARY CTA**
-Only if the diagnosis or brief flags B2B as a real lever. Two cards max. Mailto links, no forms.
+Then build the section's markup. No reaching for the old pattern.
 
-**VISIT**
-Map iframe (OpenStreetMap, centred on the postcode in the brief). Address, hours from the brief. Repeat the mascot/logo here at smaller size.
+### Banned mobile-hero copy patterns (statically detectable)
 
-**FOOTER**
-Brand-dark background. Logo. Instagram handle linked. One tagline in mono using the brief's voice. Copyright line.
+To avoid the canonical templatey hero patterns, the build must NOT produce any of these in the hero h1 or sub-line:
+
+- `<Place name> <noun>, made for <X>` (e.g. "Aberdeen nails, made for repeat visits")
+- `Where <adjective> meets <adjective>` (e.g. "Where craft meets care")
+- Rule-of-three nouns separated by `·` or `,` with no specific facts (e.g. "Quality. Craft. Care.")
+- "The place for <category>" / "Your <category> destination"
+- "We believe in <X>" / "At <business>, we..."
+
+These are AI tells. The hero must reference a fact only this business has — a year, a number, a location detail, a verbatim caption line.
 
 ### Interactions
 
