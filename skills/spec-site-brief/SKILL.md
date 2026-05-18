@@ -230,7 +230,9 @@ Quote the lines to preserve in the demo word-for-word. The demo's authenticity h
 
 ### Aesthetic positioning
 
-Name a reference. Pick one. Do not hedge.
+Two tracks. Pick which one fits this business **before** committing to a positioning reference, then commit fully to that track. The choice matters because the wrong track produces a templatey demo that swaps in any business of the same vertical.
+
+**Track A — Brand-led operator.** The business has a distinct brand identity beyond the operator's voice: a logo, a colour system, a deliberate interior, a curated style. Examples: a tattoo studio with an editorial Instagram, a café with hand-painted signage, a bakery with a tight visual system. Use a public-brand reference here:
 
 - Aimé Leon Dore drop-culture site
 - Margot Henderson editorial-warmth site
@@ -241,11 +243,30 @@ Name a reference. Pick one. Do not hedge.
 - Minimal Scandi-minimal
 - 90s Italian trattoria
 
-The demo's identity comes from this commitment. If two directions are viable, pick one and explain why. The reason hedging is worse than being wrong: vague briefs produce vague demos, and a vague demo cannot win a £350 pitch.
+The reference is shorthand for the build: "execute this archetype with the brief's specific palette and assets". Track A briefs work when the operator's *brand* is bigger than the operator's *voice*.
+
+**Track B — Operator-as-brand.** The business IS one person. Solo nail tech in a chair-share, single-craft barber, one-woman ceramics studio, a baker who is also the brand. The "brand" doesn't exist independently of the operator writing captions and serving customers. Trying to graft a public-brand reference onto Track B businesses produces a magazine-shaped demo that doesn't sound like them. Use the **operator's own captions as the canonical reference** instead. No magazine archetype. The brief commits to:
+
+- Three to five verbatim caption lines from the operator (already captured in `voice_quotes[]`) that the build must execute body copy against
+- The typographic choice that fits those lines (italic serif if the operator's voice is conversational and warm, condensed sans if it's direct, hand-script if it's playful)
+- A one-sentence "voice rule" rather than an aesthetic archetype, e.g. "The demo must read as if Annie wrote it on a Tuesday lunch break" or "The demo must read as if Ben dictated it from the chair between cuts"
+
+**How to pick between tracks.** Apply this test before naming a reference:
+
+- Does the operator have a logo / wordmark / visual system that exists independently of them? → Track A
+- Does the operator's IG/FB stream read as one specific person talking (first-person, mentions of family / location / mood) rather than a brand voice? → Track B
+- Is the business one person, no employees, no distinct "house style" beyond personal taste? → Track B
+- Could a different person take over the business tomorrow and ship the same online presence? If yes → Track A; if no → Track B
+
+When in doubt, default to Track B for solo operators and sole-trader-shaped businesses. Track A is the harder bar; the public-brand reference has to *fit*, not approximate.
+
+The demo's identity comes from this commitment. If two directions within a track are viable, pick one and explain why. The reason hedging is worse than being wrong: vague briefs produce vague demos, and a vague demo cannot win a £350 pitch.
 
 If the photos contradict each other (clean modern interior vs chaotic Instagram aesthetic), name the contradiction and choose which side the demo commits to. Brands have multiple voices. The demo only gets one.
 
-**Capture the alternatives.** Privately track which 1-2 other references you considered and why you rejected each. These don't go into the brief.md prose — they land in `outputs/brief.json`'s `metadata.positioning_alternatives_considered` so the AI layer can later learn what doesn't fit this vertical, not just what does.
+**Capture the track + the alternatives.** Record which track you committed to (Track A or B), and 1-2 alternatives you considered and rejected. These land in `outputs/brief.json`'s `metadata.positioning_alternatives_considered` so the warehouse builds a corpus of "what doesn't fit this shape of business".
+
+The brand-analysis.json schema gets `positioning_track: "brand_led | operator_as_brand"` so `/build-demo` knows which behaviour to apply (Track B triggers the voice-budget rule in `/build-demo`'s build contract — the demo's non-quote body copy must trace back to `voice_quotes[]`).
 
 ### Photo role mapping
 
@@ -283,17 +304,24 @@ Before closing Phase 2, capture two structured lists about features. The split m
 
 `treatment` rules of thumb: a fakeable success state (booking flow, reservation form) wants `embed` so the rep doesn't have to send the customer to another tab. A simple URL that needs to stay alive (the customer's existing Square shop, their MailChimp signup page) wants `link`. A deep-link to a specific resource (a single Booksy service page rather than the home) wants `deep_link`. **No invention.** Only list integrations Phase 1 actually surfaced — IG bio link, Google Business "Social profiles", the existing-website footer, the FB page's `website` / `websites[]` field. If you didn't verify it exists, don't include it.
 
-**`feature_opportunities[]`** — features the business doesn't currently have but the diagnosis says they could measurably benefit from. Capped at 4 entries (more than that means the diagnosis is fuzzy). Each entry:
+**`feature_opportunities[]`** — features the business doesn't currently have but the diagnosis says they could measurably benefit from. Capped at 3 entries. Each entry has to pass a uniqueness test: *would this feature exist on a generic same-vertical template, regardless of this lead's specific diagnosis?* If yes, it's templatey filler — drop it. If no, the feature is genuinely earned by the diagnosis and gets a slot.
 
 ```json
 {
-  "feature": "email_drop_list | enquiry_form | portfolio_filter | price_anchor | newsletter | event_calendar | wholesale_path | gallery_grid | live_status | other",
-  "rationale": "<one line — must be traceable back to brief facts; the test of success is part of the chain>",
-  "priority": 1
+  "feature": "<free-form, in the operator's own words ideally — describe the function not the SaaS-pattern name>",
+  "diagnosis_trace": "<which specific fact from Phase 1 or 3 produced this feature; cite the fact verbatim>",
+  "priority": "must | should | maybe"
 }
 ```
 
-Priority is 1-5 where 1 is "the demo needs this section to make the test_of_success land" and 5 is "nice to have, only if the brief's blueprint already accommodates it". The build will give priority-1 entries their own section; priority-2 and 3 may earn placement; priority-4 and 5 surface as suggestions, not sections.
+Priority semantics:
+- `must` — the demo's test_of_success cannot pass without this feature in its own section. The build allocates a top-level section.
+- `should` — the diagnosis supports the feature but the demo can ship without it. The build gives it a smaller component (e.g. a paragraph + CTA inside another section) only if the blueprint has room.
+- `maybe` — the feature is plausible but not load-bearing. The build does NOT add it; it surfaces back as a suggestion in the chat output for the operator to decide.
+
+No middle-priority shipping path. If a feature is `maybe`, the build refuses to add an inline strip / filler section for it. That was where templatey SaaS-defaults (newsletter strips, generic email captures, price-anchor chips) were sneaking in.
+
+The diagnosis_trace field is enforced: the build validates that every entry's trace text is a substring of (or near-substring of) something in `outputs/brief.json` — the diagnosis, a pain point, a verdict_reason, a Phase 1 fact. If the trace doesn't anchor to a real captured fact, the feature is rejected before NERVE ingest.
 
 **Hard rules:**
 
@@ -676,7 +704,8 @@ VOICE
   > "[exact quote 2]"
 
 POSITIONING
-- [Single named reference, one sentence on why]
+- Track: [brand_led | operator_as_brand]
+- [For brand_led: single named reference, one sentence on why. For operator_as_brand: a one-sentence voice rule + the 3-5 verbatim caption lines that drive body copy.]
 ```
 
 ### 4. THE DIAGNOSIS
@@ -846,7 +875,8 @@ The three metadata fields are the reasoning trace: what you considered and rejec
   "logo_kind": "<clean_vector | hand_imperfect | asset_only>",
   "voice_adjectives": ["<adjective>", "<adjective>", "<adjective>"],
   "voice_quotes": ["<verbatim line 1>", "<verbatim line 2>"],
-  "positioning_reference": "<the one named reference, e.g. 'Sang Bleu London editorial'>",
+  "positioning_track": "<brand_led | operator_as_brand>",
+  "positioning_reference": "<for brand_led: a public-brand archetype (e.g. 'Sang Bleu London editorial'). For operator_as_brand: a one-sentence voice rule (e.g. 'The demo must read as if Annie wrote it on a Tuesday lunch break').>",
   "positioning_rationale": "<the one-line why>",
   "asset_notes": ["<each asset that must be lifted from photos>"],
   "photo_roles": {
@@ -866,9 +896,9 @@ The three metadata fields are the reasoning trace: what you considered and rejec
     ],
     "feature_opportunities": [
       {
-        "feature": "<email_drop_list|enquiry_form|portfolio_filter|price_anchor|newsletter|event_calendar|wholesale_path|gallery_grid|live_status|other>",
-        "rationale": "<one line — must trace back to brief facts>",
-        "priority": <1-5>
+        "feature": "<free-form description in the operator's own words, e.g. 'a way for new customers to see Annie's nail art tagged by season'>",
+        "diagnosis_trace": "<substring of a captured Phase 1 / Phase 3 fact that justifies this feature; the build validates this anchors to outputs/brief.json>",
+        "priority": "<must | should | maybe>"
       }
     ],
     "logo_background_analysis": {
