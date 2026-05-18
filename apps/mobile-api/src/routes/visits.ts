@@ -2,6 +2,10 @@ import { Router } from 'express';
 import { v4 as uuid } from 'uuid';
 import { requireAuth, getUser } from '../auth.js';
 import { queryAll, queryOne, run } from '../db.js';
+import {
+  buildVisitEventId,
+  forwardVisitEventToNerve,
+} from '../nerve-visit-forwarder.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -19,6 +23,26 @@ router.post('/start', (req, res) => {
     'INSERT INTO visit_sessions (id, assignment_id, user_id, started_at, start_lat, start_lng, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
     id, assignment_id, user_id, now, lat ?? null, lng ?? null, now,
   );
+
+  // R9 — fire-and-forget mirror to NERVE. Skipped if we can't resolve
+  // a lead_id (NERVE requires one); never blocks the response.
+  const assignment = queryOne<{ lead_id: string }>(
+    'SELECT lead_id FROM lead_assignments WHERE id = ? AND user_id = ?',
+    assignment_id, user_id,
+  );
+  if (assignment?.lead_id) {
+    void forwardVisitEventToNerve({
+      event_id: buildVisitEventId(assignment_id, 'arrived', now),
+      assignment_id,
+      lead_id: assignment.lead_id,
+      user_id,
+      type: 'arrived',
+      latitude: typeof lat === 'number' ? lat : null,
+      longitude: typeof lng === 'number' ? lng : null,
+      metadata: { source: 'mobile-api', session_id: id },
+      occurred_at: now,
+    });
+  }
 
   res.status(201).json({ session_id: id, started_at: now });
 });
@@ -53,6 +77,28 @@ router.post('/end', (req, res) => {
     'UPDATE visit_sessions SET ended_at = ?, duration_seconds = ?, end_lat = ?, end_lng = ?, verified = ? WHERE id = ?',
     now, duration, lat ?? null, lng ?? null, verified ? 1 : 0, session_id,
   );
+
+  // R9 — fire-and-forget mirror to NERVE. duration_minutes is rounded
+  // for the dissertation aggregate (sum-of-minutes per lead).
+  const assignmentId = session.assignment_id as string;
+  const assignment = queryOne<{ lead_id: string }>(
+    'SELECT lead_id FROM lead_assignments WHERE id = ? AND user_id = ?',
+    assignmentId, user_id,
+  );
+  if (assignment?.lead_id) {
+    void forwardVisitEventToNerve({
+      event_id: buildVisitEventId(assignmentId, 'departed', now),
+      assignment_id: assignmentId,
+      lead_id: assignment.lead_id,
+      user_id,
+      type: 'departed',
+      duration_minutes: Math.max(0, Math.round(duration / 60)),
+      latitude: typeof lat === 'number' ? lat : null,
+      longitude: typeof lng === 'number' ? lng : null,
+      metadata: { source: 'mobile-api', session_id, verified },
+      occurred_at: now,
+    });
+  }
 
   res.json({ ok: true, duration_seconds: duration, verified });
 });
