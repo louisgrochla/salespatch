@@ -310,7 +310,16 @@ If the path-agnostic queries above produce fewer than 2 candidates after 3-4 que
 
 For every candidate that survives discovery, before recommending them:
 
-1. **Website status.** Search `"[business name] [postcode] website"`. If a real working site comes up — pass. Note: a Booksy or Treatwell booking page is NOT a website for our purposes. It serves the booking job but gives them no brand home, no portfolio, no story, no email capture. Still pitchable.
+1. **Functional front-door check (30-second test).** Search `"[business name] [postcode] website"` AND visit every URL their IG/FB bio links to. Apply this principle to each result:
+
+   > Does a stranger Googling this business land on a URL where they can (a) see what the business does, (b) see photos of the work, (c) book or contact, in under 30 seconds without leaving that URL?
+
+   - If a result on the operator's **own domain** passes the test → **PASS the candidate**. They already have the thing we sell.
+   - If a branded **`*.mytreatwell.co.uk` / `*.booksy.com` / `*.fresha.com` / `*.square.site`** vanity URL passes the test (business name in the subdomain, photos + services + booking all on one page) → **flag as Tier 2 candidate** and surface in the shortlist with a note: "functional booking-platform front exists; pitch must address why they should own a URL". Don't auto-reject — Tier 2 is still pitchable but harder, and the rep needs to know the shape. The /spec-site-brief skill makes the Tier 2 verdict explicit downstream.
+   - If only a Linktree / Yell listing / Facebook-page-only / Square-stub appears, or no URL at all → **Tier 1 candidate**. Classic missing-front-door case, easiest pitch.
+   - The principle is platform-agnostic by design. New booking platforms (Squarespace 2026, whatever launches in 2027) inherit the rule automatically — the question is always "does this URL pass the 30-second test", never "is this platform on a banned list".
+
+   Surface the verdict in the shortlist output: each candidate gets `Front-door tier: [Tier 1 | Tier 2 | PASS]` so the rep knows the pitch shape before they walk in.
 2. **Declare the path.** Decide whether this lead fits Path A, Path B, or Path C. Apply the **specificity-wins** rule:
    - **Path B** if there's surface evidence of a specific broken website job. The pitch names the exact pain. Verify 3b (owner-present) AND 4b (cited surface evidence of the broken job).
    - **Path C** if the business qualifies as established but the friction is generic invisibility, not specific documented pain. Verify 3c (owner-present) AND 4c (Companies House 3+ years AND at least one of the evidence types — claimed Google profile, active Facebook, press mention, community recommendation).

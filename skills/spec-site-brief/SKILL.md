@@ -82,7 +82,20 @@ The verdict logic in Phase 1 gets a free win from this: if `website_probe.reacha
 
 Before any creative work, search the web and confirm:
 
-- **Existing website status.** Search `"[business name] [location] website"`. If they have a modern functional site (not a Linktree, not an abandoned Wix from 2018, not a Facebook page, not a Square stub), STOP. Output a one-line PASS verdict with the URL. No brief.
+- **Existing functional front door (30-second test).** Search `"[business name] [location] website"`, then visit every URL the operator's IG/FB bio/website footer/Google Business Profile links to. Apply this test to each:
+
+  > Does a stranger Googling this business land on a URL where they can (a) see what the business does, (b) see photos of the work, (c) book or contact, in under 30 seconds without leaving that URL?
+
+  If yes — the operator has a functional front door regardless of whose domain it's on. Decide which case applies:
+
+  1. **Owned + functional** (their own domain hosts the page) → **PASS**. They already have what we sell.
+  2. **Platform-hosted + functional** (a branded `*.mytreatwell.co.uk` / `*.booksy.com` / `*.fresha.com` / `*.square.site` / `*.squarespace-cdn.com` / similar vanity URL where the business name is in the subdomain, photos + services + booking all live on that one page) → **Tier 2 PROCEED**. They have a working front door but they don't *own* the URL. The pitch shifts from "fix your broken site" to "take back ownership of your URL with your own brand" — harder close. See "Tier 2 verdict shape" below.
+  3. **Owned but broken / stub / Linktree / abandoned-Wix / Facebook-page-only / Yell-listing-only / Square-stub** → **Tier 1 PROCEED**. The classic broken-front-door case.
+  4. **Owned + functional** as judged by `website_probe.reachable=true` AND `platform` in `{squarespace, wix, shopify, wordpress, webflow, bigcommerce}` AND a real title → **PASS** (the Phase 0 short-circuit; if the probe hit one of these and the page has real content, no further verification needed).
+
+  The principle replaces the previous platform-enumeration rule. Trying to maintain a list of "not-a-website" platforms (Linktree, abandoned Wix, Facebook, Square stub) ages badly — new platforms launch, vanity subdomains evolve, the list rots. The 30-second test is platform-agnostic and ages well.
+
+  Edge: if the operator has BOTH a broken owned domain (e.g. a dead `.me` from a previous attempt) AND a working platform-hosted page (e.g. a Treatwell vanity URL), the verdict is Tier 2 — the broken owned domain is a thin pitch hook but the underlying business *isn't* missing a front door. Note both states in the verdict_reasoning_trace.
 - **Google rating and review count.** If under 20 reviews, flag it. The pitch cannot lean on Google social proof.
 - **Google Maps canonical URL.** When the Google rating search surfaces the Google Maps listing, capture the canonical URL with the CID embedded (`https://www.google.com/maps/place/<name>/data=!4m2!3m1!1s<hex>:<hex>`). Phase 1.5 consumes this to pull Business Profile photos — the storefront and interior shots IG can't surface. If only a search URL is found, capture that too; the photos actor accepts both.
 - **Google review recency aggregates.** Once a Google Maps URL is in hand, call `mcp__apify__call-actor` with `compass/Google-Maps-Reviews-Scraper` and:
