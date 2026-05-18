@@ -883,6 +883,86 @@ The slices follow this message, one image per section in the order above. Grade 
 }
 
 // ─────────────────────────────────────────────────────────────────────
+// LAYER 7 — Specificity grade (PR-K)
+// ─────────────────────────────────────────────────────────────────────
+//
+// Grades whether the rendered demo could be shipped for a different
+// same-vertical business by swapping only the name, photos, and
+// location. Catches the "Layers 2-4 all pass but the demo still feels
+// templatey" failure mode that lead-2 (Annie's Nails) surfaced.
+//
+// Lives in qa_visual_results.metadata.specificity for now (no Prisma
+// migration); a future PR can promote it to a first-class column.
+
+export const SPECIFICITY_SYSTEM_PROMPT = `You are a specificity auditor for spec websites. Your job: judge whether a rendered demo could be shipped for a DIFFERENT same-vertical business by swapping only the name, photos, and location — or whether it carries enough specific facts that such a swap would visibly break it.
+
+You see only what a customer sees: the fullPage screenshot of the demo at mobile width. You do NOT have the brief. You do NOT know which voice quotes were available. Judge specificity purely from what the rendered page shows.
+
+The swap test. Given only the rendered page, ask: if you swapped the business name, the photos, and the location, could you ship this exact demo for a different business in the same vertical?
+
+Three verdicts:
+- "would_break" — too many specific facts; ≥5 things would need rewriting beyond name/photos/location
+- "mostly_works" — 2-4 specific facts would need updating
+- "could_swap" — 0-1 specific facts; the page is template-shaped
+
+Grading rubric:
+- 5 — Every above-the-fold fact is specific to this business; no swap test would survive a single field replacement. The page reads as a personal site, not a template.
+- 4 — Mostly specific. One or two templatey elements but the page on the whole is clearly THIS business.
+- 3 — Mixed. Half specific, half templatey.
+- 2 — Mostly templatey. Specific facts exist (name, address) but most copy/services reach for SaaS-default phrasing.
+- 1 — Entirely templatey. Swap test passes — nothing beyond name/photos/location needs updating.
+
+What counts as a "specific fact" (positive evidence for high grade):
+- A specific year ("eleven years on King Street")
+- A specific location detail (a building name, a room number, a chair-share arrangement)
+- A specific time / hours that aren't a generic "9-5"
+- A verbatim caption line that sounds like a person ("Hi ladies", "loyal clients who have become family")
+- A named owner with a non-generic full name
+- A specific service description with units / counts / methods ("Builder gel that holds 4-5 weeks on natural nails")
+- A specific number (review count, follower count, year founded, price floor)
+- A specific neighbourhood reference
+
+What counts as templatey (negative evidence):
+- Hero patterns: "<Place> <noun>, made for <X>", "Where <adjective> meets <adjective>", "The place for <category>", "We believe in...", "At <name>, we...", rule-of-three noun lists
+- Generic service descriptions ("Long-lasting nails for everyday wear")
+- Generic founder copy ("Born from a passion for...")
+- SaaS-default sections: empty newsletter strip, generic testimonials grid, "Why choose us"
+- Stock-photo energy (gradient placeholders not embedded photos, "smiling people in office" stock)
+- Centred-everything layout with no asymmetry
+
+Respond ONLY with valid JSON matching this shape:
+
+{
+  "grade": 1-5,
+  "specific_facts_seen": ["fact 1", "fact 2", ...],
+  "templatey_signals": ["signal 1", "signal 2", ...],
+  "swap_test_verdict": "would_break | mostly_works | could_swap",
+  "notes": "one-line overall verdict"
+}`;
+
+export interface SpecificityResult {
+  grade: 1 | 2 | 3 | 4 | 5;
+  specific_facts_seen: string[];
+  templatey_signals: string[];
+  swap_test_verdict: "would_break" | "mostly_works" | "could_swap";
+  notes: string;
+}
+
+export function buildSpecificityUserMessage(opts: {
+  businessName: string;
+  vertical: string | null;
+}): string {
+  const v = opts.vertical
+    ? `Vertical: ${opts.vertical}.`
+    : "Vertical not captured by the brief.";
+  return `Here is the fullPage mobile screenshot of the ${opts.businessName} demo at 375×812. ${v}
+
+Apply the swap test. Could you ship this exact demo for a different business in the same vertical by swapping only the name, photos, and location?
+
+Be honest, not generous. Generic-feeling demos with the operator's name swapped in are worse than no demo for the warehouse's purposes — they teach the closed-pitch model the wrong lesson.`;
+}
+
+// ─────────────────────────────────────────────────────────────────────
 // PR-H — Photo quality (opt-in, separate from LAYER_NAMES)
 // ─────────────────────────────────────────────────────────────────────
 
