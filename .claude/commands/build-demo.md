@@ -88,9 +88,17 @@ Before doing anything else, consult NERVE for prior signal on what's working in 
 
    If both arrays are absent (pre-feature-capture brief), fall back to the blueprint sections in brief.md as the only source of truth — the diagnosis-driven killer section still wins.
 
----
+6c. **Read the positioning track + apply the voice budget.** `brand-analysis.json.metadata.positioning_track` is the brief's call about which positioning track applies (added by `feat/skill-positioning-solo-operator-track`).
 
-## Build contract
+   - **`brand_led`** (or absent — pre-track briefs default here) — the build follows its existing instincts. Body copy can be invented within the brand voice; verbatim quotes are inclusions, not the source of body copy.
+   - **`operator_as_brand`** — this is a **voice-budget** build. The brief's `voice_quotes[]` is the canonical source of body copy. The build's voice budget is:
+     - **Hero h1 / sub-line** — must be either a verbatim caption line from `voice_quotes[]` OR a near-verbatim line that splices two captured phrases together (e.g. "Eleven years inside Mokoko. Three days a week, by appointment."). NOT invented from scratch.
+     - **About section** — must use 2-3 of the captured voice quotes weaved into 2-3 short paragraphs. Body weight, no museum-pull-quote framing. Reads like the operator wrote it, because they did.
+     - **Services / what we do** — every service description must either come from the brief's services list OR be a near-verbatim line from `voice_quotes[]` describing that service. Generic SaaS-shaped descriptions ("Long-lasting BIAB nails for everyday wear") are banned; the operator's own caption ("Builder gel that holds 4-5 weeks on natural nails — I check every set at week 3") is what ships.
+     - **The build can invent only the chrome**: nav labels, hours table, address, section labels, navigation CTAs ("See recent work"). Everything else is the operator's voice or a verbatim fact from the brief.
+   - If the brief has fewer than 4 `voice_quotes[]` entries, the build STOPS and surfaces back to /spec-site-brief: "voice budget insufficient for operator_as_brand build; needs at least 4 captured caption lines". The skill output names which sections cannot be filled and asks the operator to re-run /spec-site-brief with more caption capture. Don't paper over the gap with invented copy.
+
+   The voice budget is what stops Track B demos from reading like generic spa templates. Without it, even with the right positioning_track set, the build's own marketing voice creeps in.
 
 ### Output
 
