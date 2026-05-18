@@ -4,6 +4,8 @@ import {
   type SiteBriefInput,
 } from "@/lib/sl-mas/siteBriefStore";
 import { verifySignature } from "@/lib/sl-mas/hmac";
+import { embedRecord } from "@/lib/embeddings";
+import { phaseLabelFor } from "@/lib/phase";
 
 // POST /api/ingest/site-brief
 //
@@ -60,6 +62,55 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
   try {
     const result = await siteBriefStore.ingest(payload);
+
+    // RAG embedding (PR 2). Selective fields only — full brief_markdown
+    // is too long and would dominate the chunk budget. The diagnosis +
+    // pitch angle + verdict reasoning is what queries like "what
+    // alternatives did the brief consider for vertical=X" need. Skip
+    // on dup (replay) since the row is unchanged. Failure is swallowed —
+    // the brief row is still queryable structurally.
+    if (result.inserted) {
+      try {
+        const meta = result.row.metadata ?? {};
+        const phaseLabel = await phaseLabelFor(
+          new Date(result.row.generated_at),
+        );
+        await embedRecord(
+          {
+            sourceType: "SiteBrief",
+            sourceId: result.row.id,
+            phaseLabel,
+            metadata: {
+              section: "site-brief",
+              leadId: result.row.lead_id,
+              briefId: result.row.brief_id,
+            },
+          },
+          {
+            business_name: result.row.business_name,
+            business_type: result.row.business_type,
+            vertical: result.row.vertical,
+            verdict: result.row.verdict,
+            verdict_reason: result.row.verdict_reason,
+            diagnosis: result.row.diagnosis,
+            pitch_angle: result.row.pitch_angle,
+            test_of_success: result.row.test_of_success,
+            verdict_reasoning_trace:
+              typeof meta.verdict_reasoning_trace === "string"
+                ? meta.verdict_reasoning_trace
+                : null,
+            diagnosis_alternatives_considered: Array.isArray(
+              meta.diagnosis_alternatives_considered,
+            )
+              ? JSON.stringify(meta.diagnosis_alternatives_considered)
+              : null,
+          },
+        );
+      } catch (e) {
+        console.error("[site-brief] embed failed:", e);
+      }
+    }
+
     return NextResponse.json({
       brief_id: result.brief_id,
       inserted: result.inserted,

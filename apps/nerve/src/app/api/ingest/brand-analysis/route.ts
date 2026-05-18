@@ -4,6 +4,8 @@ import {
   type BrandAnalysisInput,
 } from "@/lib/sl-mas/brandAnalysisStore";
 import { verifySignature } from "@/lib/sl-mas/hmac";
+import { embedRecord } from "@/lib/embeddings";
+import { phaseLabelFor } from "@/lib/phase";
 
 // POST /api/ingest/brand-analysis
 //
@@ -59,6 +61,57 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
   try {
     const result = await brandAnalysisStore.ingest(payload);
+
+    // RAG embedding (PR 2). Selective fields capture the brand decode's
+    // reasoning: logo description, voice fingerprint, positioning rationale,
+    // photo classifications. Lets the agent answer "what positioning
+    // alternatives were considered for vertical=X" via /ask. Skip on dup.
+    if (result.inserted) {
+      try {
+        const meta = result.row.metadata ?? {};
+        const phaseLabel = await phaseLabelFor(
+          new Date(result.row.analyzed_at),
+        );
+        await embedRecord(
+          {
+            sourceType: "BrandAnalysis",
+            sourceId: result.row.id,
+            phaseLabel,
+            metadata: {
+              section: "brand-analysis",
+              leadId: result.row.lead_id,
+              analysisId: result.row.analysis_id,
+            },
+          },
+          {
+            logo_description: result.row.logo_description ?? null,
+            logo_kind: result.row.logo_kind ?? null,
+            voice_quotes:
+              result.row.voice_quotes.length > 0
+                ? result.row.voice_quotes.join("\n")
+                : null,
+            voice_adjectives:
+              result.row.voice_adjectives.length > 0
+                ? result.row.voice_adjectives.join(", ")
+                : null,
+            positioning_reference: result.row.positioning_reference ?? null,
+            positioning_rationale: result.row.positioning_rationale ?? null,
+            asset_notes:
+              result.row.asset_notes.length > 0
+                ? result.row.asset_notes.join("\n")
+                : null,
+            positioning_alternatives_considered: Array.isArray(
+              meta.positioning_alternatives_considered,
+            )
+              ? JSON.stringify(meta.positioning_alternatives_considered)
+              : null,
+          },
+        );
+      } catch (e) {
+        console.error("[brand-analysis] embed failed:", e);
+      }
+    }
+
     return NextResponse.json({
       analysis_id: result.analysis_id,
       inserted: result.inserted,

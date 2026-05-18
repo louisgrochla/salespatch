@@ -4,6 +4,8 @@ import {
   type DemoArtefactInput,
 } from "@/lib/sl-mas/demoArtefactStore";
 import { verifySignature } from "@/lib/sl-mas/hmac";
+import { embedRecord } from "@/lib/embeddings";
+import { phaseLabelFor } from "@/lib/phase";
 
 // POST /api/ingest/demo-artefact
 //
@@ -68,6 +70,58 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
   try {
     const result = await demoArtefactStore.ingest(payload);
+
+    // RAG embedding (PR 2). Selective fields — NEVER embed html_inline
+    // (a 4MB markup blob would dominate the chunk budget and contribute
+    // no semantic signal beyond what the structured fields already carry).
+    // What matters for queries: aesthetic positioning, design rationale,
+    // layout decisions (hero/gallery roles), NERVE consult summary.
+    if (result.inserted) {
+      try {
+        const meta = result.row.metadata ?? {};
+        const phaseLabel = await phaseLabelFor(
+          new Date(result.row.generated_at),
+        );
+        const layoutDecisions =
+          meta.layout_decisions && typeof meta.layout_decisions === "object"
+            ? JSON.stringify(meta.layout_decisions)
+            : null;
+        const consult =
+          meta.nerve_consult_summary &&
+          typeof meta.nerve_consult_summary === "object"
+            ? JSON.stringify(meta.nerve_consult_summary)
+            : null;
+        const designRationale =
+          typeof meta.design_rationale === "string"
+            ? meta.design_rationale
+            : null;
+        await embedRecord(
+          {
+            sourceType: "DemoArtefact",
+            sourceId: result.row.id,
+            phaseLabel,
+            metadata: {
+              section: "demo-artefact",
+              leadId: result.row.lead_id,
+              artefactId: result.row.artefact_id,
+            },
+          },
+          {
+            business_name: result.row.business_name,
+            vertical: result.row.vertical ?? null,
+            aesthetic_positioning: result.row.aesthetic_positioning ?? null,
+            dominant_hex: result.row.dominant_hex ?? null,
+            photo_count: result.row.photo_count,
+            design_rationale: designRationale,
+            layout_decisions: layoutDecisions,
+            nerve_consult_summary: consult,
+          },
+        );
+      } catch (e) {
+        console.error("[demo-artefact] embed failed:", e);
+      }
+    }
+
     return NextResponse.json({
       artefact_id: result.artefact_id,
       inserted: result.inserted,

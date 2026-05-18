@@ -305,6 +305,7 @@ Write the artefact sidecar at `~/Desktop/salespatch-demos/[slug]/outputs/demo-ar
   "metadata": {
     "size_kb": <int>,
     "build_demo_session": "<the same iso stamp>",
+    "design_rationale": "<one short paragraph, 2-5 sentences. WHY the build made the calls it did — not WHAT the diagnosis said. Mention the choices that wouldn't be obvious from the rendered HTML alone: why 8 gallery tiles instead of 4, why hero-bg interior instead of storefront, why the diagnosis-driven section landed second instead of first, what alternative the build considered and rejected. Required when verdict=PROCEED.>",
     "photo_classifications": {
       "<filename>": {
         "role": "<final role used in the demo: logo|storefront|interior|product_close|product_assortment|menu|press|lifestyle|unused>",
@@ -746,6 +747,28 @@ The autofix script (`qa-visual-autofix.ts`) is a single-pass HTML transformation
 **Idempotency:** every remedy in the library is a no-op when its target pattern is already in the fixed state. Re-running autofix on its own output is safe.
 
 **Final write:** the autofixed demo.html overwrites the original. The pre-autofix version is gone — if you need to inspect what changed, git diff against the last commit before /build-demo ran. (The `demo-artefact.json` posted to NERVE in the earlier ingest step still references the pre-autofix HTML; a future PR could re-post a post-autofix artefact, but for now the warehouse view of the artefact is the as-built version.)
+
+**Capture iterations into qa-visual-result.metadata.** Each iteration the autofix runs, the script's stdout is an `AutofixSummary` JSON shape (`{ bugs_attempted, fixes_applied, unfixable_bugs }`). Capture it in the NEXT visual-QA result that gets POSTed:
+
+```jsonc
+{
+  // ...other QaVisualResult fields...
+  "metadata": {
+    "autofix_history": [
+      {
+        "iteration": 1,
+        "ran_at": "<ISO timestamp>",
+        "summary": { /* AutofixSummary JSON */ }
+      },
+      // iteration 2, 3, ...
+    ]
+  }
+}
+```
+
+The array accumulates across iterations: the QA result POSTed after iteration 1 has one entry; after iteration 2, two entries; etc. The `Embedding` of the QaVisualResult (PR 2) doesn't include this array — it's structurally queryable via `/api/read/lead-bundle` and the leads UI, so embedding the prose form would be redundant. The value is in giving the eventual closed-pitch-outcome model a clean "which remedies fired, for which bugs, on which leads" signal.
+
+When the autofix iteration loop is skipped entirely (no critical bugs in iteration 0), the field stays absent — `metadata.autofix_history` is only present when at least one autofix ran.
 
 ## Output format
 
