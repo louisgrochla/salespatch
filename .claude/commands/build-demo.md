@@ -68,7 +68,16 @@ Before doing anything else, consult NERVE for prior signal on what's working in 
 
 5. Re-read the test of success from brief.md. Pin it to the top of your reasoning. Every layout decision, every word of copy, every animation gets measured against whether it produces that reaction in the owner.
 
-6. **Read the feature inventory.** `brand-analysis.json.metadata.existing_integrations` and `brand-analysis.json.metadata.feature_opportunities` are the brief's structured commitments about which third-party tools the demo MUST preserve and which features the diagnosis says the build should add. Two rules:
+6a. **Read the logo treatment.** `brand-analysis.json.metadata.logo_background_analysis.suggested_treatment` is the brief's call about how the logo's source file (typically a white-square-background JPEG) needs to render on the demo's dark hero. Apply CSS at build time:
+
+   - `transparent_png` — the build CANNOT fix this with CSS. Render the logo as-is and surface a warn-level note in the chat output: "Logo needs alpha PNG before pitching — current JPEG will show a visible white edge on the dark hero." Operator's job to swap the file.
+   - `drop_shadow` — wrap or style the `<img>` so the white card looks intentional: `border-radius: 8px; box-shadow: 0 6px 18px rgba(0,0,0,0.35); padding: 6px; background: #fff`. Keeps the JPEG visible but presents it as a deliberate card.
+   - `wrapped_container` — wrap the `<img>` in a `<span class="logo-wrap">` styled `display:inline-flex; align-items:center; justify-content:center; border-radius:50%; background: var(--accent); padding: 4px; aspect-ratio: 1/1;`. Inside, the logo `<img>` gets `border-radius: 50%; display: block; width: 100%; height: 100%; object-fit: cover;`. Hides the JPEG-square's edge for circular badge-style logos. The accent backstop also gives a small "rim" effect that looks intentional.
+   - `none` — render the `<img>` directly with no extra container. Use this when the source is already alpha or the JPEG background happens to match the hero.
+
+   When the field is absent (pre-logo-intelligence brief), default to `none` and rely on visual-QA to flag any issue.
+
+6b. **Read the feature inventory.** `brand-analysis.json.metadata.existing_integrations` and `brand-analysis.json.metadata.feature_opportunities` are the brief's structured commitments about which third-party tools the demo MUST preserve and which features the diagnosis says the build should add. Two rules:
 
    - **`existing_integrations[]`** is non-negotiable. For every entry, the URL must appear in the demo. The `treatment` field decides how:
      - `embed` — render an iframe (Booksy/Treatwell/Fresha/OpenTable/etc) wired into a section. Fall back to a button linking to the URL if the provider blocks iframes (Booksy doesn't; some Fresha endpoints do).
@@ -96,6 +105,7 @@ Before doing anything else, consult NERVE for prior signal on what's working in 
 - Vanilla HTML, CSS, JS. No frameworks, no libraries, no build tools.
 - Semantic HTML. Proper landmark elements (`header`, `nav`, `main`, `section`, `footer`). One `h1`, descending heading hierarchy.
 - Mobile-first responsive. Test mental model: 375px wide on a knackered iPhone in a busy café. Hero headline must remain legible and the primary CTA must be reachable without zoom.
+- **Avoid awkward mobile text-wrap.** Multi-item flex rows (hero tickers, ticker strips, social-proof marquees, nav rows with 4+ items) must wrap predictably at the mobile viewport. Default rule: any flex row with 3+ items must include `@media (max-width: 420px) { .row-class { flex-direction: column; gap: 0.4rem; text-align: left; } }` (or equivalent stacked layout). Without this, the row's `gap: 2rem` desktop default wraps inconsistently at 375px and items land on three or four staggered lines. Tickers, ribbons, and meta strips are the canonical offenders.
 - WCAG AA contrast on every text/background pair. The brief's hex palette has been chosen to pass. Verify.
 - Keyboard navigable. Modals trap focus. Escape closes them. Forms have proper labels (visible or sr-only).
 - Reduced-motion respected. Wrap any non-essential animation in `@media (prefers-reduced-motion: no-preference)`.
