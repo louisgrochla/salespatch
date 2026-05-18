@@ -528,7 +528,7 @@ Use the Read tool on `hero.png` and `full.png`. Look at them. The hero crop is t
 
 If `outputs/.qa-visual/sections/` exists (PR-C onwards), Read each section PNG too — they're inputs for Layer 6 (section grading).
 
-### Step 3 — apply the six layers
+### Step 3 — apply the seven layers
 
 **Read `apps/nerve/scripts/qa-visual-prompts.md` first.** It documents the system prompts, output schemas, and rubrics. The TS constants in `qa-visual-prompts.ts` are the executable form (what the SDK runner will use); the `.md` is the readable form for this manual flow.
 
@@ -542,6 +542,7 @@ Layer-specific inputs to load before applying each prompt:
 - **Layer 4** (Voice consistency, PR-C) — read `outputs/brand-analysis.json` for `voice_quotes[]` (fall back to `outputs/brief.json` if absent). Inject as the `voiceQuotes` field per `buildVoiceConsistencyUserMessage`. The prompt grades whether the rendered demo preserves the brief's verbatim language and is free of marketing-mush drift.
 - **Layer 5** (Customer reaction, PR-C) — read `outputs/brief.json` for business_name, business_type, address, vertical. Inject per `buildCustomerReactionUserMessage`. Role-plays a UK consumer who landed from a Google search — different signal from Layer 3 (which role-plays the owner). The customer reacts to "should I trust this enough to act?" not "is this me?".
 - **Layer 6** (Section grading, PR-C) — load the per-section PNGs from `outputs/.qa-visual/sections/` plus the section label list from `outputs/.qa-visual/render-result.json.sections[]`. Inject the labels per `buildSectionGradingUserMessage`. Send the section PNGs in DOM order. If no sections were detected, emit `section_grades: []` and skip the vision call.
+- **Layer 7** (Specificity grade, PR-K) — read `outputs/brief.json` for `business_name` + `vertical`. Apply `SPECIFICITY_SYSTEM_PROMPT` per `buildSpecificityUserMessage({businessName, vertical})` to `full.png` alone (no other layer's inputs). The prompt judges whether the rendered demo could be shipped for a different same-vertical business with only name + photos + location swapped. Lands in `qa-visual-result.json.metadata.specificity` as JSONB (no first-class column yet). The `SpecificityResult` shape has `grade` (1-5), `specific_facts_seen[]`, `templatey_signals[]`, `swap_test_verdict` (`would_break | mostly_works | could_swap`), and `notes`. Surface the grade in the Output Format's Visual-QA line: `specificity=<N>/5(<verdict>)`.
 
 Honest, not generous. The warehouse needs honest signal; flattering a weak demo helps nobody.
 

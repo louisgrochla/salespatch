@@ -264,6 +264,52 @@ Each layer answers a different question. Combining them into one pass dilutes at
 
 **Renderer dependency.** `qa-visual-render.ts` slices `full.png` into per-section PNGs via element-handle screenshots (which auto-scroll). Slices land at `.qa-visual/sections/section-NN-<label>.png`. The label is derived from the element's `id` OR its first `<h2>`/`<h3>` text, sanitised to a-z0-9-. If no recognisable sections exist, the slice list is empty and Layer 6 emits `"section_grades": []` rather than erroring.
 
+## Layer 7 — Specificity grade (PR-K)
+
+**System prompt:** `SPECIFICITY_SYSTEM_PROMPT` in `qa-visual-prompts.ts`.
+
+**User message:** `buildSpecificityUserMessage({ businessName, vertical })`.
+
+**Inputs:** full.png (the fullPage mobile capture) + the brief's vertical + business_name. NO context about the brief's content — Layer 7 must judge specificity from ONLY what's visible on the rendered page, the way a customer would.
+
+**Output schema (SpecificityResult):**
+
+```json
+{
+  "grade": 4,
+  "specific_facts_seen": [
+    "11 years on King Street",
+    "Inside Mokoko Hair Salon",
+    "Tue Fri Sat only — closed Mon Wed Thu Sun",
+    "Annie Guynh Nguyen named as owner"
+  ],
+  "templatey_signals": [
+    "Hero h1 'Aberdeen nails, made for repeat visits' matches the <Place> <noun>, made for <X> templatey pattern"
+  ],
+  "swap_test_verdict": "could_swap",
+  "notes": "Voice section is specific; hero copy is templatey. Net mid-grade — the about + hours sections rescue the demo from generic-spa territory but the hero is the AI-tell."
+}
+```
+
+**Grading rubric:**
+- `5` — Every above-the-fold fact is specific to this business; no swap test would survive a single field replacement. The page reads as a personal site, not a template.
+- `4` — Mostly specific. One or two templatey elements (a generic hero CTA, a placeholder testimonial) but the page on the whole is clearly THIS business.
+- `3` — Mixed. Half the page is specific (verbatim quotes, real photos, real address), half is templatey (generic services grid, "we believe" filler). Could swap to a same-vertical competitor with edits to the specific half only.
+- `2` — Mostly templatey. Specific facts exist (name, address) but the rest could be any same-vertical business. Hero/copy/services all reach for SaaS-default phrasing.
+- `1` — Entirely templatey. Pure swap-test failure — change name and photos, ship to a different business in the same vertical, nothing else needs updating.
+
+**Swap test (vision applies this).** Given only the rendered page, ask: if you swapped the business name, the photos, and the location, could you ship this exact demo for a different business in the same vertical? Three verdicts:
+
+- `would_break` — too many specific facts; ≥5 things would need rewriting beyond name/photos/location
+- `mostly_works` — 2-4 specific facts would need updating
+- `could_swap` — 0-1 specific facts; the page is template-shaped
+
+**Why this layer matters.** Layers 2-4 grade fidelity to the brief but don't grade whether the brief's voice actually made it to the page. A demo can score brand_fidelity=5 (palette + typography + positioning all on-brief) and voice_consistency=5 (all captured quotes rendered) but still feel templatey because the build invented the connective copy between the quotes. Layer 7 catches that gap. The vision call sees only what a customer sees and answers "is this a template with this business's name swapped in".
+
+The warehouse can join Layer 7 grade against close-rate over time: the hypothesis is `grade=5` closes >> `grade=3` closes. Once the cohort is big enough, this becomes a queryable dimension.
+
+**Storage today.** Lands in `qa_visual_results.metadata.specificity` as JSONB. Doesn't yet have a first-class column — the metadata escape hatch keeps this PR free of Prisma migration. A future PR can promote it.
+
 ## Canonical result file
 
 The full per-demo result, written to `outputs/qa-visual-result.json`:
