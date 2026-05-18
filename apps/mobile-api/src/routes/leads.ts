@@ -173,8 +173,72 @@ router.post('/:id/intel', (req, res) => {
     }
   }
 
+  // R9 — fire-and-forget `feedback` visit_event when the intel has any
+  // semantic content. The free-form `notes` field is the most useful
+  // signal for RAG (the NERVE side embeds `feedback` text into the
+  // vault); structured fields ride along in `metadata` for the ops
+  // surface. interest_level maps to the SP rating (cold=1, warm=3,
+  // hot=5) since both express the SP's read of the lead.
+  const feedbackText = buildIntelFeedbackText({ notes, objection, competitor, sentiment, best_time, price_discussed });
+  if (feedbackText) {
+    const assignment = queryOne<{ lead_id: string }>(
+      'SELECT lead_id FROM lead_assignments WHERE id = ? AND user_id = ?',
+      req.params.id, user_id,
+    );
+    if (assignment?.lead_id) {
+      void forwardVisitEventToNerve({
+        event_id: buildVisitEventId(req.params.id, 'feedback', now),
+        assignment_id: req.params.id,
+        lead_id: assignment.lead_id,
+        user_id,
+        type: 'feedback',
+        feedback: feedbackText,
+        rating: interestLevelToRating(interest_level),
+        metadata: {
+          source: 'mobile-api',
+          via: 'intel',
+          interest_level: interest_level ?? null,
+          sentiment: sentiment ?? null,
+          objection: objection ?? null,
+          competitor: competitor ?? null,
+          best_time: best_time ?? null,
+          price_discussed: price_discussed ?? null,
+        },
+        occurred_at: now,
+      });
+    }
+  }
+
   res.json({ ok: true });
 });
+
+function buildIntelFeedbackText(input: {
+  notes?: unknown; objection?: unknown; competitor?: unknown;
+  sentiment?: unknown; best_time?: unknown; price_discussed?: unknown;
+}): string | null {
+  const parts: string[] = [];
+  const note = typeof input.notes === 'string' ? input.notes.trim() : '';
+  if (note) parts.push(note);
+  const obj = typeof input.objection === 'string' ? input.objection.trim() : '';
+  if (obj) parts.push(`Objection: ${obj}`);
+  const comp = typeof input.competitor === 'string' ? input.competitor.trim() : '';
+  if (comp) parts.push(`Competitor mentioned: ${comp}`);
+  const sent = typeof input.sentiment === 'string' ? input.sentiment.trim() : '';
+  if (sent) parts.push(`Sentiment: ${sent}`);
+  const best = typeof input.best_time === 'string' ? input.best_time.trim() : '';
+  if (best) parts.push(`Best follow-up time: ${best}`);
+  const price = typeof input.price_discussed === 'string' ? input.price_discussed.trim() : '';
+  if (price) parts.push(`Price discussed: ${price}`);
+  const out = parts.join('\n');
+  return out.length > 0 ? out : null;
+}
+
+function interestLevelToRating(level: unknown): number | null {
+  if (level === 'cold') return 1;
+  if (level === 'warm') return 3;
+  if (level === 'hot') return 5;
+  return null;
+}
 
 // POST /leads/:id/pitch — record the post-pitch questionnaire
 //
