@@ -76,6 +76,20 @@ If you change a contract, update the corresponding knowledge note in the same co
 7. `ADR/*` — architecture decision records
 8. `knowledge/` — cross-app contracts and entity definitions (via business-brain MCP)
 
+## Skills and slash-commands (tracked in this repo)
+The SL-MAS pipeline skills live in the repo, not just `~/.claude/`:
+
+- `skills/spec-site-brief/SKILL.md` — research + brand decode skill
+- `.claude/commands/{build-demo,grab-photos,lead-hunter,lead-json,new-lead}.md` —
+  the five pipeline slash commands
+
+`scripts/setup-skills.sh` symlinks `~/.claude/skills/...` and
+`~/.claude/commands/...` to these repo paths so the local Claude Code instance
+reads the tracked files directly. Run it once per machine, then edit the
+repo-tracked files for everything from there on — changes are picked up
+immediately by the next skill invocation. Pre-existing local files are
+backed up to `~/.claude/.skills-backup/<timestamp>/` on first run.
+
 ## Changelog Convention
 For implementation changes, create a changelog entry:
 ```
