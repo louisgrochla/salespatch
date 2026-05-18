@@ -68,6 +68,17 @@ Before doing anything else, consult NERVE for prior signal on what's working in 
 
 5. Re-read the test of success from brief.md. Pin it to the top of your reasoning. Every layout decision, every word of copy, every animation gets measured against whether it produces that reaction in the owner.
 
+6. **Read the feature inventory.** `brand-analysis.json.metadata.existing_integrations` and `brand-analysis.json.metadata.feature_opportunities` are the brief's structured commitments about which third-party tools the demo MUST preserve and which features the diagnosis says the build should add. Two rules:
+
+   - **`existing_integrations[]`** is non-negotiable. For every entry, the URL must appear in the demo. The `treatment` field decides how:
+     - `embed` — render an iframe (Booksy/Treatwell/Fresha/OpenTable/etc) wired into a section. Fall back to a button linking to the URL if the provider blocks iframes (Booksy doesn't; some Fresha endpoints do).
+     - `link` — surface as a CTA button or footer link. Don't wrap in an iframe.
+     - `deep_link` — preserve the exact URL (don't substitute the provider's home).
+     Skipping an entry is a build failure. If the brief listed Booksy and the demo has no Booksy CTA, the lead will think you replaced their booking layer and refuse the pitch.
+   - **`feature_opportunities[]`** is suggestive. Priority 1 entries earn their own section unless the diagnosis directly contradicts; priority 2-3 may earn a smaller component (an email-capture strip, an enquiry mailto link, a portfolio-filter dropdown); priority 4-5 are nice-to-have, only build them if the blueprint already has room. Never propose a feature opportunity that conflicts with an existing integration — if Booksy is in `existing_integrations`, do NOT add `enquiry_form` for booking.
+
+   If both arrays are absent (pre-feature-capture brief), fall back to the blueprint sections in brief.md as the only source of truth — the diagnosis-driven killer section still wins.
+
 ---
 
 ## Build contract
