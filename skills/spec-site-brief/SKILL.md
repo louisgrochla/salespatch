@@ -246,6 +246,43 @@ Use exactly one of these enum values per photo. Role names mirror the build-demo
 
 If a photo could be two roles, pick the one that serves the diagnosis (e.g. for a "demand exceeds capture" diagnosis, lean product_close over interior; for "trust gap", lean storefront over product). The build will respect your call.
 
+### Feature inventory
+
+Before closing Phase 2, capture two structured lists about features. The split matters: one tells `/build-demo` what to preserve from the customer's existing setup, the other tells it what the diagnosis would benefit from adding. Without these the build either drops a working booking layer or invents a feature the owner doesn't want.
+
+**`existing_integrations[]`** — third-party tools the customer already uses that the demo MUST surface (not replace). Booksy, Fresha, Treatwell, Square, MailChimp, Squarespace blog, an Eventbrite event page, a working Stripe checkout, an existing OpenTable page. Each entry:
+
+```json
+{
+  "name": "Booksy",
+  "type": "booking | reservation | payment | newsletter | event | gallery | catalogue | other",
+  "url": "https://urbancutz21.booksy.com/",
+  "treatment": "embed | link | deep_link",
+  "evidence": "IG bio link points here; was the link in their Linktree"
+}
+```
+
+`treatment` rules of thumb: a fakeable success state (booking flow, reservation form) wants `embed` so the rep doesn't have to send the customer to another tab. A simple URL that needs to stay alive (the customer's existing Square shop, their MailChimp signup page) wants `link`. A deep-link to a specific resource (a single Booksy service page rather than the home) wants `deep_link`. **No invention.** Only list integrations Phase 1 actually surfaced — IG bio link, Google Business "Social profiles", the existing-website footer, the FB page's `website` / `websites[]` field. If you didn't verify it exists, don't include it.
+
+**`feature_opportunities[]`** — features the business doesn't currently have but the diagnosis says they could measurably benefit from. Capped at 4 entries (more than that means the diagnosis is fuzzy). Each entry:
+
+```json
+{
+  "feature": "email_drop_list | enquiry_form | portfolio_filter | price_anchor | newsletter | event_calendar | wholesale_path | gallery_grid | live_status | other",
+  "rationale": "<one line — must be traceable back to brief facts; the test of success is part of the chain>",
+  "priority": 1
+}
+```
+
+Priority is 1-5 where 1 is "the demo needs this section to make the test_of_success land" and 5 is "nice to have, only if the brief's blueprint already accommodates it". The build will give priority-1 entries their own section; priority-2 and 3 may earn placement; priority-4 and 5 surface as suggestions, not sections.
+
+**Hard rules:**
+
+- Both lists may be empty. Don't pad — if the customer has nothing to integrate and the diagnosis fits in their existing surfaces, both can be `[]`.
+- Every `feature_opportunities` rationale must trace back to a fact captured in Phase 1 or Phase 3 (the diagnosis). Inventing a "we recommend you add a loyalty programme" because it sounds good fails this check.
+- Existing integrations override matching opportunities. If they have Booksy, don't propose `enquiry_form` as a substitute for booking — the booking job is solved.
+- Both lists land in `brand-analysis.json` (and downstream NERVE) under the `metadata` field — see Phase 4 schema. No new ingest-side validation needed; the build skill is the consumer.
+
 ---
 
 ## Phase 3 — Diagnose
@@ -798,10 +835,29 @@ The three metadata fields are the reasoning trace: what you considered and rejec
   },
   "analysis_markdown": "<Phase 2 section verbatim>",
   "source": "manual_skill",
-  "metadata": {},
+  "metadata": {
+    "existing_integrations": [
+      {
+        "name": "<e.g. Booksy>",
+        "type": "<booking|reservation|payment|newsletter|event|gallery|catalogue|other>",
+        "url": "<full https URL>",
+        "treatment": "<embed|link|deep_link>",
+        "evidence": "<one line — where Phase 1 saw it>"
+      }
+    ],
+    "feature_opportunities": [
+      {
+        "feature": "<email_drop_list|enquiry_form|portfolio_filter|price_anchor|newsletter|event_calendar|wholesale_path|gallery_grid|live_status|other>",
+        "rationale": "<one line — must trace back to brief facts>",
+        "priority": <1-5>
+      }
+    ]
+  },
   "analyzed_at": "<same ISO 8601 UTC>"
 }
 ```
+
+Both arrays default to `[]`. See "Feature inventory" in Phase 2 for capture rules and the priority rubric.
 
 **3. `outputs/lead-profile.json`** — business snapshot for `LeadProfile`.
 
