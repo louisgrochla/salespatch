@@ -33,6 +33,10 @@ import {
   type SalesUser,
 } from "@/lib/supabase-builds";
 import { normaliseName } from "@/lib/sl-mas/businessIdentityStore";
+import {
+  visitEventStore,
+  type VisitAggregate,
+} from "@/lib/sl-mas/visitEventStore";
 
 // ── Public types ─────────────────────────────────────────────────────────
 
@@ -307,6 +311,13 @@ export async function loadLeadsOps(raw: RawSearchParams): Promise<LeadOpsResult>
     fetchSalesUsers(),
   ]);
 
+  // R9: visit + feedback now live in NERVE Postgres. Aggregate across every
+  // lead in one pass and use Supabase only as a fallback when a given lead
+  // has no NERVE rows yet (i.e., before the mobile-api producer wire-up
+  // has propagated for that lead).
+  const visitAggsByLead: Map<string, VisitAggregate> =
+    await visitEventStore.aggregateAcrossLeads();
+
   const supabaseAvailable = builds.length > 0 || salesUsers.length > 0;
 
   // ── Index pre-built lookups ────────────────────────────────────────────
@@ -446,6 +457,7 @@ export async function loadLeadsOps(raw: RawSearchParams): Promise<LeadOpsResult>
         buildByAssignmentId,
         revenueByAssignment,
         visitsByAssignment,
+        visitAggsByLead,
         demoByLead,
         qaByLead,
         pitchesByName,
@@ -472,6 +484,7 @@ export async function loadLeadsOps(raw: RawSearchParams): Promise<LeadOpsResult>
         buildByAssignmentId,
         revenueByAssignment,
         visitsByAssignment,
+        visitAggsByLead,
         demoByLead,
         qaByLead,
         pitchesByName,
@@ -576,6 +589,7 @@ interface BuildRowArgs {
   buildByAssignmentId: Map<string, BuildRow>;
   revenueByAssignment: Map<string, number>;
   visitsByAssignment: Map<string, { durationMinutes: number; startedAt: string | null }>;
+  visitAggsByLead: Map<string, VisitAggregate>;
   demoByLead: Map<string, { count: number; latestAt: Date | null }>;
   qaByLead: Map<string, { hasCritical: boolean | null; ranAt: Date }>;
   pitchesByName: Map<
@@ -604,6 +618,7 @@ function buildRow(args: BuildRowArgs): LeadOpsRow {
     buildByAssignmentId,
     revenueByAssignment,
     visitsByAssignment,
+    visitAggsByLead,
     demoByLead,
     qaByLead,
     pitchesByName,
@@ -670,10 +685,16 @@ function buildRow(args: BuildRowArgs): LeadOpsRow {
     revenuePence += revenueByAssignment.get(aid) ?? 0;
   }
 
-  // Visit minutes: sum across every assignment id; null when Supabase is
-  // unavailable (the map is empty in that case).
+  // R9 visit aggregation. NERVE-first: if visit_events has any rows for
+  // this lead, trust them. Fall back to the Supabase live-pull only when
+  // NERVE is empty (i.e., before the mobile-api producer wire-up has
+  // propagated). visitMinutes stays null when nothing is known so the
+  // column can render `—` cleanly.
+  const nerveVisit = visitAggsByLead.get(leadId);
   let visitMinutes: number | null = null;
-  if (visitsByAssignment.size > 0 || assignmentIds.length === 0) {
+  if (nerveVisit && nerveVisit.visit_count > 0) {
+    visitMinutes = nerveVisit.total_duration_minutes;
+  } else if (visitsByAssignment.size > 0 || assignmentIds.length === 0) {
     let acc = 0;
     let any = false;
     for (const aid of assignmentIds) {
@@ -686,8 +707,14 @@ function buildRow(args: BuildRowArgs): LeadOpsRow {
     visitMinutes = any ? acc : null;
   }
 
+  // Feedback count = scoped notes + assignment-event notes + R9 visit
+  // feedback rows. The three signals don't overlap (different tables,
+  // different producers), so the sum is the count an operator cares
+  // about ("how many free-form follow-ups touch this lead").
   const feedbackCount =
-    (noteAgg?.count ?? 0) + (event?.notes ? 1 : 0);
+    (noteAgg?.count ?? 0) +
+    (event?.notes ? 1 : 0) +
+    (nerveVisit?.feedback_count ?? 0);
 
   const lastActivityAt = maxDate(
     event?.occurredAt ?? null,
@@ -697,6 +724,7 @@ function buildRow(args: BuildRowArgs): LeadOpsRow {
     noteAgg?.latestAt ?? null,
     factAgg?.latestAt ?? null,
     build?.paidAt ?? null,
+    nerveVisit?.latest_occurred_at ?? null,
     profileTimestamp,
   );
 
