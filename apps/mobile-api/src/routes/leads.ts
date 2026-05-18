@@ -240,6 +240,28 @@ function interestLevelToRating(level: unknown): number | null {
   return null;
 }
 
+function buildPitchFeedbackText(input: {
+  notes: string | null; firstResponsePhrase: string | null;
+  competitorMentioned: string | null; objections: string[];
+  demoReaction: string | null;
+}): string | null {
+  const parts: string[] = [];
+  if (input.notes) parts.push(input.notes);
+  if (input.firstResponsePhrase) parts.push(`First response: "${input.firstResponsePhrase}"`);
+  if (input.competitorMentioned) parts.push(`Competitor mentioned: ${input.competitorMentioned}`);
+  if (input.objections.length > 0) parts.push(`Objections: ${input.objections.join(', ')}`);
+  if (input.demoReaction) parts.push(`Demo reaction: ${input.demoReaction}`);
+  const out = parts.join('\n');
+  return out.length > 0 ? out : null;
+}
+
+function gutFeelToRating(pct: number | null): number | null {
+  if (pct == null) return null;
+  if (pct < 0 || pct > 100) return null;
+  if (pct === 0) return 1;
+  return Math.min(5, Math.ceil(pct / 20));
+}
+
 // POST /leads/:id/pitch — record the post-pitch questionnaire
 //
 // Stores the structured pitch row locally (always succeeds) and
@@ -383,6 +405,64 @@ router.post('/:id/pitch', async (req, res) => {
     'INSERT INTO sales_activity_log (id, user_id, assignment_id, action, notes, location_lat, location_lng, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
     uuid(), user_id, assignmentId, `pitch_${outcome}`, JSON.stringify({ pitch_id: id, outcome }), gpsLat, gpsLng, now,
   );
+
+  // R9 — mirror the visit-side timeline. The structured pitch row goes
+  // to /api/ingest/pitch above; here we emit lightweight visit_events
+  // so /leads ops view + RAG vault see the pitch happened.
+  //
+  // `pitched` fires for any outcome except `not_pitched` (which is "I
+  // visited but couldn't pitch" — that's a visit, not a pitch).
+  // `feedback` fires when the SP wrote anything free-form on the
+  // questionnaire.
+  const leadId = assignment.lead_id as string;
+  if (outcome !== 'not_pitched') {
+    void forwardVisitEventToNerve({
+      event_id: buildVisitEventId(assignmentId, 'pitched', pitchedAt),
+      assignment_id: assignmentId,
+      lead_id: leadId,
+      user_id,
+      type: 'pitched',
+      duration_minutes: pitchDuration != null
+        ? Math.max(0, Math.round(pitchDuration / 60))
+        : null,
+      latitude: gpsLat,
+      longitude: gpsLng,
+      metadata: {
+        source: 'mobile-api',
+        via: 'pitch',
+        pitch_id: id,
+        outcome,
+        pitch_attempt_number: pitchAttemptNumber,
+      },
+      occurred_at: pitchedAt,
+    });
+  }
+
+  const pitchFeedbackText = buildPitchFeedbackText({
+    notes, firstResponsePhrase, competitorMentioned, objections, demoReaction,
+  });
+  if (pitchFeedbackText) {
+    void forwardVisitEventToNerve({
+      event_id: buildVisitEventId(assignmentId, 'feedback', pitchedAt),
+      assignment_id: assignmentId,
+      lead_id: leadId,
+      user_id,
+      type: 'feedback',
+      feedback: pitchFeedbackText,
+      rating: gutFeelToRating(gutFeelClosePct),
+      latitude: gpsLat,
+      longitude: gpsLng,
+      metadata: {
+        source: 'mobile-api',
+        via: 'pitch',
+        pitch_id: id,
+        outcome,
+        interest_level: interestLevel,
+        demo_reaction: demoReaction,
+      },
+      occurred_at: pitchedAt,
+    });
+  }
 
   // Forward to NERVE. Failures don't fail the request — they're logged
   // on the pitch row for retry.
