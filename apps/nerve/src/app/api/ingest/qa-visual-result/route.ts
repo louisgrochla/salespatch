@@ -5,6 +5,8 @@ import {
   type LayerName,
 } from "@/lib/sl-mas/qaVisualResultStore";
 import { verifySignature } from "@/lib/sl-mas/hmac";
+import { embedRecord } from "@/lib/embeddings";
+import { phaseLabelFor } from "@/lib/phase";
 
 // POST /api/ingest/qa-visual-result
 //
@@ -62,6 +64,65 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
   try {
     const result = await qaVisualResultStore.ingest(payload);
+
+    // RAG embedding (PR 2). Selective fields capture the layers' prose
+    // (bug findings, owner/customer reactions, voice drift notes) so
+    // queries like "what did the owner say about the demo" or "what
+    // critical bugs has visual-QA flagged for vertical=X" can retrieve
+    // from /ask. Skip on dup.
+    if (result.inserted) {
+      try {
+        const phaseLabel = await phaseLabelFor(new Date(result.row.ran_at));
+        const bugsText = Array.isArray(result.row.bugs)
+          ? (result.row.bugs as Array<Record<string, unknown>>)
+              .map((b) => {
+                const sev = typeof b.severity === "string" ? b.severity : "?";
+                const loc = typeof b.location === "string" ? b.location : "?";
+                const find = typeof b.finding === "string" ? b.finding : "";
+                return `[${sev}] ${loc} — ${find}`;
+              })
+              .join("\n")
+          : null;
+        const ownerReaction = result.row.owner_reaction
+          ? JSON.stringify(result.row.owner_reaction)
+          : null;
+        const customerReaction = result.row.customer_reaction
+          ? JSON.stringify(result.row.customer_reaction)
+          : null;
+        const brandFidelityNotes = pickString(
+          result.row.brand_fidelity,
+          "notes",
+        );
+        const voiceNotes = pickString(result.row.voice_consistency, "notes");
+        await embedRecord(
+          {
+            sourceType: "QaVisualResult",
+            sourceId: result.row.id,
+            phaseLabel,
+            metadata: {
+              section: "qa-visual",
+              leadId: result.row.lead_id,
+              qaVisualId: result.row.qa_visual_id,
+              hasCritical: result.row.has_critical,
+            },
+          },
+          {
+            producer: result.row.producer,
+            bug_count: result.row.bug_count,
+            has_critical: result.row.has_critical,
+            bugs: bugsText,
+            owner_reaction: ownerReaction,
+            customer_reaction: customerReaction,
+            brand_fidelity_notes: brandFidelityNotes,
+            voice_consistency_notes: voiceNotes,
+            notes: result.row.notes,
+          },
+        );
+      } catch (e) {
+        console.error("[qa-visual-result] embed failed:", e);
+      }
+    }
+
     return NextResponse.json({
       qa_visual_id: result.qa_visual_id,
       inserted: result.inserted,
@@ -92,6 +153,15 @@ const VALID_LAYER_NAMES: LayerName[] = [
   "customer_reaction",
   "section_grades",
 ];
+
+function pickString(
+  obj: Record<string, unknown> | null | undefined,
+  key: string,
+): string | null {
+  if (!obj) return null;
+  const v = obj[key];
+  return typeof v === "string" ? v : null;
+}
 
 function validatePayload(p: Partial<QaVisualResultInput>): string | undefined {
   if (!p || typeof p !== "object") return "payload required";
