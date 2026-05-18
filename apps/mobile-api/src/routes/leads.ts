@@ -3,6 +3,10 @@ import { v4 as uuid } from 'uuid';
 import { requireAuth, getUser } from '../auth.js';
 import { queryAll, queryOne, run } from '../db.js';
 import { forwardPitchToNerve, type NervePitchPayload } from '../nerve-forwarder.js';
+import {
+  buildVisitEventId,
+  forwardVisitEventToNerve,
+} from '../nerve-visit-forwarder.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -116,6 +120,30 @@ router.patch('/:id/status', (req, res) => {
     'INSERT INTO sales_activity_log (id, user_id, assignment_id, action, location_lat, location_lng, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
     uuid(), user_id, req.params.id, `status_${status}`, lat ?? null, lng ?? null, now,
   );
+
+  // R9 — fire-and-forget `pitched` visit_event when the SP marks the
+  // visit as pitched. Other status transitions don't map to a
+  // visit_event type (arrived/departed come from /visits, sold belongs
+  // to the pitch row + Stripe).
+  if (status === 'pitched') {
+    const assignment = queryOne<{ lead_id: string }>(
+      'SELECT lead_id FROM lead_assignments WHERE id = ? AND user_id = ?',
+      req.params.id, user_id,
+    );
+    if (assignment?.lead_id) {
+      void forwardVisitEventToNerve({
+        event_id: buildVisitEventId(req.params.id, 'pitched', now),
+        assignment_id: req.params.id,
+        lead_id: assignment.lead_id,
+        user_id,
+        type: 'pitched',
+        latitude: typeof lat === 'number' ? lat : null,
+        longitude: typeof lng === 'number' ? lng : null,
+        metadata: { source: 'mobile-api', via: 'patch-status' },
+        occurred_at: now,
+      });
+    }
+  }
 
   res.json({ ok: true, status });
 });
