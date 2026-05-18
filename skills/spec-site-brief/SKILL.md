@@ -671,12 +671,25 @@ Deliver in this exact order. No preamble, no summary, no postscript.
 
 ### 1. VERDICT
 
-One line. PROCEED or PASS, with reason.
+One line. Three verdict shapes: **PROCEED (Tier 1)**, **PROCEED (Tier 2)**, or **PASS**, with reason. The tier comes from the Phase 1 functional-front-door check (the 30-second test).
 
-Examples:
-
-- `PROCEED — strong IG (16.9K), no site, 4.9 from 270 reviews, Good Food Guide listed.`
+- `PROCEED Tier 1 — strong IG (16.9K), no site, 4.9 from 270 reviews, Good Food Guide listed.` *(classic broken-front-door case; the pitch fixes a real absence)*
+- `PROCEED Tier 2 — works out of anniesnailsandbeauty.mytreatwell.co.uk; dead .me domain; pitch is "take back ownership of your URL".` *(operator has a functional platform-hosted front door but doesn't own the URL; harder close)*
 - `PASS — modern functional site already live at examplebakery.com.`
+
+### Tier 2 verdict shape
+
+When the verdict is Tier 2, capture explicitly:
+
+- Which URL hosts the functional front door (`functional_front_door_url` in brief.json metadata)
+- Which platform owns that URL (Treatwell / Booksy / Fresha / Square / Squarespace / etc — `functional_front_door_platform`)
+- Whether the operator also has a broken owned domain (`broken_owned_domain` if present, null otherwise)
+
+Tier 2 pitches differ from Tier 1 in three ways that downstream skills (`/lead-json`, `/build-demo`) need to respect:
+
+1. **Hook framing.** Tier 1 hooks point at the operator's absence ("you have no website"). Tier 2 hooks point at the operator's *dependency* ("your front door lives on Treatwell, not on your own URL"). The /lead-json `hook` and `opener` shift accordingly.
+2. **Demo positioning.** The demo must EMBED rather than replace the existing platform front. The operator's customers already use that URL; the demo's job is to add an owned-brand layer in front of it, not to compete with it.
+3. **Expected close rate.** Tier 2 closes lower than Tier 1 in the same vertical. The warehouse should learn this — close-rate by tier becomes a queryable dimension.
 
 ### 2. BUSINESS SNAPSHOT
 
@@ -833,7 +846,11 @@ Generate three structured sidecars from the brief content you just wrote, save t
   "address": "<full address from snapshot>",
   "owner_name": "<owner if known, else null>",
   "verdict": "PROCEED",
+  "verdict_tier": "<tier_1 | tier_2 | null when verdict is PASS>",
   "verdict_reason": "<the one-liner from section 1>",
+  "functional_front_door_url": "<for tier_2: the URL that hosts the platform-hosted front door (e.g. https://anniesnailsandbeauty.mytreatwell.co.uk/); null for tier_1>",
+  "functional_front_door_platform": "<for tier_2: treatwell | booksy | fresha | square | squarespace | other; null for tier_1>",
+  "broken_owned_domain": "<for tier_2 if applicable: the broken owned domain like https://www.anniesnails.me/; null otherwise>",
   "google_rating": <number or null>,
   "google_review_count": <integer or null>,
   "instagram_handle": "<handle without @ or null>",

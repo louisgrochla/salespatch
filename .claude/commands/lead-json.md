@@ -161,7 +161,14 @@ The buyer is the owner. Usually 35 to 65, skeptical of "web agencies", proud of 
 2. If the business has under 20 Google reviews, do not lean on Google in the opener. Pick a different hook (years trading, signature product, neighbourhood reputation).
 3. If there is no phone in the research, `phone` is null. Do not guess.
 4. If the research implies the owner is anti-tech or anti-digital, the hook and opener must acknowledge it. e.g. "I know you've done fine on word-of-mouth for 20 years, but…".
-5. If the business already has a modern functional site, you do not have a sale. In that case, output `"hook": "PASS — existing site at <url> is already functional."` and set `pain_points`, `opener`, `close_script`, `next_visit_reason`, `demo_moments`, `specific_objections` to null.
+5. If the business already has a modern functional site on their OWN domain (`outputs/brief.json.verdict` is PASS), you do not have a sale. Output `"hook": "PASS — existing site at <url> is already functional."` and set `pain_points`, `opener`, `close_script`, `next_visit_reason`, `demo_moments`, `specific_objections` to null.
+
+5b. **Tier-aware pitch shape.** Read `outputs/brief.json.verdict_tier` and adjust the pitch accordingly:
+
+   - **`tier_1`** — classic broken-front-door. The hook points at the operator's *absence* of a working URL. Standard pitch shape. Opener leads with the missing thing ("you have 856 Facebook likes and no website"). Close is "let me give you a front door".
+   - **`tier_2`** — operator has a functional platform-hosted front door (read `functional_front_door_url` + `functional_front_door_platform` from brief.json). The hook points at the operator's *dependency*, not absence. The opener acknowledges the working platform front and offers the missing layer ("your Treatwell page works; what's missing is your own URL on top of it"). The close is "let me give you an owned brand layer that points at your existing Treatwell — Treatwell stays". Specific objections MUST include: "I already have a Treatwell/Booksy/Fresha page" with a response that does NOT replace the platform; the demo wraps it. Use `embed` treatment in `existing_integrations` for the platform URL — the demo's job is to enclose it, not compete with it.
+
+   Tier 2 closes lower than Tier 1 in the same vertical, so the rep needs to know upfront. Surface the tier in `description` (e.g. "Solo nail studio — Treatwell is her booking, this gives her an owned brand layer on top.").
 6. Postcode is OUTWARD only. "E8 3BA" → `"postcode": "E8"`. The full postcode goes in `address`.
 7. Brand colours: only fill `brand_primary_hex` / `brand_accent_hex` if you can actually see the logo, storefront, or existing site. Do not invent a palette to fill the field. Always include the "#".
 8. UK compliance: do not include GDPR or cookie-banner talk in the pitch. That is fulfilment's job, not the rep's.
@@ -237,7 +244,12 @@ Generate `outputs/pitch-brief.json` next to lead.json. It is the same playbook d
     { "objection": "...", "response": "..." }
   ],
   "source": "manual_skill",
-  "metadata": { "lead_json_session": "<the same iso stamp>" },
+  "metadata": {
+    "lead_json_session": "<the same iso stamp>",
+    "verdict_tier": "<tier_1 | tier_2, copied from outputs/brief.json.verdict_tier>",
+    "functional_front_door_url": "<copied from brief.json for tier_2, else null>",
+    "functional_front_door_platform": "<copied from brief.json for tier_2, else null>"
+  },
   "generated_at": "<same ISO 8601 UTC as run.jsonl ts>"
 }
 ```
