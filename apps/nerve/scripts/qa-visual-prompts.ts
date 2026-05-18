@@ -452,6 +452,10 @@ Bug categories to flag:
 
 8. **Form controls** — labels disconnected from inputs, select chevrons clipped by container, fields off-screen at this width.
 
+9. **Logo background on dark hero** — when the logo image is a JPEG with a white or coloured square background and the hero behind it contrasts strongly (dark hero with white-background logo JPEG, or vice versa), the JPEG-square reads as a visible halo or card around the logo, not as a deliberate badge. Flag as **warning** when the halo is visible but doesn't dominate; **critical** when the halo is the most distracting element above the fold. Common with Facebook-page profile photos that ship as JPEGs even when the logo design is circular.
+
+10. **Mobile text-wrap** — multi-item rows (hero tickers, ribbons, nav rows, social-proof strips) wrapping onto 3+ lines at this viewport because the flex container has \`gap: 1.5rem+\` with no \`flex-direction: column\` fall-back at narrow widths. Each item is legible on its own; the row reads as broken layout because the items wrap inconsistently. Flag as **warning** if in the hero or above the fold; **info** if lower in the page. Do NOT flag rows that wrap onto two lines cleanly — only flag when wrapping is staggered or items land mid-row.
+
 Severity rubric:
 - "critical" — must-fix-before-ship. A UK shop owner would notice in the first 5 seconds. Hard-gates the build verdict.
 - "warning" — noticeable but the demo can still pitch. Degrades the score.

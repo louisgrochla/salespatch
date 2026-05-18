@@ -198,6 +198,25 @@ Suggest 2–3 Google Fonts that match each voice, with weights. If a brand eleme
 
 Describe what is there in enough detail that it could be reproduced as inline SVG or pulled as a transparent PNG. Note if it is clean-vector or hand-imperfect. The imperfection matters — perfect Bezier curves on a hand-drawn mark will read as fake.
 
+**Background analysis (required).** Examine the source file for the logo (typically `fb_<slug>_logo.jpg` from the Facebook page scrape, or an Instagram profile picture). Most of these arrive as JPEGs with a *coloured* or *white* square background even when the logo design itself is circular or transparent. On a dark hero or coloured CTA strip, that background will render as a visible square edge around the logo. Decide which treatment the build should apply and commit it as `logo_background_analysis` in `brand-analysis.json.metadata`:
+
+```json
+{
+  "has_white_bg": <bool — is the JPEG's background white/near-white?>,
+  "needs_alpha_channel": <bool — would the demo look noticeably better with an alpha PNG?>,
+  "suggested_treatment": "transparent_png | drop_shadow | wrapped_container | none",
+  "rationale": "<one line — what you saw in the source>"
+}
+```
+
+`suggested_treatment` rubric:
+- **`transparent_png`** — the logo design is irregular (non-circular, non-square shape with sharp edges) and the white JPEG-square will visibly clash with the hero. The build cannot fix this with CSS alone; flag it for the operator to source an alpha PNG before pitching.
+- **`drop_shadow`** — the logo design is dark on white, and the white JPEG-square reads as a deliberate "card" treatment. A subtle shadow + corner radius on the `<img>` makes it look intentional.
+- **`wrapped_container`** — the logo design is circular (badge-style, like Urban Cutz) and the white JPEG-square is the only artefact. Wrapping the `<img>` in a circular accent-coloured container (`border-radius: 50%; background: var(--accent); padding: 4px`) hides the square edge while letting the badge breathe.
+- **`none`** — the logo is already alpha or the background colour happens to match the hero (e.g. black logo on black JPEG-bg over a black hero).
+
+The build will read `suggested_treatment` and apply matching CSS. Without it, the build guesses based on file extension (PNG = trust alpha, JPEG = assume coloured-bg) which gets it right ~60% of the time but the other 40% of leads ship with visible white squares on a dark hero. The brief decode is the right place to make this call because it has the source file in hand.
+
 ### Voice and tone
 
 Pull verbatim language from menus, captions, and any press quotes. How do they actually talk?
@@ -851,13 +870,19 @@ The three metadata fields are the reasoning trace: what you considered and rejec
         "rationale": "<one line — must trace back to brief facts>",
         "priority": <1-5>
       }
-    ]
+    ],
+    "logo_background_analysis": {
+      "has_white_bg": <bool>,
+      "needs_alpha_channel": <bool>,
+      "suggested_treatment": "<transparent_png|drop_shadow|wrapped_container|none>",
+      "rationale": "<one line>"
+    }
   },
   "analyzed_at": "<same ISO 8601 UTC>"
 }
 ```
 
-Both arrays default to `[]`. See "Feature inventory" in Phase 2 for capture rules and the priority rubric.
+`existing_integrations` and `feature_opportunities` both default to `[]`. `logo_background_analysis` is required (set `suggested_treatment: "none"` for already-alpha PNGs). See "Feature inventory" + "Logo / mascot" in Phase 2 for capture rules.
 
 **3. `outputs/lead-profile.json`** — business snapshot for `LeadProfile`.
 

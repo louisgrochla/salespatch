@@ -43,6 +43,8 @@ export type BugPattern =
   | "redundant_cta_pair"
   | "status_as_cta"
   | "live_content_hardcoded"
+  | "logo_white_bg_on_dark_hero"
+  | "text_wraps_awkwardly_at_mobile"
   | "unknown";
 
 export interface RemedyResult {
@@ -113,6 +115,23 @@ export function inferPattern(bug: BugFinding): BugPattern {
     /\b(text|h1|heading|mono|ribbon|overlay|gradient|photo|image)\b/.test(text)
   ) {
     return "text_over_image_low_contrast";
+  }
+
+  // Logo white-bg on dark hero (Layer 1 category #9)
+  if (
+    /\blogo\b/.test(text) &&
+    /\b(white|jpeg|square|halo|card|background|bg|edge)\b/.test(text) &&
+    /\b(hero|above[- ]?the[- ]?fold|nav|header)\b/.test(text)
+  ) {
+    return "logo_white_bg_on_dark_hero";
+  }
+
+  // Mobile text-wrap (Layer 1 category #10)
+  if (
+    /\b(wrap|wraps|wrapping|staggered|mid[- ]?row|broken layout)\b/.test(text) &&
+    /\b(ticker|ribbon|strip|nav row|flex row|marquee)\b/.test(text)
+  ) {
+    return "text_wraps_awkwardly_at_mobile";
   }
 
   return "unknown";
@@ -216,6 +235,73 @@ function remedyRedundantCtaPair(_html: string): string | null {
   return null;
 }
 
+/**
+ * Logo with white JPEG background on a dark hero. No safe auto-fix at
+ * the HTML/CSS layer — the right fix depends on the logo's shape:
+ *
+ * - Circular badge with a white square JPEG-bg → wrap in a circular
+ *   accent-coloured container.
+ * - Irregular shape on a white square JPEG-bg → operator needs to
+ *   source a transparent PNG; CSS can't crop arbitrary shapes.
+ * - Dark-on-white logo where the white card reads as deliberate →
+ *   add a subtle drop-shadow.
+ *
+ * The brief-side decode (spec-site-brief Phase 2 "Logo / mascot") is
+ * the right place to commit which treatment applies — it has the
+ * source file in hand. /build-demo reads
+ * `brand-analysis.json.metadata.logo_background_analysis.suggested_treatment`
+ * and applies the matching CSS at build time. By the time visual-QA
+ * fires, the build has either already applied the right treatment or
+ * the brief didn't capture the field (legacy lead). Auto-fixing at
+ * this layer would mean guessing the logo's shape from a screenshot,
+ * which is exactly the kind of half-fix that misleads the rep.
+ *
+ * Surface as unfixable so the operator either re-runs /spec-site-brief
+ * with the new prompt or sources a transparent PNG before pitching.
+ */
+function remedyLogoWhiteBgOnDarkHero(_html: string): string | null {
+  return null;
+}
+
+/**
+ * Hero ticker / ribbon / nav row wrapping awkwardly at mobile width.
+ *
+ * The build's default ticker pattern uses something like:
+ *
+ *   .hero .ticker { display: flex; gap: 2rem; flex-wrap: wrap; }
+ *
+ * At 375px with 4 items, the row wraps inconsistently — items land
+ * mid-row, the gap reads as deliberate-then-broken. The fix is a
+ * mobile media query that switches to a stacked layout:
+ *
+ *   @media (max-width: 420px) {
+ *     .hero .ticker { flex-direction: column; gap: 0.4rem; }
+ *   }
+ *
+ * The remedy injects this rule into the demo's <style> block if not
+ * already present. Targets the `.ticker` class which the build emits
+ * for the canonical case. If the wrap issue is in a differently-named
+ * row (`.ribbon`, `.proof-strip`, `.nav-row`), the rule won't match
+ * — that's acceptable; the warn-level finding flows through to the
+ * chat output and the operator can adjust the build's class names.
+ *
+ * Idempotent — checks for the `.ticker` mobile rule before inserting.
+ */
+function remedyTextWrapsAwkwardlyAtMobile(html: string): string | null {
+  // Already patched?
+  if (/@media \(max-width:\s*420px\)\s*\{[^}]*\.ticker\b[^}]*flex-direction:\s*column/.test(html)) {
+    return null;
+  }
+  // Find the closing </style> of the first inline stylesheet to append into.
+  const styleClose = html.indexOf("</style>");
+  if (styleClose === -1) return null;
+  // Only fire if the demo actually uses `.ticker`.
+  if (!/\.ticker\b/.test(html.slice(0, styleClose))) return null;
+
+  const rule = `\n@media (max-width: 420px) {\n  .ticker { flex-direction: column; gap: 0.4rem; align-items: flex-start; }\n}\n`;
+  return html.slice(0, styleClose) + rule + html.slice(styleClose);
+}
+
 // ─────────────────────────────────────────────────────────────────────
 // Public orchestration entry point
 // ─────────────────────────────────────────────────────────────────────
@@ -266,6 +352,14 @@ export function applyRemedies(
       case "redundant_cta_pair":
         next = remedyRedundantCtaPair(current);
         remedyName = "(no safe auto-fix — risks breaking nav)";
+        break;
+      case "logo_white_bg_on_dark_hero":
+        next = remedyLogoWhiteBgOnDarkHero(current);
+        remedyName = "(no safe auto-fix — brief decode owns the treatment)";
+        break;
+      case "text_wraps_awkwardly_at_mobile":
+        next = remedyTextWrapsAwkwardlyAtMobile(current);
+        remedyName = "stack .ticker rows at <420px";
         break;
       default:
         remedyName = "(no remedy registered for this pattern)";
