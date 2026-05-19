@@ -66,6 +66,28 @@ If you change a contract, update the corresponding knowledge note in the same co
 - Run `npm run verify` before committing when source changes are involved
 - When done, the user will review and merge to main
 
+### PR sizing — one logical feature, one PR
+- **Default to long-lived feature branches**, NOT one-PR-per-commit. A multi-step
+  task (e.g. a "Phase R9" rollout with model + store + endpoint + producer)
+  should live on a single branch with many small commits, then merge as **one**
+  PR. The user used to work this way and it kept Vercel build CPU under the
+  included tier.
+- **Each merge to main triggers a production build on every Vercel project
+  whose files changed.** Pushes to feature branches also trigger preview
+  builds. Many small PRs = many builds = real money. Use commits, not PRs, to
+  keep changes reviewable.
+- **Split into separate PRs only when there's a real reason:** independent
+  rollback granularity, deployable-in-isolation slices, or a hard review
+  cliff (e.g. schema-then-store-then-API where each stage needs sign-off
+  before the next). Phase A1, A2, A3 splitting is high-cost — bundle them
+  unless the user explicitly asks for staged review.
+- **Group root-deps bumps into one PR.** Touching `package.json` /
+  `package-lock.json` rebuilds every Vercel project (see ignoreCommand in
+  `apps/*/vercel.json`) — dribbling upgrades across multiple PRs multiplies
+  the cost.
+- **Use `[skip vercel]` in WIP commit messages** when pushing scratch commits
+  to a feature branch you don't want previewed yet.
+
 ## Source of Truth (read in this order)
 1. `SPEC.md` — master specification
 2. `CONSTRAINTS.md` — hard limits
