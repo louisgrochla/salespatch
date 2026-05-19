@@ -1,13 +1,26 @@
 import crypto from 'crypto';
 
 // Forwards a structured pitch row from mobile-api → NERVE
-// /api/ingest/pitch. Body is HMAC-SHA256 signed with the same shared
-// secret pattern Supabase webhooks use, so NERVE's existing auth path
-// works unchanged.
+// /api/ingest/pitch. HMAC-SHA256 signed.
 //
-// Configuration:
-//   NERVE_PITCH_URL    — full endpoint, default https://nerve.salespatch.co.uk/api/ingest/pitch
-//   NERVE_PITCH_SECRET — same value as NERVE's SUPABASE_WEBHOOK_SECRET
+// Configuration (preferred — unified Phase B secret):
+//   NERVE_BASE_URL          — defaults to https://nerve.salespatch.co.uk
+//   OUTCOME_INGEST_SECRET   — same value as NERVE's OUTCOME_INGEST_SECRET
+//                             (the secret already used by lead-assignment,
+//                             salesperson, Stripe, etc. ingest endpoints).
+//                             Signs with header `X-Ingest-Signature`.
+//
+// Legacy fallback (kept so an env-var rollout can be staggered):
+//   NERVE_PITCH_URL    — full endpoint, default {NERVE_BASE_URL}/api/ingest/pitch
+//   NERVE_PITCH_SECRET — same value as NERVE's SUPABASE_WEBHOOK_SECRET.
+//                        Signs with header `x-supabase-signature`.
+//
+// NERVE's pitch route now accepts either signature scheme. If both env
+// vars are present we use the unified one; the legacy one is fallback for
+// the gap window before deploys roll. The producer-side silent failure
+// (pitch 401s after Phase B because operators only kept OUTCOME_INGEST_-
+// SECRET in sync) is what motivated this change — see Lead Intelligence
+// vs Sales Intelligence drift report 2026-05-19.
 //
 // Returns a result discriminator the caller can persist:
 //   { ok: true, nervePitchId }
@@ -49,29 +62,33 @@ export type ForwardResult =
   | { ok: false; error: string };
 
 export async function forwardPitchToNerve(payload: NervePitchPayload): Promise<ForwardResult> {
+  const baseUrl =
+    process.env.NERVE_BASE_URL ?? 'https://nerve.salespatch.co.uk';
   const url =
-    process.env.NERVE_PITCH_URL ??
-    'https://nerve.salespatch.co.uk/api/ingest/pitch';
-  const secret = process.env.NERVE_PITCH_SECRET;
+    process.env.NERVE_PITCH_URL ?? `${baseUrl}/api/ingest/pitch`;
 
-  if (!secret) {
+  const unifiedSecret = process.env.OUTCOME_INGEST_SECRET;
+  const legacySecret = process.env.NERVE_PITCH_SECRET;
+
+  if (!unifiedSecret && !legacySecret) {
     // Without a secret we can only succeed in dev with NERVE_WEBHOOK_ALLOW_UNSIGNED=true.
     // Never silently no-op — the caller must know forwarding is disabled.
-    return { ok: false, error: 'NERVE_PITCH_SECRET not configured' };
+    return { ok: false, error: 'no NERVE pitch secret configured (OUTCOME_INGEST_SECRET or NERVE_PITCH_SECRET)' };
   }
 
   const body = JSON.stringify(payload);
-  const signature = crypto.createHmac('sha256', secret).update(body).digest('hex');
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (unifiedSecret) {
+    const sig = crypto.createHmac('sha256', unifiedSecret).update(body).digest('hex');
+    headers['X-Ingest-Signature'] = `sha256=${sig}`;
+  }
+  if (legacySecret) {
+    const sig = crypto.createHmac('sha256', legacySecret).update(body).digest('hex');
+    headers['x-supabase-signature'] = sig;
+  }
 
   try {
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-supabase-signature': signature,
-      },
-      body,
-    });
+    const res = await fetch(url, { method: 'POST', headers, body });
 
     const json = (await res.json().catch(() => ({}))) as {
       ok?: boolean;

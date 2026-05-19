@@ -228,6 +228,7 @@ function FlagsCell({ row }: { row: LeadOpsRow }) {
   if (row.flags.unassigned) flags.push({ label: "unassigned", tone: "pill-status-pending" });
   if (row.flags.paidUnbuilt) flags.push({ label: "unbuilt", tone: "pill-status-followup" });
   if (row.flags.overdue) flags.push({ label: "overdue", tone: "pill-status-rejected" });
+  if (row.flags.missingPitchLog) flags.push({ label: "no pitch row", tone: "pill-status-rejected" });
   if (flags.length === 0) {
     return <td className="text-fg-dim">—</td>;
   }

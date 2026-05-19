@@ -12,6 +12,7 @@ const FLAG_OPTIONS: { value: string; label: string }[] = [
   { value: "only_paid_unbuilt", label: "paid · unbuilt" },
   { value: "only_unassigned", label: "unassigned" },
   { value: "only_active_onboarding", label: "active onboarding" },
+  { value: "only_missing_pitch_log", label: "no pitch row" },
 ];
 
 /**
