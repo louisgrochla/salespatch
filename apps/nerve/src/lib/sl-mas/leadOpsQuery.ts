@@ -63,7 +63,8 @@ export type LeadOpsFlag =
   | "only_critical_qa"
   | "only_paid_unbuilt"
   | "only_unassigned"
-  | "only_active_onboarding";
+  | "only_active_onboarding"
+  | "only_missing_pitch_log";
 
 export interface LeadOpsBuild {
   status: string | null;
@@ -113,6 +114,14 @@ export interface LeadOpsRow {
     unassigned: boolean;
     paidUnbuilt: boolean;
     overdue: boolean;
+    /**
+     * Stage is pitched/sold/rejected but no PitchLog row matches by
+     * businessName. Signals that the iOS post-pitch questionnaire forward
+     * to NERVE failed silently (most often a producer/consumer HMAC
+     * mismatch). The operator should check apps/nerve/api/ingest/pitch
+     * webhook_ingestions log + pitch_attempts.forward_error.
+     */
+    missingPitchLog: boolean;
   };
 }
 
@@ -170,7 +179,8 @@ function parseFilters(raw: RawSearchParams): ParsedFilters {
     flagRaw === "only_critical_qa" ||
     flagRaw === "only_paid_unbuilt" ||
     flagRaw === "only_unassigned" ||
-    flagRaw === "only_active_onboarding"
+    flagRaw === "only_active_onboarding" ||
+    flagRaw === "only_missing_pitch_log"
       ? flagRaw
       : null;
   return {
@@ -510,6 +520,9 @@ export async function loadLeadsOps(raw: RawSearchParams): Promise<LeadOpsResult>
     ) {
       return false;
     }
+    if (filters.flag === "only_missing_pitch_log" && !r.flags.missingPitchLog) {
+      return false;
+    }
     if (filters.q) {
       const hay = `${r.businessName} ${r.leadId} ${r.postcode ?? ""} ${r.location ?? ""}`.toLowerCase();
       if (!hay.includes(filters.q)) return false;
@@ -556,7 +569,8 @@ export async function loadLeadsOps(raw: RawSearchParams): Promise<LeadOpsResult>
         r.flags.criticalQa ||
         r.flags.paidUnbuilt ||
         r.flags.overdue ||
-        r.flags.unassigned,
+        r.flags.unassigned ||
+        r.flags.missingPitchLog,
     ).length,
     supabaseAvailable,
   };
@@ -762,6 +776,9 @@ function buildRow(args: BuildRowArgs): LeadOpsRow {
       paidUnbuilt:
         !!build?.paid && !build.onboardingCompleted,
       overdue: overdueDeadline && !build?.onboardingCompleted,
+      missingPitchLog:
+        (stage === "pitched" || stage === "sold" || stage === "rejected") &&
+        (pitch?.count ?? 0) === 0,
     },
   };
 }

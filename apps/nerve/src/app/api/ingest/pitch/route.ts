@@ -14,6 +14,7 @@ import { embedRecord } from "@/lib/embeddings";
 import { phaseLabelFor } from "@/lib/phase";
 import { outcomeIngester } from "@/lib/sl-mas/outcomeIngest";
 import type { OutcomeIngestPayload } from "@/lib/sl-mas/types";
+import { verifySignature as verifyIngestSignature } from "@/lib/sl-mas/hmac";
 
 // Pitch ingestion. Accepts both:
 //   1. Supabase Database Webhook envelope { type, table, record, … }
@@ -159,12 +160,25 @@ function deriveQualityFlag(args: {
   return "ok";
 }
 
-function verifySignature(rawBody: string, signature: string | null): boolean {
-  const secret = process.env.SUPABASE_WEBHOOK_SECRET;
-  if (!secret) return false;
-  if (!signature) return false;
-  const expected = crypto.createHmac("sha256", secret).update(rawBody).digest("hex");
-  const candidate = signature.startsWith("sha256=") ? signature.slice(7) : signature;
+// Accept both the legacy Supabase-webhook scheme and the unified Phase A/B
+// scheme used by every other ingest endpoint. The unified scheme is
+// preferred — sales-dashboard and mobile-api producers were on the legacy
+// secret only, which silently 401'd every pitch after the Phase B rollout
+// because operators only kept OUTCOME_INGEST_SECRET in sync. Falling back
+// to the legacy path means a single-deploy migration on the consumer side
+// before producers move over.
+function verifySignature(rawBody: string, headers: Headers): boolean {
+  const unifiedSig = headers.get("x-ingest-signature");
+  const outcomeSecret = process.env.OUTCOME_INGEST_SECRET;
+  if (unifiedSig && outcomeSecret && verifyIngestSignature(rawBody, unifiedSig, outcomeSecret)) {
+    return true;
+  }
+
+  const legacySig = headers.get("x-supabase-signature") ?? headers.get("x-signature");
+  const legacySecret = process.env.SUPABASE_WEBHOOK_SECRET;
+  if (!legacySig || !legacySecret) return false;
+  const expected = crypto.createHmac("sha256", legacySecret).update(rawBody).digest("hex");
+  const candidate = legacySig.startsWith("sha256=") ? legacySig.slice(7) : legacySig;
   if (candidate.length !== expected.length) return false;
   return crypto.timingSafeEqual(Buffer.from(candidate), Buffer.from(expected));
 }
@@ -173,13 +187,13 @@ function verifySignature(rawBody: string, signature: string | null): boolean {
 
 export async function POST(req: NextRequest) {
   const rawBody = await req.text();
-  const sig = req.headers.get("x-supabase-signature") ?? req.headers.get("x-signature");
 
   const allowUnsigned =
     process.env.NODE_ENV !== "production" &&
-    process.env.NERVE_WEBHOOK_ALLOW_UNSIGNED === "true";
+    (process.env.NERVE_WEBHOOK_ALLOW_UNSIGNED === "true" ||
+      process.env.OUTCOME_INGEST_ALLOW_UNSIGNED === "true");
 
-  if (!allowUnsigned && !verifySignature(rawBody, sig)) {
+  if (!allowUnsigned && !verifySignature(rawBody, req.headers)) {
     await logIngestion("/api/ingest/pitch", "failed", "invalid signature", rawBody);
     return NextResponse.json({ error: "invalid signature" }, { status: 401 });
   }

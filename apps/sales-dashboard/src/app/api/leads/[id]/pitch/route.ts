@@ -5,6 +5,7 @@ import { resolveUserFromRequest } from '@/lib/auth';
 import {
   buildEventId,
   postLeadAssignmentEvent,
+  postPitch,
   type AssignmentStatus,
 } from '@/lib/nerve-ingest';
 
@@ -187,43 +188,24 @@ export async function POST(
     pitched_at: pitchedAtTs,
   }).then(() => undefined, () => undefined);
 
-  // 5. HMAC-sign and forward to NERVE. Failures don't bubble — the
-  //    pitch_attempts row stays unforwarded for retry.
-  const nerveUrl = process.env.NERVE_PITCH_URL ?? 'https://nerve.salespatch.co.uk/api/ingest/pitch';
-  const nerveSecret = process.env.NERVE_PITCH_SECRET;
-
-  let nerveJson: { ok?: boolean; pitchId?: string; qualityFlag?: string; error?: string } = {};
-  let forwardOk = false;
-  let forwardError: string | null = null;
-
-  if (!nerveSecret) {
-    forwardError = 'NERVE_PITCH_SECRET not configured';
-  } else {
-    const bodyJson = JSON.stringify(nervePayload);
-    const signature = crypto.createHmac('sha256', nerveSecret).update(bodyJson).digest('hex');
-    try {
-      const nerveRes = await fetch(nerveUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-supabase-signature': signature },
-        body: bodyJson,
-      });
-      nerveJson = await nerveRes.json().catch(() => ({}));
-      if (nerveRes.ok && nerveJson.pitchId && !nerveJson.error) {
-        forwardOk = true;
-      } else {
-        forwardError = nerveJson.error ?? `NERVE responded ${nerveRes.status}`;
-      }
-    } catch (e) {
-      forwardError = `NERVE unreachable: ${e instanceof Error ? e.message : String(e)}`;
-    }
-  }
+  // 5. Forward to NERVE on the unified OUTCOME_INGEST_SECRET path. The
+  //    legacy NERVE_PITCH_SECRET + x-supabase-signature pair was a silent
+  //    failure mode after Phase B — operators only kept the unified
+  //    secret in sync, so every pitch since the rollout was 401'ing
+  //    without surfacing. NERVE still accepts the legacy scheme so this
+  //    can ship before the consumer redeploys.
+  const forwardResult = await postPitch(nervePayload);
+  const forwardOk = forwardResult.ok;
+  const forwardError = forwardOk ? null : forwardResult.error;
+  const nervePitchIdResult = forwardOk ? forwardResult.nervePitchId : null;
+  const qualityFlagResult = forwardOk ? forwardResult.qualityFlag : null;
 
   if (forwardOk) {
     await sb
       .from('pitch_attempts')
       .update({
-        nerve_pitch_id: nerveJson.pitchId,
-        quality_flag: nerveJson.qualityFlag ?? null,
+        nerve_pitch_id: nervePitchIdResult,
+        quality_flag: qualityFlagResult,
         forwarded_at: new Date().toISOString(),
         forward_error: null,
       })
@@ -288,7 +270,7 @@ export async function POST(
     lead_id: assignment.lead_id,
     assignment_id: params.id,
     action: `pitch_${body.outcome}`,
-    notes: JSON.stringify({ pitch_id: pitchId, nerve_pitch_id: nerveJson.pitchId, outcome: body.outcome }),
+    notes: JSON.stringify({ pitch_id: pitchId, nerve_pitch_id: nervePitchIdResult, outcome: body.outcome }),
     location_lat: body.gps_lat ?? null,
     location_lng: body.gps_lng ?? null,
     created_at: new Date().toISOString(),
@@ -304,8 +286,8 @@ export async function POST(
     pitch_id: pitchId,
     pitch_attempt_number: pitchAttemptNumber,
     forwarded: forwardOk,
-    nerve_pitch_id: forwardOk ? nerveJson.pitchId : null,
-    quality_flag: forwardOk ? (nerveJson.qualityFlag ?? 'unknown') : null,
+    nerve_pitch_id: nervePitchIdResult,
+    quality_flag: qualityFlagResult,
     forward_error: forwardOk ? null : forwardError,
     new_status: newStatus,
   });

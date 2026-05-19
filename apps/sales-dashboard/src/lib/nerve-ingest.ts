@@ -296,6 +296,72 @@ export async function postStripeEvent(
   return postSigned('/api/ingest/stripe-event', payload);
 }
 
+// ─── Pitch (legacy /api/ingest/pitch, now on unified secret) ───────────
+
+export interface NervePitchPayload {
+  id: string;
+  business_name: string;
+  business_type?: string | null;
+  sector?: string | null;
+  location?: string | null;
+  lead_source?: string | null;
+  demo_version?: string | null;
+  outcome: string;
+  contractor_id?: string | null;
+  pitch_duration?: number | null;
+  pitch_attempt_number?: number | null;
+  consent_to_record: boolean;
+  decision_maker_present?: boolean | null;
+  demo_shown?: boolean | null;
+  interest_level?: string | null;
+  demo_reaction?: string | null;
+  agreed_price?: number | null;
+  payment_method?: string | null;
+  best_followup_time?: string | null;
+  agreed_next_step?: string | null;
+  gut_feel_close_pct?: number | null;
+  first_response_phrase?: string | null;
+  competitor_mentioned?: string | null;
+  gps_lat?: number | null;
+  gps_lng?: number | null;
+  notes?: string | null;
+  objections?: string[];
+  date: string; // ISO-8601 of when the pitch happened
+}
+
+/**
+ * Forward a post-pitch questionnaire to NERVE /api/ingest/pitch on the
+ * unified OUTCOME_INGEST_SECRET path. NERVE now accepts this header pair
+ * in addition to the legacy SUPABASE_WEBHOOK_SECRET + x-supabase-signature
+ * scheme — see apps/nerve/src/app/api/ingest/pitch/route.ts.
+ *
+ * Returns the same discriminator shape the legacy inline forwarder did so
+ * callers (sales-dashboard pitch route + mobile-api) can keep their
+ * status-flag handling unchanged.
+ */
+export async function postPitch(
+  payload: NervePitchPayload,
+): Promise<
+  | { ok: true; nervePitchId: string; qualityFlag: string }
+  | { ok: false; error: string }
+> {
+  const result = await postSigned('/api/ingest/pitch', payload);
+  if (!result.ok) {
+    return { ok: false, error: result.error ?? 'unknown error' };
+  }
+  const body = result.body as
+    | { pitchId?: string; qualityFlag?: string; error?: string }
+    | undefined;
+  if (!body?.pitchId || body.error) {
+    return { ok: false, error: body?.error ?? 'missing pitchId in response' };
+  }
+  return {
+    ok: true,
+    nervePitchId: body.pitchId,
+    qualityFlag: body.qualityFlag ?? 'unknown',
+  };
+}
+
 // ─── shared HMAC POST plumbing ─────────────────────────────────────────
 
 async function postSigned(
