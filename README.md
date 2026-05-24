@@ -1,83 +1,116 @@
-# OpenClaw Local Agent (Single Node) MVP Repo
+# salespatch
 
-This repository is the *spec and governance* foundation for building a local, voice-capable, multi-agent system integrated with **OpenClaw**.
+> A multi-agent AI platform that helps UK independent local businesses get a website they'd actually want, sold to them by humans who don't need to do the design work.
 
-It is designed to:
-- Keep multiple builder models aligned to the same plan
-- Prevent architectural drift and scope creep
-- Enforce approval gating for any side effects
-- Maintain a strong paper trail (Markdown + JSON changelogs)
+**Status:** Closed beta · live since May 2026 in Aberdeen · solo project
+**Stack:** TypeScript · Next.js 14 · Node.js · SQLite + Supabase Postgres · Stripe Connect · Swift (iOS) · React Native (Expo) · Claude API · OpenRouter · Apify · Playwright
 
-## What’s inside
-- `SPEC.md` single source of truth for the MVP
-- `CONSTRAINTS.md` hard limits that builders must not exceed
-- `GOVERNANCE/*` rules for prompting, change control, and changelog enforcement
-- `OPENCLAW/*` interface contract and security expectations
-- `AGENTS/*` agent contracts and capability boundaries
-- `RELIABILITY/*` failure behaviors
-- `PERFORMANCE/*` latency budget for real-time feel
-- `OPERATIONS/*` observability and deployment guidance
-- `ADR/*` architecture decision records (required for major changes)
-- `CHANGELOG/*` immutable build history
+---
 
-## Using with Claude Code
-Claude Code reads `CLAUDE.md` automatically at the start of every session.
-All project rules, key commands, and deployment context are defined there.
+## What it does
 
-## Runtime modes
-- Exact Next.js Mission Control app (imported from your prior project): from repo root run `npm run mc:install` then `npm run mc:dev` and open `http://127.0.0.1:3000`.
-  - Source path: `apps/mission-control`.
-  - This is the original full UI/API stack, separate from the TypeScript mission-control runtime on `4317`.
-  - Includes in-app OpenClaw native cron manager at `Settings` (create/list/run/disable/remove cron jobs without terminal).
-  - Safer local-only mode (recommended for development): `npm run mc:dev:safe` (binds `127.0.0.1` only).
-  - Task APIs in imported app now support natural-language assignment inference when `assigned_agent_id` is not provided:
-    - `assign ... to <agent name>`
-    - `@agent-name` mention
-  - Pi reboot-safe startup scripts:
-    - `bash scripts/pi/mc-start.sh` writes `apps/mission-control/.env.local` from `~/.openclaw/openclaw.json` token, starts Next on `:3001`, and prints `/api/openclaw/status`.
-    - `bash scripts/pi/mc-stop.sh` stops the Mission Control dev process on `:3001`.
-- Local development on machines without OpenClaw: `INTERFACE_MODE=local npm run dev` (default).
-- OpenClaw integration mode (for the target Raspberry Pi 400): `INTERFACE_MODE=openclaw npm run dev`.
-- OpenClaw bridge service mode (for real transport wiring): `INTERFACE_MODE=openclaw-bridge npm run dev` (health at `/health`, inbound events at `POST /events`, session orchestration at `POST /sessions/start`, `POST /sessions/end`, `GET /sessions`, transcript history at `GET /sessions/:session_id/transcript`).
-- Voice call loop endpoints (bridge mode): `POST /calls/start`, `POST /calls/:call_id/partial`, `POST /calls/:call_id/final`, `POST /calls/:call_id/interrupt`, `POST /calls/:call_id/end`.
-  - Reliability note: `POST /calls/:call_id/final` accepts optional `client_turn_id` for idempotent retry-safe responses.
-- Realtime bootstrap endpoint (bridge mode): `POST /realtime/session` (requires `OPENAI_REALTIME_ENABLED=true` and `OPENAI_API_KEY`; defaults model to `gpt-realtime-mini` or override with `OPENAI_REALTIME_MODEL`).
-- Telephony bootstrap endpoints (bridge mode): `POST /telephony/call`, `POST /twilio/voice`, `POST /twilio/status` (requires `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM_NUMBER`, `TELEPHONY_PUBLIC_BASE_URL`).
-- Telephony speech loop endpoint (bridge mode): `POST /twilio/gather` for turn-based phone conversation (default mode via `TELEPHONY_CONVERSATION_MODE=gather`; set `stream` to force Twilio media stream mode on `/twilio/voice`).
-- Telephony media stream endpoints (bridge mode): websocket `GET /twilio/media` (upgrade) and diagnostics `GET /telephony/media/sessions`.
-- Browser voice client (bridge mode): open `http://127.0.0.1:4318/voice-lab` for microphone + TTS testing against `/calls/*`.
-- OpenClaw outbound coverage includes `system.message_send`, `system.voice_speak`, `system.approval_request`, `system.notify_user`, and `system.call_user`.
-- Mission Control local panel: `INTERFACE_MODE=mission-control npm run dev` then open `http://127.0.0.1:4317`.
-  - Dashboard snapshot API: `GET /api/dashboard` (counts + recent runs/queue/notifications + latency summary).
-  - Mission Control APIs include `GET /api/tasks`, `GET /api/tasks/:task_id`, `GET /api/sessions`, `GET /api/sessions/:session_id`, `GET /api/notifications`, `POST /api/notifications/:id/ack`, `POST /api/messages`, and `POST /api/realtime/session`.
-  - ClawDeck compatibility APIs are available on the same runtime: `GET/POST /api/workspaces`, `GET/PATCH/DELETE /api/workspaces/:id`, `GET/POST /api/agents`, `GET/PATCH/DELETE /api/agents/:id`, `GET/POST /api/tasks` (workspace-scoped filters supported), `GET/PATCH/DELETE /api/tasks/:id` (compat IDs), `GET/POST /api/events`, `GET /api/openclaw/status`.
-  - Pipeline/scheduler APIs: `GET/POST/PATCH /api/jobs`, `POST /api/jobs/:id/run`, `POST /api/jobs/:id/trigger`, `GET /api/job-runs`, `GET /api/job-runs/:run_id`, `GET /api/pipelines/:run_id/graph`, `POST /api/pipelines/:run_id/nodes/:node_id/retry`, `POST /api/pipelines/:run_id/nodes/:node_id/override`.
-  - Scheduler mode API: `GET /api/scheduler/mode` (`internal` tick or external `openclaw-cron` trigger mode).
-  - Content automation APIs: `GET /api/content/runs/:run_id/results`, `GET /api/post-queue`, `POST /api/post-queue/:id/approve`, `POST /api/post-queue/:id/dispatch`, `POST /api/media/jobs`.
-  - Mission Control telephony APIs: `POST /api/telephony/call`, `GET /api/telephony/media/sessions`.
-- The core runtime is transport-agnostic via `src/interface/controller.ts`; OpenClaw is an adapter layer.
-- Persistence defaults to SQLite at `data/mvp.sqlite` (override with `DB_PATH`).
-- Model provider defaults to `MODEL_PROVIDER=local` (provider abstraction added in M5-001).
-- OpenAI caller provider mode: `MODEL_PROVIDER=openai` with `OPENAI_API_KEY` (optional: `OPENAI_MODEL`, `OPENAI_BASE_URL`).
-- OpenRouter provider mode: `MODEL_PROVIDER=openrouter` with `OPENROUTER_API_KEY` (or `OPENAI_API_KEY`) and optional `OPENROUTER_MODEL`, `OPENROUTER_BASE_URL`, `OPENROUTER_SITE_URL`, `OPENROUTER_APP_NAME`.
-- Provider reliability controls (OpenAI/OpenRouter modes): `MODEL_TIMEOUT_MS`, `MODEL_MAX_RETRIES`, `MODEL_FALLBACK_TO_LOCAL` (`true`/`false`).
-- OpenClaw bridge host/port controls: `OPENCLAW_BRIDGE_HOST` (default `0.0.0.0`), `OPENCLAW_BRIDGE_PORT` (default `4318`).
-- Scheduler controls:
-  - `SCHEDULER_MODE` = `internal` (default) or `openclaw-cron`.
-  - `SCHEDULER_TICK_MS` (default `60000` ms, used only in `internal` mode).
-  - Optional external trigger guard: `MISSION_CONTROL_CRON_TRIGGER_TOKEN` (required header `x-mc-cron-token` on `POST /api/jobs/:id/trigger` when set).
-  - Default recurring schedule `FREQ=HOURLY;INTERVAL=1`.
-- Content dispatch webhooks: `TIKTOK_DISPATCH_WEBHOOK`, `REELS_DISPATCH_WEBHOOK`, `SHORTS_DISPATCH_WEBHOOK`, optional `POST_DISPATCH_SECRET`.
-- Mission Control telephony bridge target: `MISSION_CONTROL_BRIDGE_URL` (default `http://127.0.0.1:4318`).
-- Media budget guards: `HIGGSFIELD_MAX_COST_PER_TASK_USD` (default `10`), `HIGGSFIELD_MAX_COST_PER_DAY_USD` (default `50`).
+Most independent UK businesses (cafés, salons, butchers, florists) either have no website or have a Wix page they made in 2017. Building them a good one is a slow, design-heavy job. Salespatch flips the order of operations:
 
-## Source of truth order
-1. `SPEC.md`
-2. `CONSTRAINTS.md`
-3. `OPENCLAW/*`
-4. `GOVERNANCE/*`
-5. `PERFORMANCE/*`, `RELIABILITY/*`
-6. `AGENTS/*`
-7. `OPERATIONS/*`
-8. `ADR/*`
-9. `CHANGELOG/*`
+1. A pipeline of LLM agents researches a business (Google, Instagram, Maps, their own site)
+2. The agents extract a **brand signature** — colour, tone, audience, what their existing assets actually say
+3. A separate generation pass produces a **personalised single-file HTML demo site** specifically for that business — not a template
+4. A salesperson then walks into the shop with a pitch deck and a live demo already built. The demo *is* the pitch.
+5. If the business signs, the demo is deployed on a real domain through the platform.
+
+The thesis: the friction in selling websites to local SMBs isn't sales talent, it's the cost of building a bespoke demo for every prospect. Bring that cost to near-zero with AI and the whole funnel changes.
+
+---
+
+## Architecture
+
+```
+              ┌─────────────────────────────────────────────────────┐
+              │   Agent Orchestration Runtime (TypeScript · SQLite) │
+              │                                                     │
+              │   Lead pipeline   scout → profile → brand-analyse → │
+              │                   brand-intelligence → qualify →    │
+              │                   assign                            │
+              │                                                     │
+              │   Site pipeline   brief → compose → QA              │
+              │                                                     │
+              │   9 agents total across two pipelines               │
+              └────────────────┬────────────────────────────────────┘
+                                           │
+       ┌───────────────────────────────────┼──────────────────────────────┐
+       │                                   │                              │
+┌──────▼───────┐                  ┌────────▼─────────┐           ┌────────▼────────┐
+│ mission-     │                  │ sales-dashboard  │           │ admin-panel     │
+│ control      │                  │ (Vercel)         │           │ (back office)   │
+│ (Pi/Tailscale)│                 │ Next.js +        │           │ Next.js +       │
+│  Next.js     │                  │ Supabase +       │           │ SQLite          │
+│              │                  │ Stripe Connect   │           │                 │
+└──────────────┘                  └──────────────────┘           └─────────────────┘
+                                           │
+                                  ┌────────▼─────────┐
+                                  │ mobile-api       │
+                                  │ Express + SQLite │
+                                  └────────┬─────────┘
+                                           │
+                                  ┌────────▼─────────┐
+                                  │ iOS (SwiftUI)    │
+                                  │ + Expo (RN)      │
+                                  └──────────────────┘
+```
+
+The agent runtime is transport-agnostic — it can run as a local CLI, as a Mission Control web service, or behind an external orchestration layer. The split between SQLite (operator-side, on the Pi) and Supabase Postgres (salesperson-side, on the web) is deliberate: the operator system stays self-contained on a Raspberry Pi 400, while the public-facing surfaces are cloud-deployed and horizontally scaled.
+
+---
+
+## Apps in this monorepo
+
+| Path | Stack | Role |
+|---|---|---|
+| `src/` | TypeScript, SQLite | Agent orchestration runtime — the brain |
+| `apps/mission-control/` | Next.js 14 | Operator dashboard (deployed to Pi via Tailscale) |
+| `apps/sales-dashboard/` | Next.js 14, Supabase, Stripe Connect | Public salesperson dashboard (Vercel) |
+| `apps/admin-panel/` | Next.js 14 | Back-office admin UI |
+| `apps/nerve/` | Next.js 14, Prisma | Session changelog + decision log |
+| `apps/mobile-api/` | Express, SQLite | Backend API for mobile clients |
+| `apps/mobile/` | Expo / React Native | Cross-platform salesperson app |
+| `apps/ios/SalesFlow/` | SwiftUI | Native iOS app for salespeople in the field |
+| `tools/workbench/` | tsx + static frontend | Local UI for iterating on demo site generation quality |
+
+---
+
+## The interesting bits (for ML / agent-eng folks)
+
+- **LLM evaluation pipeline** — golden-set evals on agent outputs, prompt versioning, regression tests when prompts change. The `site-qa` agent grades demo outputs against a rubric before they ever hit a salesperson, and a separate visual-QA pipeline catches hardcoded content and CTA-hierarchy bugs that pure-text evals miss.
+- **Multi-stage brand extraction** — instead of one giant prompt, a chain of focused agents each producing structured JSON, then composed. Failures are localised and rerunnable.
+- **Voice budgeting & specificity layers** — generated copy is checked against the brand voice extracted upstream; vague filler is flagged and regenerated.
+- **NERVE — the data flywheel** ([live: nerve.salespatch.co.uk](https://nerve.salespatch.co.uk)). Every pitch outcome, demo performance metric, and lead-funnel event flows through an HMAC-secured idempotent ingestion layer (11 endpoints across two tiers) into a Postgres warehouse purpose-built as the training-data substrate for the next architectural milestone: replacing LLM-agent stages with smaller fine-tuned critic models hot-swappable into a `ModelRegistry`. Threshold for kick-off: n > 200 closed/rejected outcomes. An anonymised public view of platform performance ships at the URL above as both contractor-facing transparency and the primary dataset for the founder's 4th-year university dissertation on the self-learning system. The system is being designed to collect its own training data as a byproduct of operating.
+- **Production constraints baked into prompts** — agents output single-file HTML demos that must lint clean, score ≥90 on Lighthouse mobile, and pass accessibility checks before they're surfaced.
+
+---
+
+## Roadmap (public)
+
+- **February 2026** — Project started.
+- **May 2026** — Closed beta launched in Aberdeen with 5 salespeople in the field. 40+ sellable demos generated for real businesses; another 200+ test demos held back as the training corpus for the future critic-LoRA phase. First real lead validated end-to-end through the full pipeline (research → demo → admin queue → field) on 2026-05-11.
+- **Summer 2026** — Scale beta to ~50 leads; tighten the NERVE ingestion layer; ship the salesperson-facing iOS app to TestFlight.
+- **Autumn 2026** — Honours dissertation begins; pitched as an applied ML / NLP study using salespatch's outcome data as the source.
+- **Q4 2026 / 2027** — Once enough closed/rejected outcomes accumulate, train the first critic-LoRA on a real outcome dataset and hot-swap into the `ModelRegistry`. This is when "multi-agent system using LLMs" becomes "self-learning multi-agent system."
+
+---
+
+## Why is this on GitHub publicly?
+
+I'm a final-year university student building this in the open. The agent orchestration patterns, the eval harnesses, and the multi-app architecture are the bits I'm proudest of and the bits I think other people building LLM-powered tools could learn from. Business strategy and customer-specific work is kept private; the technical machinery is open.
+
+---
+
+## Contact
+
+Louis Grochla — [LinkedIn](https://www.linkedin.com/in/louisgrochla/) · louisgrochla27@gmail.com
+
+Final-year BA (Hons) Digital Marketing & Business Analytics, Robert Gordon University, Aberdeen. Applying to MS Data Science programs in the US for 2027.
+
+---
+
+## Development
+
+If you want to actually run this locally (you probably don't — it's wired to a specific deployment), see [`DEVELOPMENT.md`](./DEVELOPMENT.md) for runtime modes, env vars, and the OpenClaw integration spec.
