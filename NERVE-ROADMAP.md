@@ -476,6 +476,18 @@ _Last updated: 2026-05-17 evening (visual-QA verification shipped + NERVE notes 
 
 ---
 
+## Deferred (with ADR)
+
+### G1 — Post-sale fulfilment state machine — DEFERRED
+
+- **Status:** deferred. Tracked via NERVE notes + `/nerve-demo-revision` audit rows for now.
+- **ADR:** [ADR-0015](ADR/ADR-0015-fulfillment-state-machine-deferred.md)
+- **Why deferred:** the `AssignmentStatus` enum is defined in 5 places (sales-dashboard, admin-panel, mobile-api, ios `Models.swift`, supabase CHECK + `shared-enums.md`). Cross-contract change with iOS coordination cost; marginal benefit at n<20 beta sales is small. Sold-unpaid is already representable as `sold_at IS NOT NULL AND paid_at IS NULL` (via PR [#136](https://github.com/louisgrochla/salespatch/pull/136)).
+- **Revisit when:** ≥20 closed deals OR a deferred-payment/fulfilment incident OR we wire any Phase 3 automation (Vercel deploy / domain register) that needs a state field to gate on.
+- **Likely shape on revisit:** new `fulfillment_status` column on `lead_assignments` (not extending `AssignmentStatus`) with values `pending` / `building` / `awaiting_payment` / `awaiting_client` / `live` / `handover_complete`.
+
+---
+
 ## Done log
 
 > Tasks land here when their checkbox flips. Most recent at top.
