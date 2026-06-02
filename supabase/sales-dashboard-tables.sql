@@ -39,6 +39,7 @@ CREATE TABLE lead_assignments (
   rejection_reason text,
   notes           text,                  -- JSON blob with business data
   commission_amount real,
+  agreed_price_pence integer,            -- negotiated flat one-time price (pence). NULL = use locked £299+£25/mo model.
   location_lat    real,
   location_lng    real,
   follow_up_at    timestamptz,

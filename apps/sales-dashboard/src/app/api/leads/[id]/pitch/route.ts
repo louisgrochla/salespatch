@@ -224,11 +224,27 @@ export async function POST(
     body.outcome === 'not_pitched' ? 'visited' :
     'pitched';
 
+  // When the SP closes a deal the negotiated price drives both the customer
+  // payment view AND the flat-one-time switch in the webhook. Capture it on
+  // the assignment so /preview, /onboarding, payments.ts, and webhook all
+  // read it without round-tripping to NERVE.
+  const agreedPricePence =
+    body.agreed_price != null ? Math.round(body.agreed_price * 100) : null;
+  const isSoldNow = newStatus === 'sold' && assignment.status !== 'sold';
+
   await sb
     .from('lead_assignments')
     .update({
       status: newStatus,
       pitched_at: assignment.status === 'visited' ? pitchedAt : undefined,
+      // sold_at was previously only set by the Stripe webhook. For
+      // relationship sales (verbal close, payment deferred), set it here so
+      // sold-unpaid is queryable as `sold_at IS NOT NULL AND paid_at IS NULL`.
+      sold_at: isSoldNow ? pitchedAt : undefined,
+      agreed_price_pence:
+        newStatus === 'sold' && agreedPricePence != null
+          ? agreedPricePence
+          : undefined,
       updated_at: new Date().toISOString(),
     })
     .eq('id', params.id);

@@ -15,12 +15,24 @@ Revenue comes from businesses purchasing their AI-generated website. Salespeople
 
 ## Checkout Flow
 
-1. Customer decides to buy → salesperson initiates checkout.
+1. Customer decides to buy → salesperson initiates checkout (or marks pitch outcome `closed_now`/`closed_followup` to record a relationship sale).
 2. `POST /api/payments/create-checkout` creates a Stripe Checkout Session.
 3. Customer pays → Stripe fires webhook to `POST /api/payments/webhook`.
-4. Webhook confirms payment → lead status set to `sold`, `sold_at` timestamp set.
-5. Commission calculated: `sale_price * salesperson.commission_rate`.
-6. Platform takes its cut, remainder transferred to salesperson's Connect account.
+4. Webhook confirms payment → `paid_at` set (strictly stronger than `sold_at`).
+5. Commission calculated and credited.
+
+## Pricing models — two paths
+
+**Default (locked beta):** £299 setup + £25/mo recurring (30-day trial). Subscription is created by the webhook AFTER `checkout.session.completed`. Setup fee comes from `SETUP_FEE_PENCE`; monthly amount displayed is `MONTHLY_PENCE` (actual charge is pinned to `STRIPE_HOSTING_PRICE_ID`).
+
+**Flat one-time (negotiated):** when `lead_assignments.agreed_price_pence` is set (captured at pitch time on `closed_now`/`closed_followup` outcomes), that amount overrides the env default AND the webhook **skips** creating the £25/mo subscription. Session metadata carries `billing_model='flat_one_time'`; preview/onboarding UI suppresses the "/mo" line and the welcome email omits the hosting rows.
+
+## Sold vs paid — the deferred-payment pattern
+
+For relationship sales (verbal close, Stripe deferred to pre-launch) the assignment can be `status='sold' AND paid_at IS NULL`. Every "already done, skip" guard in the payment flow keys on `paid_at`, NOT `status`, so payment can still be collected later:
+- `payments.ts createCheckoutSessionForAssignment` refuses only when `paid_at != null`.
+- `webhook/route.ts handleCheckoutCompleted` skips only when `paid_at != null`; the paid UPDATE uses `.is('paid_at', null)`.
+- `/preview/[leadId]` and `/onboarding/[leadId]` show the pay CTA (or redirect to `/paid`) based on `paid_at`.
 
 ## Payout Tracking
 

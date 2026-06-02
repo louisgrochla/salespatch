@@ -23,6 +23,8 @@ The central business object. A "lead" is a business profile; a "lead assignment"
 | rejection_reason | text | Optional: price, not_interested, has_website, wrong_person, timing, other |
 | notes | text | JSON blob — contains enriched business data (description, services, reviews, brand info) |
 | commission_amount | real | Final commission for this sale |
+| agreed_price_pence | integer | Negotiated flat one-time price (pence). NULL = use default £299 setup + £25/mo model. Set by pitch cascade on `closed_now`/`closed_followup`. When set, payment view + Stripe Checkout use this as the setup fee AND the webhook skips creating the recurring subscription. |
+| paid_at | timestamptz | Set ONLY by Stripe webhook on `checkout.session.completed`. Strictly stronger than `sold_at` — sold-unpaid = `sold_at IS NOT NULL AND paid_at IS NULL`. Every "already done" guard in the payment flow keys on this, not `status='sold'`. |
 | location_lat/lng | real | GPS coordinates of visit |
 | follow_up_at | timestamp | Scheduled follow-up |
 | follow_up_note | text | Follow-up context |
