@@ -116,6 +116,8 @@ interface AssignmentForPayment {
   user_id: string;
   status: string;
   notes: string | null;
+  paid_at: string | null;
+  agreed_price_pence: number | null;
 }
 
 async function loadAssignment(
@@ -124,7 +126,7 @@ async function loadAssignment(
 ): Promise<AssignmentForPayment | null> {
   const { data, error } = await supabase
     .from('lead_assignments')
-    .select('id, lead_id, user_id, status, notes')
+    .select('id, lead_id, user_id, status, notes, paid_at, agreed_price_pence')
     .eq('id', leadAssignmentId)
     .maybeSingle();
   if (error) throw new Error(`loadAssignment: ${error.message}`);
@@ -148,20 +150,31 @@ export async function createCheckoutSessionForAssignment(
 ): Promise<PaymentSessionRow> {
   const assignment = await loadAssignment(supabase, leadAssignmentId);
   if (!assignment) throw new Error(`Assignment not found: ${leadAssignmentId}`);
-  if (assignment.status === 'sold') {
-    throw new Error('Lead already sold — cannot create new session');
+  // Refuse only when money is already in. status='sold' is the SP's claim;
+  // paid_at is the strictly-stronger "real money landed" stamp. Relationship
+  // sales (sold-unpaid) need a checkout session created later, before launch.
+  if (assignment.paid_at) {
+    throw new Error('Lead already paid — cannot create new session');
   }
 
   const businessName = businessNameFromNotes(assignment.notes);
   const stripe = getStripe();
   const expiresAtUnix = Math.floor(Date.now() / 1000) + SESSION_EXPIRES_HOURS * 60 * 60;
 
-  // Resolve dynamic prices once per session create. Snapshot is stored on
-  // the lead_payment_sessions row so historical price is recoverable even
-  // if env vars change later.
-  const setupPence = getSetupFeePence();
-  const monthlyPence = getMonthlyPence();
-  const monthlyDisplay = formatPenceAsPounds(monthlyPence);
+  // Resolve prices. When the assignment has agreed_price_pence set the SP
+  // negotiated a flat one-time deal — that amount wins over the env default
+  // AND the webhook skips creating the £25/mo subscription (driven by the
+  // billing_model metadata key set below). Snapshot is stored on
+  // lead_payment_sessions so historical price survives env changes.
+  const flatOneTime = assignment.agreed_price_pence != null;
+  const setupPence = assignment.agreed_price_pence ?? getSetupFeePence();
+  const monthlyPence = flatOneTime ? 0 : getMonthlyPence();
+  const monthlyDisplay = flatOneTime ? '' : formatPenceAsPounds(monthlyPence);
+  const billingModel = flatOneTime ? 'flat_one_time' : 'setup_plus_monthly';
+
+  const productDescription = flatOneTime
+    ? `Flat one-time fee for ${businessName}'s website build and launch. No recurring charges. Cancel anytime.`
+    : `One-time setup fee. Includes first month of hosting & support. ${monthlyDisplay}/month thereafter, starting in 30 days. Cancel anytime, no commitment.`;
 
   const session = await stripe.checkout.sessions.create({
     mode: 'payment',
@@ -175,21 +188,22 @@ export async function createCheckoutSessionForAssignment(
           unit_amount: setupPence,
           product_data: {
             name: `Website setup — ${businessName}`,
-            description: `One-time setup fee. Includes first month of hosting & support. ${monthlyDisplay}/month thereafter, starting in 30 days. Cancel anytime, no commitment.`,
+            description: productDescription,
           },
         },
         quantity: 1,
       },
     ],
     payment_intent_data: {
-      // Save the card so the webhook can create a recurring subscription on it,
-      // off-session, with a 30-day trial so the first recurring charge lands
-      // exactly 30 days after the setup fee.
+      // Save the card so the webhook can create a recurring subscription on
+      // it (only when billing_model='setup_plus_monthly'). For flat one-time
+      // deals the saved card is harmless but unused.
       setup_future_usage: 'off_session',
       metadata: {
         lead_assignment_id: assignment.id,
         salesperson_id: assignment.user_id,
         lead_id: assignment.lead_id,
+        billing_model: billingModel,
       },
     },
     metadata: {
@@ -198,6 +212,7 @@ export async function createCheckoutSessionForAssignment(
       lead_id: assignment.lead_id,
       monthly_pence: String(monthlyPence),
       setup_pence: String(setupPence),
+      billing_model: billingModel,
     },
     // Onboarding now happens PRE-payment, so success_url goes straight to
     // /paid (a thank-you confirmation), not back through the form.

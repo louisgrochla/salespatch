@@ -157,7 +157,7 @@ async function handleCheckoutCompleted(
   // don't double-pay. (Belt-and-braces — stripe_events should already gate.)
   const { data: assignment, error: aErr } = await supabase
     .from('lead_assignments')
-    .select('id, user_id, status')
+    .select('id, user_id, status, paid_at')
     .eq('id', leadAssignmentId)
     .maybeSingle();
   if (aErr) throw new Error(`assignment lookup: ${aErr.message}`);
@@ -165,8 +165,11 @@ async function handleCheckoutCompleted(
     console.error(`[payments/webhook] assignment ${leadAssignmentId} not found`);
     return;
   }
-  if (assignment.status === 'sold') {
-    console.log(`[payments/webhook] assignment ${leadAssignmentId} already sold — skipping`);
+  // Key idempotency on paid_at (money landed), not status. status='sold' can
+  // be set by a manual pitch close (relationship sale) BEFORE payment — the
+  // webhook must still credit when payment finally lands on that lead.
+  if (assignment.paid_at) {
+    console.log(`[payments/webhook] assignment ${leadAssignmentId} already paid — skipping`);
     return;
   }
   if (assignment.user_id !== salespersonId) {
@@ -216,7 +219,10 @@ async function handleCheckoutCompleted(
       stripe_customer_id: stripeCustomerId,
     })
     .eq('id', leadAssignmentId)
-    .neq('status', 'sold');
+    // Guard against double-credit by keying on the strictly-stronger
+    // paid_at stamp. status='sold' may already be true from a manual pitch
+    // close before payment; only paid_at IS NULL means "not yet credited".
+    .is('paid_at', null);
   if (updErr) throw new Error(`assignment update: ${updErr.message}`);
 
   // Mark cached payment session completed so the preview page won't
@@ -247,10 +253,19 @@ async function handleCheckoutCompleted(
     console.warn(`[payments/webhook] cost_log insert failed (non-fatal): ${costErr.message}`);
   }
 
-  // Spin up the £25/mo subscription with a 30-day trial. Customer's card was
-  // saved off-session at checkout, so the subscription's first charge lands
-  // on the saved PM at trial end.
-  if (stripeCustomerId) {
+  // Spin up the £25/mo subscription with a 30-day trial — UNLESS the deal
+  // was a flat one-time (SP negotiated a flat price, no recurring). The
+  // billing_model metadata key is set by payments.ts createCheckoutSession;
+  // default to setup_plus_monthly to preserve behaviour for sessions created
+  // before this branch shipped.
+  const billingModel = session.metadata?.billing_model ?? 'setup_plus_monthly';
+  const isFlatOneTime = billingModel === 'flat_one_time';
+
+  if (isFlatOneTime) {
+    console.log(
+      `[payments/webhook] assignment ${leadAssignmentId} is flat_one_time — skipping monthly subscription`,
+    );
+  } else if (stripeCustomerId) {
     await createMonthlySubscription({
       customerId: stripeCustomerId,
       leadAssignmentId,
@@ -298,11 +313,12 @@ async function handleCheckoutCompleted(
       businessName,
       amountPaidPence: amountPaid,
       setupFeePoundsLabel: formatPenceAsPounds(amountPaid),
-      monthlyPoundsLabel: `${formatPenceAsPounds(getMonthlyPence())}/mo`,
-      trialEndsLabel: fmtDate(trialEnds),
+      monthlyPoundsLabel: isFlatOneTime ? '' : `${formatPenceAsPounds(getMonthlyPence())}/mo`,
+      trialEndsLabel: isFlatOneTime ? '' : fmtDate(trialEnds),
       deliveryByLabel: fmtDate(deliveryBy),
       previewUrl: `https://salespatch.co.uk/preview/${leadAssignmentId}`,
       assignmentId: leadAssignmentId,
+      flatOneTime: isFlatOneTime,
     });
     if (result.ok) {
       console.log(`[payments/webhook] welcome email sent: ${result.id} to ${customerEmail}`);

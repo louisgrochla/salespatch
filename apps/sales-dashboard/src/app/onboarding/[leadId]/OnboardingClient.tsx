@@ -118,9 +118,11 @@ interface Props {
   leadId: string;
   businessName: string;
   demoUrl: string | null;
+  setupLabel: string;     // already formatted, e.g. "£250" / "£299"
+  flatOneTime: boolean;   // true = no recurring monthly; show one-time copy
 }
 
-export default function OnboardingClient({ leadId, businessName, demoUrl }: Props) {
+export default function OnboardingClient({ leadId, businessName, demoUrl, setupLabel, flatOneTime }: Props) {
   const router = useRouter();
   const [step, setStep] = useState<StepKey>('contact');
   const [answers, setAnswers] = useState<Answers>(EMPTY);
@@ -556,7 +558,7 @@ export default function OnboardingClient({ leadId, businessName, demoUrl }: Prop
         {/* Always-visible info strip. Three compact chips that frame the
             offer + reassurance. Sets expectations so the form feels like a
             speed-up, not a gate before payment. */}
-        <InfoStrip />
+        <InfoStrip setupLabel={setupLabel} flatOneTime={flatOneTime} />
 
         {/* Eyebrow row */}
         <header
@@ -814,7 +816,7 @@ export default function OnboardingClient({ leadId, businessName, demoUrl }: Prop
               >
                 {checkoutLoading
                   ? 'Opening checkout…'
-                  : 'Or pay £299 now and share details later'}
+                  : `Or pay ${setupLabel} now and share details later`}
               </button>
             </div>
           )}
@@ -831,10 +833,12 @@ export default function OnboardingClient({ leadId, businessName, demoUrl }: Prop
 // (transparent + low), edit-anytime last (de-risk the decision).
 // ---------------------------------------------------------------------------
 
-function InfoStrip() {
+function InfoStrip({ setupLabel, flatOneTime }: { setupLabel: string; flatOneTime: boolean }) {
   const items: Array<{ glyph: string; label: string; sub: string }> = [
     { glyph: '◐', label: 'Live in 7 days', sub: 'from payment' },
-    { glyph: '✶', label: '£299 today', sub: 'then £25/mo from day 30' },
+    flatOneTime
+      ? { glyph: '✶', label: `${setupLabel} today`, sub: 'one-time · no monthly' }
+      : { glyph: '✶', label: `${setupLabel} today`, sub: 'then £25/mo from day 30' },
     { glyph: '✦', label: 'Cancel anytime', sub: 'no commitment' },
   ];
   return (

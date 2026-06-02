@@ -28,6 +28,8 @@ interface AssignmentRow {
   status: string;
   notes: string | null;
   sold_at: string | null;
+  paid_at: string | null;
+  agreed_price_pence: number | null;
 }
 
 function getSupabase() {
@@ -42,7 +44,7 @@ async function loadAssignment(leadId: string): Promise<AssignmentRow | null> {
   const sb = getSupabase();
   const { data, error } = await sb
     .from('lead_assignments')
-    .select('id, status, notes, sold_at')
+    .select('id, status, notes, sold_at, paid_at, agreed_price_pence')
     .eq('id', leadId)
     .maybeSingle();
   if (error) {
@@ -129,16 +131,21 @@ export default async function PreviewPage({
   const { business_name, demo_site_domain } = parseNotes(assignment.notes);
 
   // Already paid → don't show the CTA. Customer might have scanned twice
-  // or shared the link with their partner.
-  if (assignment.status === 'sold') {
+  // or shared the link with their partner. Key on paid_at (money landed),
+  // not status: a relationship sale ('sold' before Stripe) still needs the
+  // CTA so the SP can collect payment before launch.
+  if (assignment.paid_at) {
     return <PaidState businessName={business_name} demoUrl={demo_site_domain} />;
   }
 
   // No Stripe round-trip on this page — the CTA links to /onboarding/<id>
   // first (5-question form), which then redirects to Stripe Checkout when
-  // the customer hits "Continue to payment".
-  const setupLabel = formatPenceAsPounds(getSetupFeePence());
-  const monthlyLabel = formatPenceAsPounds(getMonthlyPence());
+  // the customer hits "Continue to payment". When agreed_price_pence is set
+  // on the assignment, the SP negotiated a flat one-time deal; that amount
+  // overrides the env default and the monthly line is suppressed.
+  const flatOneTime = assignment.agreed_price_pence != null;
+  const setupLabel = formatPenceAsPounds(assignment.agreed_price_pence ?? getSetupFeePence());
+  const monthlyLabel = flatOneTime ? '' : formatPenceAsPounds(getMonthlyPence());
 
   return (
     <PreviewWithCTA
@@ -147,6 +154,7 @@ export default async function PreviewPage({
       onboardingHref={`/onboarding/${assignment.id}`}
       setupLabel={setupLabel}
       monthlyLabel={monthlyLabel}
+      flatOneTime={flatOneTime}
     />
   );
 }
@@ -166,12 +174,14 @@ function PreviewWithCTA({
   onboardingHref,
   setupLabel,
   monthlyLabel,
+  flatOneTime,
 }: {
   businessName: string;
   demoUrl: string | null;
   onboardingHref: string;
   setupLabel: string;
   monthlyLabel: string;
+  flatOneTime: boolean;
 }) {
   return (
     <div
@@ -206,6 +216,7 @@ function PreviewWithCTA({
         href={onboardingHref}
         setupLabel={setupLabel}
         monthlyLabel={monthlyLabel}
+        flatOneTime={flatOneTime}
       />
     </div>
   );
@@ -281,10 +292,12 @@ function FloatingCTAButton({
   href,
   setupLabel,
   monthlyLabel,
+  flatOneTime,
 }: {
   href: string;
   setupLabel: string;
   monthlyLabel: string;
+  flatOneTime: boolean;
 }) {
   return (
     <a
@@ -324,7 +337,9 @@ function FloatingCTAButton({
             lineHeight: 1.1,
           }}
         >
-          {setupLabel} setup · then {monthlyLabel}/mo · cancel anytime
+          {flatOneTime
+            ? `${setupLabel} · one-time · cancel anytime`
+            : `${setupLabel} setup · then ${monthlyLabel}/mo · cancel anytime`}
         </span>
       </span>
       <span

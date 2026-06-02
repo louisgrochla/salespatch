@@ -204,12 +204,13 @@ export interface WelcomeArgs {
   to: string;
   businessName: string;
   amountPaidPence: number;
-  setupFeePoundsLabel: string;     // e.g. "£299"
-  monthlyPoundsLabel: string;      // e.g. "£25/mo"
-  trialEndsLabel: string;          // e.g. "5 June 2026"
+  setupFeePoundsLabel: string;     // e.g. "£299" or "£250" for flat
+  monthlyPoundsLabel: string;      // e.g. "£25/mo"; empty when flatOneTime
+  trialEndsLabel: string;          // e.g. "5 June 2026"; empty when flatOneTime
   deliveryByLabel: string;         // e.g. "12 May 2026"
   previewUrl: string;              // /preview/<assignmentId>
   assignmentId: string;            // shown as ref
+  flatOneTime?: boolean;           // true = flat-fee deal, suppress monthly/trial rows
 }
 
 export async function sendCustomerWelcome(args: WelcomeArgs): Promise<SendResult> {
@@ -248,14 +249,14 @@ function welcomeHtml(a: WelcomeArgs): string {
           <td style="padding:6px 0;color:rgba(15,14,12,0.65);">Setup fee</td>
           <td style="padding:6px 0;text-align:right;font-weight:500;">${escapeHtml(a.setupFeePoundsLabel)}</td>
         </tr>
-        <tr>
+        ${a.flatOneTime ? '' : `<tr>
           <td style="padding:6px 0;color:rgba(15,14,12,0.65);">Hosting &amp; support<br><span style="font-size:11px;color:rgba(15,14,12,0.50);font-family:'JetBrains Mono',ui-monospace,monospace;">cancel anytime</span></td>
           <td style="padding:6px 0;text-align:right;font-weight:500;">${escapeHtml(a.monthlyPoundsLabel)}</td>
         </tr>
         <tr>
           <td style="padding:6px 0;color:rgba(15,14,12,0.65);">First charge for hosting</td>
           <td style="padding:6px 0;text-align:right;font-weight:500;">${escapeHtml(a.trialEndsLabel)}</td>
-        </tr>
+        </tr>`}
         <tr>
           <td style="padding:10px 0 0;color:rgba(15,14,12,0.65);border-top:1px solid rgba(15,14,12,0.08);">Site live by</td>
           <td style="padding:10px 0 0;text-align:right;font-weight:600;color:#B8860B;border-top:1px solid rgba(15,14,12,0.08);">${escapeHtml(a.deliveryByLabel)}</td>
@@ -268,7 +269,7 @@ function welcomeHtml(a: WelcomeArgs): string {
       <li>We finalise your site (copy, photos, design).</li>
       <li>You can request small design changes any time during the 7-day build by emailing <a href="mailto:${escapeHtml(SUPPORT_EMAIL)}" style="color:#B8860B;">${escapeHtml(SUPPORT_EMAIL)}</a>.</li>
       <li>We email you the moment your site is live with your domain, login details, and how to manage it.</li>
-      <li>30 days from today, your £25/mo hosting &amp; support plan starts. <strong style="color:#0F0E0C;">Cancel anytime</strong> — no notice, no fee, just reply to this email or drop a line to <a href="mailto:${escapeHtml(SUPPORT_EMAIL)}" style="color:#B8860B;">${escapeHtml(SUPPORT_EMAIL)}</a>. We'll also send a reminder a few days before the first charge.</li>
+      ${a.flatOneTime ? `<li>That's it — this is a flat one-time fee. No recurring charges, nothing to cancel later.</li>` : `<li>30 days from today, your £25/mo hosting &amp; support plan starts. <strong style="color:#0F0E0C;">Cancel anytime</strong> — no notice, no fee, just reply to this email or drop a line to <a href="mailto:${escapeHtml(SUPPORT_EMAIL)}" style="color:#B8860B;">${escapeHtml(SUPPORT_EMAIL)}</a>. We'll also send a reminder a few days before the first charge.</li>`}
     </ol>
 
     <div style="margin:24px 0;padding:14px 18px;background:rgba(184,134,11,0.08);border:1px solid rgba(184,134,11,0.25);border-radius:12px;font-size:14px;line-height:1.5;color:rgba(15,14,12,0.78);">
@@ -299,9 +300,9 @@ function welcomeText(a: WelcomeArgs): string {
 Thanks for going live with us. Your website will be built and delivered within 7 days. We've already started.
 
 Order summary
-  Setup fee:                 ${a.setupFeePoundsLabel}
+  Setup fee:                 ${a.setupFeePoundsLabel}${a.flatOneTime ? '' : `
   Hosting & support:         ${a.monthlyPoundsLabel}  (cancel anytime)
-  First hosting charge:      ${a.trialEndsLabel}
+  First hosting charge:      ${a.trialEndsLabel}`}
   Site live by:              ${a.deliveryByLabel}
 
 What happens next

@@ -12,6 +12,10 @@
 import { createClient } from '@supabase/supabase-js';
 import { notFound, redirect } from 'next/navigation';
 import OnboardingClient from './OnboardingClient';
+import {
+  getSetupFeePence,
+  formatPenceAsPounds,
+} from '@/lib/payments';
 
 export const dynamic = 'force-dynamic';
 
@@ -19,6 +23,8 @@ interface AssignmentRow {
   id: string;
   status: string;
   notes: string | null;
+  paid_at: string | null;
+  agreed_price_pence: number | null;
 }
 
 function getSupabase() {
@@ -74,7 +80,7 @@ export default async function OnboardingPage({
   const sb = getSupabase();
   const { data, error } = await sb
     .from('lead_assignments')
-    .select('id, status, notes')
+    .select('id, status, notes, paid_at, agreed_price_pence')
     .eq('id', params.leadId)
     .maybeSingle();
   if (error) {
@@ -84,17 +90,27 @@ export default async function OnboardingPage({
   const assignment = data as AssignmentRow | null;
   if (!assignment) notFound();
 
-  if (assignment.status === 'sold') {
+  // Redirect only when money has actually landed (paid_at), not when the SP
+  // claims sold. Sold-unpaid leads (relationship sales) still need the
+  // onboarding form so payment can be collected before launch.
+  if (assignment.paid_at) {
     redirect(`/paid/${assignment.id}`);
   }
 
   const { business_name, demo_site_domain } = parseNotes(assignment.notes);
+  // When agreed_price_pence is set the SP negotiated a flat one-time deal;
+  // pass through so the CTA + InfoStrip can show the actual price + suppress
+  // the £25/mo recurring copy.
+  const flatOneTime = assignment.agreed_price_pence != null;
+  const setupLabel = formatPenceAsPounds(assignment.agreed_price_pence ?? getSetupFeePence());
 
   return (
     <OnboardingClient
       leadId={assignment.id}
       businessName={business_name}
       demoUrl={demo_site_domain}
+      setupLabel={setupLabel}
+      flatOneTime={flatOneTime}
     />
   );
 }
