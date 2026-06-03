@@ -395,6 +395,25 @@ private struct ClientWebView: UIViewRepresentable {
     func makeUIView(context: Context) -> WKWebView {
         let config = WKWebViewConfiguration()
         config.allowsInlineMediaPlayback = true
+
+        // Demo HTML uses viewport-fit=cover so the hero photo bleeds edge-to-edge
+        // in mobile Safari. In our WKWebView this means sticky headers (the
+        // "Café 100 / Order direct" bar at top: 0) render UNDER the iPhone
+        // status bar / Dynamic Island, colliding with our own chrome (X + Live
+        // pill). Push body down by the safe-area-top so any sticky/fixed top
+        // element naturally sits below the notch. Hero photos lose ~50pt of
+        // edge-to-edge bleed on iOS only — acceptable trade for legibility.
+        let safeAreaScript = """
+        (function() {
+          var s = document.createElement('style');
+          s.textContent = 'body { padding-top: env(safe-area-inset-top); }';
+          (document.head || document.documentElement).appendChild(s);
+        })();
+        """
+        config.userContentController.addUserScript(
+            WKUserScript(source: safeAreaScript, injectionTime: .atDocumentStart, forMainFrameOnly: true)
+        )
+
         let webView = WKWebView(frame: .zero, configuration: config)
         webView.navigationDelegate = context.coordinator
         webView.scrollView.bounces = false
