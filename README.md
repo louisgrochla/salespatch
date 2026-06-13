@@ -107,7 +107,7 @@ I'm a final-year university student building this in the open. The agent orchest
 
 Louis Grochla — [LinkedIn](https://www.linkedin.com/in/louisgrochla/) · louisgrochla27@gmail.com
 
-Final-year BA (Hons) Digital Marketing & Business Analytics, Robert Gordon University, Aberdeen. Applying to MS Data Science programs in the US for 2027.
+Final-year BA (Hons) Digital Marketing & Business Analytics, Robert Gordon University, Aberdeen. 
 
 ---
 
