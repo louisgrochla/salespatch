@@ -2,7 +2,7 @@
 
 > A multi-agent AI platform that helps UK independent local businesses get a website they'd actually want, sold to them by humans who don't need to do the design work.
 
-**Status:** Closed beta · live since May 2026 in Aberdeen
+**Status:** Closed beta · live since May 2026 in Aberdeen · 10 paying SME clients
 **Stack:** TypeScript · Next.js 14 · Node.js · SQLite + Supabase Postgres · Stripe Connect · Swift (iOS) · React Native (Expo) · Claude API · OpenRouter · Apify · Playwright
 
 ---
@@ -90,7 +90,7 @@ The agent runtime is transport-agnostic — it can run as a local CLI, as an ope
 ## Roadmap (public)
 
 - **February 2026** — Project started.
-- **May 2026** — Closed beta launched in Aberdeen with 5 salespeople in the field. 40+ sellable demos generated for real businesses; another 200+ test demos held back as the training corpus for the future critic-LoRA phase. First real lead validated end-to-end through the full pipeline (research → demo → admin queue → field) on 2026-05-11.
+- **May 2026** — Closed beta launched in Aberdeen with 5 salespeople in the field. 40+ sellable demos generated for real businesses, 10 of which are now paying clients; another 200+ test demos held back as the training corpus for the future critic-LoRA phase. First real lead validated end-to-end through the full pipeline (research → demo → admin queue → field) on 2026-05-11.
 - **Summer 2026** — Scale beta to ~50 leads; tighten the NERVE ingestion layer; ship the salesperson-facing iOS app to TestFlight.
 - **Autumn 2026** — Honours dissertation begins; pitched as an applied ML / NLP study using salespatch's outcome data as the source.
 - **Q4 2026 / 2027** — Once enough closed/rejected outcomes accumulate, train the first critic-LoRA on a real outcome dataset and swap it into the agent pipeline. This is when "multi-agent system using LLMs" becomes "self-learning multi-agent system."
